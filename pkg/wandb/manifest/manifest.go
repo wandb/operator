@@ -180,9 +180,8 @@ type Application struct {
 	Sizing       map[v2.Size]SizingConfig `yaml:"sizing,omitempty"`
 	Ingress      *AppIngressSpec          `yaml:"ingress,omitempty"`
 	Triage       *ApplicationTriage       `yaml:"triage,omitempty"`
-	// SecurityProfile opts this workload into security settings supported by
-	// newer server images. An empty profile preserves legacy behavior.
-	SecurityProfile WorkloadSecurityProfile `yaml:"securityProfile,omitempty"`
+	// SecurityProfile supplies workload defaults; CR settings take precedence.
+	SecurityProfile v2.WorkloadSecurityProfile `yaml:"securityProfile,omitempty"`
 }
 
 // ApplicationTriage declares a shared diagnostic runner and the actions
@@ -202,14 +201,6 @@ type TriageAction struct {
 	Name        string   `yaml:"name"`
 	Description string   `yaml:"description,omitempty"`
 	Args        []string `yaml:"args,omitempty"`
-}
-
-// WorkloadSecurityProfile controls security settings that require an explicit
-// server-manifest opt-in. Pointer fields distinguish an omitted setting from
-// an explicitly disabled one.
-type WorkloadSecurityProfile struct {
-	RunAsNonRoot           *bool `yaml:"runAsNonRoot,omitempty"`
-	ReadOnlyRootFilesystem *bool `yaml:"readOnlyRootFilesystem,omitempty"`
 }
 
 type AppIngressSpec struct {
@@ -305,9 +296,8 @@ type MigrationJob struct {
 	CommonVolumeMounts []string      `yaml:"commonVolumeMounts,omitempty"`
 	Env                []EnvVar      `yaml:"env,omitempty"`
 	VolumeMounts       []VolumeMount `yaml:"volumeMounts,omitempty"`
-	// SecurityProfile opts this workload into security settings supported by
-	// newer server images. An empty profile preserves legacy behavior.
-	SecurityProfile WorkloadSecurityProfile `yaml:"securityProfile,omitempty"`
+	// SecurityProfile supplies migration defaults; CR settings take precedence.
+	SecurityProfile v2.WorkloadSecurityProfile `yaml:"securityProfile,omitempty"`
 }
 
 // FileSpec defines a single file to project into the application's container.
@@ -629,10 +619,7 @@ func mergeApplications(dst, src map[string]Application) {
 				}
 			}
 
-			mergedApp.SecurityProfile = mergeWorkloadSecurityProfiles(
-				mergedApp.SecurityProfile,
-				srcApp.SecurityProfile,
-			)
+			mergedApp.SecurityProfile = mergedApp.SecurityProfile.WithOverrides(srcApp.SecurityProfile)
 
 			dst[name] = mergedApp
 		} else {
@@ -640,17 +627,6 @@ func mergeApplications(dst, src map[string]Application) {
 			dst[name] = srcApp
 		}
 	}
-}
-
-func mergeWorkloadSecurityProfiles(dst, src WorkloadSecurityProfile) WorkloadSecurityProfile {
-	if src.RunAsNonRoot != nil {
-		dst.RunAsNonRoot = new(*src.RunAsNonRoot)
-	}
-	if src.ReadOnlyRootFilesystem != nil {
-		dst.ReadOnlyRootFilesystem = new(*src.ReadOnlyRootFilesystem)
-	}
-
-	return dst
 }
 
 func DownloadServerManifest(ctx context.Context, repository string, version string, auth *RegistryAuth) (Manifest, error) {

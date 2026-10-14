@@ -48,59 +48,74 @@ func TestReconcileApplicationsAddsAndClearsSecurityProfile(t *testing.T) {
 	}
 	c := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithObjects(initialApplication).
+		WithObjects(initialApplication, &apiv2.Application{ObjectMeta: metav1.ObjectMeta{Name: "worker", Namespace: "default", CreationTimestamp: metav1.Now()}}).
 		Build()
 
-	enabled := servermanifest.WorkloadSecurityProfile{
-		RunAsNonRoot: new(true), ReadOnlyRootFilesystem: new(true),
-	}
-	for _, version := range []string{"0.84.9", "0.85.0", "0.85.0-rc.1", "1.0.0", "custom-build"} {
-		t.Run(version, func(t *testing.T) {
-			wandb.Spec.Wandb.Version = version
-			for _, transition := range []struct {
-				name    string
-				profile servermanifest.WorkloadSecurityProfile
-			}{
-				{"false", servermanifest.WorkloadSecurityProfile{RunAsNonRoot: new(false), ReadOnlyRootFilesystem: new(false)}},
-				{"empty", servermanifest.WorkloadSecurityProfile{}},
-				{"omitted", servermanifest.WorkloadSecurityProfile{}},
-			} {
-				t.Run(transition.name, func(t *testing.T) {
-					for _, profile := range []servermanifest.WorkloadSecurityProfile{enabled, transition.profile} {
-						manifest := servermanifest.Manifest{Applications: map[string]servermanifest.Application{
-							"api": {Name: "api", Image: servermanifest.ImageRef{Repository: "example/api", Tag: "test"},
-								SecurityProfile: profile,
-								Containers:      []servermanifest.ContainerSpec{{Name: "api"}, {Name: "sidecar"}},
-								InitContainers:  []servermanifest.ContainerSpec{{Name: "prepare", Image: servermanifest.ImageRef{Repository: "example/init", Tag: "test"}}},
-							},
-						}}
-						var previous *apiv2.Application
-						for repeat := 0; repeat < 2; repeat++ {
-							if _, err := reconcileApplications(context.Background(), c, wandb, manifest, telemetry.DefaultTelemetryRuntimeConfig()); err != nil {
-								t.Fatalf("reconcile: %v", err)
-							}
-							actual := &apiv2.Application{}
-							if err := c.Get(context.Background(), client.ObjectKey{Name: "api", Namespace: "default"}, actual); err != nil {
-								t.Fatal(err)
-							}
-							nonRoot, readOnly := profile.RunAsNonRoot, profile.ReadOnlyRootFilesystem
-							pod := actual.Spec.PodTemplate.Spec
-							assertPodSecurityBaseline(t, pod.SecurityContext)
-							assertOptionalBool(t, "runAsNonRoot", pod.SecurityContext.RunAsNonRoot, nonRoot)
-							if len(pod.Containers) != 2 || len(pod.InitContainers) != 1 {
-								t.Fatalf("unexpected containers: %#v", pod)
-							}
-							for _, container := range append(pod.Containers, pod.InitContainers...) {
-								assertContainerSecurityBaseline(t, container.SecurityContext)
-								assertOptionalBool(t, container.Name+" readOnlyRootFilesystem", container.SecurityContext.ReadOnlyRootFilesystem, readOnly)
-							}
-							if previous != nil && (!reflect.DeepEqual(previous.Spec, actual.Spec) || previous.ResourceVersion != actual.ResourceVersion) {
-								t.Fatal("unchanged reconciliation rewrote the Application")
-							}
-							previous = actual
-						}
-					}
-				})
+	enabled := apiv2.WorkloadSecurityProfile{RunAsNonRoot: new(true), ReadOnlyRootFilesystem: new(true)}
+	disabled := apiv2.WorkloadSecurityProfile{RunAsNonRoot: new(false), ReadOnlyRootFilesystem: new(false)}
+	for _, step := range []struct {
+		name                       string
+		manifest, shared, workload apiv2.WorkloadSecurityProfile
+		nonRoot, readOnly          *bool
+	}{
+		{name: "unconfigured"},
+		{name: "manifest defaults", manifest: enabled, nonRoot: new(true), readOnly: new(true)},
+		{name: "shared CR overrides manifest", manifest: enabled, shared: disabled, nonRoot: new(false), readOnly: new(false)},
+		{name: "workload CR overrides one field", manifest: enabled, shared: disabled, workload: apiv2.WorkloadSecurityProfile{RunAsNonRoot: new(true)}, nonRoot: new(true), readOnly: new(false)},
+		{name: "remove workload override", manifest: enabled, shared: disabled, nonRoot: new(false), readOnly: new(false)},
+		{name: "remove shared override", manifest: enabled, nonRoot: new(true), readOnly: new(true)},
+		{name: "remove manifest profile"},
+		{name: "shared CR without manifest profile", shared: enabled, nonRoot: new(true), readOnly: new(true)},
+		{name: "workload CR false without manifest profile", shared: enabled, workload: disabled, nonRoot: new(false), readOnly: new(false)},
+		{name: "workload CR alone", workload: enabled, nonRoot: new(true), readOnly: new(true)},
+		{name: "remove all overrides"},
+	} {
+		t.Run(step.name, func(t *testing.T) {
+			wandb.Spec.Wandb.SecurityProfile = step.shared
+			wandb.Spec.Wandb.Applications = map[string]apiv2.WandbApplicationOverride{
+				"api":     {SecurityProfile: step.workload},
+				"unknown": {SecurityProfile: enabled},
+			}
+			manifest := servermanifest.Manifest{Applications: map[string]servermanifest.Application{
+				"api": {Name: "api", Image: servermanifest.ImageRef{Repository: "example/api", Tag: "test"},
+					SecurityProfile: step.manifest,
+					Containers:      []servermanifest.ContainerSpec{{Name: "api"}, {Name: "sidecar"}},
+					InitContainers:  []servermanifest.ContainerSpec{{Name: "prepare", Image: servermanifest.ImageRef{Repository: "example/init", Tag: "test"}}},
+				},
+				"worker": {Name: "worker", Image: servermanifest.ImageRef{Repository: "example/worker", Tag: "test"}},
+			}}
+			var previous *apiv2.Application
+			for repeat := 0; repeat < 2; repeat++ {
+				if _, err := reconcileApplications(context.Background(), c, wandb, manifest, telemetry.DefaultTelemetryRuntimeConfig()); err != nil {
+					t.Fatal(err)
+				}
+				actual := &apiv2.Application{}
+				if err := c.Get(context.Background(), client.ObjectKey{Name: "api", Namespace: "default"}, actual); err != nil {
+					t.Fatal(err)
+				}
+				pod := actual.Spec.PodTemplate.Spec
+				assertPodSecurityBaseline(t, pod.SecurityContext)
+				assertOptionalBool(t, "runAsNonRoot", pod.SecurityContext.RunAsNonRoot, step.nonRoot)
+				if len(pod.Containers) != 2 || len(pod.InitContainers) != 1 {
+					t.Fatalf("unexpected containers: %#v", pod)
+				}
+				for _, container := range append(pod.Containers, pod.InitContainers...) {
+					assertContainerSecurityBaseline(t, container.SecurityContext)
+					assertOptionalBool(t, container.Name+" readOnlyRootFilesystem", container.SecurityContext.ReadOnlyRootFilesystem, step.readOnly)
+				}
+				if previous != nil && (!reflect.DeepEqual(previous.Spec, actual.Spec) || previous.ResourceVersion != actual.ResourceVersion) {
+					t.Fatal("unchanged reconciliation rewrote the Application")
+				}
+				previous = actual
+				worker := &apiv2.Application{}
+				if err := c.Get(context.Background(), client.ObjectKey{Name: "worker", Namespace: "default"}, worker); err != nil {
+					t.Fatal(err)
+				}
+				assertOptionalBool(t, "worker runAsNonRoot", worker.Spec.PodTemplate.Spec.SecurityContext.RunAsNonRoot, step.shared.RunAsNonRoot)
+				assertOptionalBool(t, "worker readOnlyRootFilesystem", worker.Spec.PodTemplate.Spec.Containers[0].SecurityContext.ReadOnlyRootFilesystem, step.shared.ReadOnlyRootFilesystem)
+			}
+			if !reflect.DeepEqual(manifest.Applications["api"].SecurityProfile, step.manifest) {
+				t.Fatal("CR override mutated the manifest")
 			}
 		})
 	}

@@ -4531,6 +4531,13 @@ spec:
                           - message: minReplicas must be <= maxReplicas
                             rule: '!has(self.minReplicas) || !has(self.maxReplicas)
                               || self.minReplicas <= self.maxReplicas'
+                        securityProfile:
+                          properties:
+                            readOnlyRootFilesystem:
+                              type: boolean
+                            runAsNonRoot:
+                              type: boolean
+                          type: object
                       type: object
                     type: object
                   bucketProxy:
@@ -4673,6 +4680,18 @@ spec:
                     type: string
                   manifestRepository:
                     type: string
+                  migrations:
+                    additionalProperties:
+                      properties:
+                        securityProfile:
+                          properties:
+                            readOnlyRootFilesystem:
+                              type: boolean
+                            runAsNonRoot:
+                              type: boolean
+                          type: object
+                      type: object
+                    type: object
                   notifications:
                     properties:
                       email:
@@ -5264,6 +5283,13 @@ spec:
                         type: boolean
                       insecureAllowAPIKeyAdminAccess:
                         default: false
+                        type: boolean
+                    type: object
+                  securityProfile:
+                    properties:
+                      readOnlyRootFilesystem:
+                        type: boolean
+                      runAsNonRoot:
                         type: boolean
                     type: object
                   serviceAccount:

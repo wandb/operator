@@ -609,6 +609,8 @@ func reconcileApplications(
 		// Applied last so legacy overrides beat manifest and injected env, as in v1.
 		envVars = applyLegacyOverrideEnv(ctx, wandb, app.Name, envVars)
 
+		app.SecurityProfile = resolveWorkloadSecurityProfile(app.SecurityProfile,
+			wandb.Spec.Wandb.SecurityProfile, wandb.Spec.Wandb.Applications[app.Name].SecurityProfile)
 		containers := resolveContainers(app, wandb, envVars, volumeMounts)
 
 		initContainers := resolveInitContainers(app, wandb, envVars, volumeMounts)
@@ -1174,8 +1176,10 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 					ImagePullSecrets:   wandb.Spec.Global.ImagePullSecrets,
 				},
 			}
-			if hasWorkloadSecurityProfile(migrationTask.SecurityProfile) {
-				applyWorkloadSecurityProfile(&podTemplate.Spec, migrationTask.SecurityProfile)
+			profile := resolveWorkloadSecurityProfile(migrationTask.SecurityProfile,
+				wandb.Spec.Wandb.SecurityProfile, wandb.Spec.Wandb.Migrations[name].SecurityProfile)
+			if hasWorkloadSecurityProfile(profile) {
+				applyWorkloadSecurityProfile(&podTemplate.Spec, profile)
 			}
 			setCustomCACertsChecksumAnnotation(&podTemplate, caChecksum)
 

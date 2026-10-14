@@ -154,21 +154,21 @@ func TestRunMigrationsSurfacesFailedJobPhaseAndReason(t *testing.T) {
 	}
 }
 
-func TestRunMigrationsSecurityProfileCompatibility(t *testing.T) {
+func TestRunMigrationsSecurityProfileOverrides(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name             string
-		profile          servermanifest.WorkloadSecurityProfile
+		profile          apiv2.WorkloadSecurityProfile
+		shared, override apiv2.WorkloadSecurityProfile
 		wantProfiled     bool
 		wantRunAsNonRoot *bool
 		wantReadOnlyRoot *bool
 	}{
-		{name: "legacy absent profile"},
-		{name: "legacy empty profile", profile: servermanifest.WorkloadSecurityProfile{}},
+		{name: "unset profile"},
 		{
 			name: "enabled profile",
-			profile: servermanifest.WorkloadSecurityProfile{
+			profile: apiv2.WorkloadSecurityProfile{
 				RunAsNonRoot:           new(true),
 				ReadOnlyRootFilesystem: new(true),
 			},
@@ -178,7 +178,7 @@ func TestRunMigrationsSecurityProfileCompatibility(t *testing.T) {
 		},
 		{
 			name: "explicit false profile",
-			profile: servermanifest.WorkloadSecurityProfile{
+			profile: apiv2.WorkloadSecurityProfile{
 				RunAsNonRoot:           new(false),
 				ReadOnlyRootFilesystem: new(false),
 			},
@@ -188,7 +188,7 @@ func TestRunMigrationsSecurityProfileCompatibility(t *testing.T) {
 		},
 		{
 			name: "pod setting only",
-			profile: servermanifest.WorkloadSecurityProfile{
+			profile: apiv2.WorkloadSecurityProfile{
 				RunAsNonRoot: new(true),
 			},
 			wantProfiled:     true,
@@ -196,11 +196,34 @@ func TestRunMigrationsSecurityProfileCompatibility(t *testing.T) {
 		},
 		{
 			name: "container setting only",
-			profile: servermanifest.WorkloadSecurityProfile{
+			profile: apiv2.WorkloadSecurityProfile{
 				ReadOnlyRootFilesystem: new(true),
 			},
 			wantProfiled:     true,
 			wantReadOnlyRoot: new(true),
+		},
+
+		{
+			name:         "shared CR without manifest",
+			shared:       apiv2.WorkloadSecurityProfile{RunAsNonRoot: new(true)},
+			wantProfiled: true, wantRunAsNonRoot: new(true),
+		},
+		{
+			name:         "shared CR false beats manifest",
+			profile:      apiv2.WorkloadSecurityProfile{RunAsNonRoot: new(true), ReadOnlyRootFilesystem: new(true)},
+			shared:       apiv2.WorkloadSecurityProfile{RunAsNonRoot: new(false)},
+			wantProfiled: true, wantRunAsNonRoot: new(false), wantReadOnlyRoot: new(true),
+		},
+		{
+			name:         "migration CR beats shared",
+			shared:       apiv2.WorkloadSecurityProfile{RunAsNonRoot: new(true), ReadOnlyRootFilesystem: new(true)},
+			override:     apiv2.WorkloadSecurityProfile{ReadOnlyRootFilesystem: new(false)},
+			wantProfiled: true, wantRunAsNonRoot: new(true), wantReadOnlyRoot: new(false),
+		},
+		{
+			name:         "migration CR alone",
+			override:     apiv2.WorkloadSecurityProfile{RunAsNonRoot: new(true)},
+			wantProfiled: true, wantRunAsNonRoot: new(true),
 		},
 	}
 
@@ -221,7 +244,14 @@ func TestRunMigrationsSecurityProfileCompatibility(t *testing.T) {
 				wandb := &apiv2.WeightsAndBiases{
 					ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "default"},
 					Spec: apiv2.WeightsAndBiasesSpec{
-						Wandb: apiv2.WandbAppSpec{Version: version},
+						Wandb: apiv2.WandbAppSpec{
+							Version:         version,
+							SecurityProfile: test.shared,
+							Migrations: map[string]apiv2.WandbMigrationOverride{
+								"gorilla": {SecurityProfile: test.override},
+								"unknown": {SecurityProfile: apiv2.WorkloadSecurityProfile{ReadOnlyRootFilesystem: new(true)}},
+							},
+						},
 					},
 					Status: apiv2.WeightsAndBiasesStatus{
 						Wandb: apiv2.WandbStatus{
@@ -259,7 +289,7 @@ func TestRunMigrationsSecurityProfileCompatibility(t *testing.T) {
 				containerSecurityContext := job.Spec.Template.Spec.Containers[0].SecurityContext
 				if !test.wantProfiled {
 					if job.Spec.Template.Spec.SecurityContext != nil || containerSecurityContext != nil {
-						t.Fatalf("legacy migration gained security contexts: pod=%#v container=%#v", job.Spec.Template.Spec.SecurityContext, containerSecurityContext)
+						t.Fatalf("unconfigured migration gained security contexts: pod=%#v container=%#v", job.Spec.Template.Spec.SecurityContext, containerSecurityContext)
 					}
 					return
 				}
@@ -292,10 +322,12 @@ func TestSecurityProfileDoesNotRestartCompletedMigrations(t *testing.T) {
 		}},
 	}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&apiv2.WeightsAndBiases{}).WithObjects(wandb).Build()
-	for _, profile := range []servermanifest.WorkloadSecurityProfile{
+	for _, profile := range []apiv2.WorkloadSecurityProfile{
 		{RunAsNonRoot: new(true), ReadOnlyRootFilesystem: new(true)},
 		{RunAsNonRoot: new(false)}, {},
 	} {
+		wandb.Spec.Wandb.SecurityProfile = profile
+		wandb.Spec.Wandb.Migrations = map[string]apiv2.WandbMigrationOverride{"gorilla": {SecurityProfile: profile}}
 		manifest := servermanifest.Manifest{Migrations: map[string]servermanifest.MigrationJob{
 			"gorilla": {Image: servermanifest.ImageRef{Repository: "example/migrate", Tag: "test"}, SecurityProfile: profile},
 		}}
