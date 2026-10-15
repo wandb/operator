@@ -11,9 +11,12 @@ import (
 	redisreplicationv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redisreplication/v1beta2"
 	redissentinelv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redissentinel/v1beta2"
 	"github.com/wandb/operator/pkg/wandb/manifest"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 var _ = Describe("Redis vendor specs", func() {
@@ -51,6 +54,13 @@ var _ = Describe("Redis vendor specs", func() {
 		expectRedisDefaultContainerSecurityContext(sentinel.Spec.InitContainer.SecurityContext)
 		Expect(sentinel.Spec.VolumeMount).NotTo(BeNil())
 		expectRedisWritableTmpMount(sentinel.Spec.VolumeMount.MountPath)
+		Expect(sentinel.Spec.VolumeMount.MountPath).To(ContainElement(corev1.VolumeMount{
+			Name: redisSentinelRunVolumeName, MountPath: "/var/run",
+		}))
+		Expect(sentinel.Spec.VolumeMount.Volume).To(ContainElement(corev1.Volume{
+			Name:         redisSentinelRunVolumeName,
+			VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
+		}))
 
 		replication, err := ToRedisReplicationVendorSpec(context.Background(), wandb, wandb.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis, redisScheme(), manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
@@ -75,11 +85,49 @@ var _ = Describe("Redis vendor specs", func() {
 		expectOpenShiftContainerSecurityContext(redis.Spec.SecurityContext)
 		expectOpenShiftContainerSecurityContext(redis.Spec.InitContainer.SecurityContext)
 		expectRedisWritableTmpMount(redis.Spec.Storage.VolumeMount.MountPath)
+
+		wandb.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis.Sentinel.Enabled = true
+		sentinel, err := ToRedisSentinelVendorSpec(context.Background(), wandb, wandb.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis, redisScheme(), manifest.Manifest{})
+		Expect(err).NotTo(HaveOccurred())
+		expectOpenShiftPodSecurityContext(sentinel.Spec.PodSecurityContext)
+		expectOpenShiftContainerSecurityContext(sentinel.Spec.SecurityContext)
+		Expect(sentinel.Spec.VolumeMount.MountPath).To(ContainElement(corev1.VolumeMount{
+			Name: redisSentinelRunVolumeName, MountPath: "/var/run",
+		}))
+	})
+
+	It("retains ownership labels on actual standalone and replication PVCs", func() {
+		wandb := redisWandb(true)
+		labels := BuildWandbRedisLabels(wandb)
+		standalone := &corev1.PersistentVolumeClaim{ObjectMeta: metav1.ObjectMeta{Name: "redis-redis-0", Namespace: "wandb", Labels: map[string]string{"existing": "keep"}}}
+		replication := &corev1.PersistentVolumeClaim{ObjectMeta: metav1.ObjectMeta{Name: "custom-data-redis-replica-0", Namespace: "wandb"}}
+		retained := &corev1.PersistentVolumeClaim{ObjectMeta: metav1.ObjectMeta{Name: "custom-data-redis-replica-3", Namespace: "wandb"}}
+		legacy := &corev1.PersistentVolumeClaim{ObjectMeta: metav1.ObjectMeta{Name: "redis-data-legacy-0", Namespace: "wandb"}}
+		unrelated := &corev1.PersistentVolumeClaim{ObjectMeta: metav1.ObjectMeta{Name: "redis-redis-other-0", Namespace: "wandb"}}
+		statefulSet := func(name, template string) *appsv1.StatefulSet {
+			return &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "wandb"}, Spec: appsv1.StatefulSetSpec{
+				VolumeClaimTemplates: []corev1.PersistentVolumeClaim{{ObjectMeta: metav1.ObjectMeta{Name: template}}},
+			}}
+		}
+		cl := fake.NewClientBuilder().WithScheme(redisScheme()).WithObjects(standalone, replication, retained, legacy, unrelated,
+			statefulSet("redis", "redis"), statefulSet("redis-replica", "custom-data"), statefulSet("legacy", "redis-data")).Build()
+		Expect(ensurePVCLabels(context.Background(), cl, "wandb", []string{"redis", "redis-replica", "legacy", "not-created-yet"}, labels)).To(Succeed())
+		for _, pvc := range []*corev1.PersistentVolumeClaim{standalone, replication, retained, legacy} {
+			Expect(cl.Get(context.Background(), client.ObjectKeyFromObject(pvc), pvc)).To(Succeed())
+			for key, value := range labels {
+				Expect(pvc.Labels).To(HaveKeyWithValue(key, value))
+			}
+		}
+		Expect(standalone.Labels).To(HaveKeyWithValue("existing", "keep"))
+		Expect(cl.Get(context.Background(), client.ObjectKeyFromObject(unrelated), unrelated)).To(Succeed())
+		Expect(unrelated.Labels).To(BeEmpty())
 	})
 })
 
 func redisScheme() *runtime.Scheme {
 	scheme := runtime.NewScheme()
+	Expect(corev1.AddToScheme(scheme)).To(Succeed())
+	Expect(appsv1.AddToScheme(scheme)).To(Succeed())
 	Expect(apiv2.AddToScheme(scheme)).To(Succeed())
 	Expect(redisv1beta2.AddToScheme(scheme)).To(Succeed())
 	Expect(redissentinelv1beta2.AddToScheme(scheme)).To(Succeed())

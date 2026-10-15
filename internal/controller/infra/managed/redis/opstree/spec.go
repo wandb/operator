@@ -71,6 +71,8 @@ const (
 
 	redisWritableTmpVolumeName = "redis-tmp"
 	redisWritableTmpMountPath  = "/tmp"
+	redisSentinelRunVolumeName = "redis-sentinel-run"
+	redisSentinelRunMountPath  = "/var/run"
 
 	redisCapabilityAll corev1.Capability = "ALL"
 )
@@ -148,6 +150,17 @@ func redisWritableVolumeMount() rediscommon.AdditionalVolume {
 
 func redisAdditionalVolumePtr() *rediscommon.AdditionalVolume {
 	volumeMount := redisWritableVolumeMount()
+	// The pinned upstream Sentinel config writes /var/run/redis-sentinel.pid.
+	// Keep that ephemeral runtime path writable while the root stays read-only.
+	volumeMount.Volume = append(volumeMount.Volume, corev1.Volume{
+		Name: redisSentinelRunVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		},
+	})
+	volumeMount.MountPath = append(volumeMount.MountPath, corev1.VolumeMount{
+		Name: redisSentinelRunVolumeName, MountPath: redisSentinelRunMountPath,
+	})
 	return &volumeMount
 }
 
@@ -219,9 +232,8 @@ func ToRedisStandaloneVendorSpec(
 			Tolerations:        wandb.GetTolerations(spec.ManagedInfraSpec),
 			Storage: &rediscommon.Storage{
 				VolumeClaimTemplate: corev1.PersistentVolumeClaim{
-					ObjectMeta: metav1.ObjectMeta{
-						Labels: BuildWandbRedisLabels(wandb),
-					},
+					// The upstream CRD does not admit template metadata labels.
+					// WriteState labels live PVCs; purge also discovers unlabeled claims.
 					Spec: corev1.PersistentVolumeClaimSpec{
 						AccessModes: []corev1.PersistentVolumeAccessMode{
 							corev1.ReadWriteOnce,
@@ -388,9 +400,7 @@ func ToRedisReplicationVendorSpec(
 			Tolerations:        wandb.GetTolerations(spec.ManagedInfraSpec),
 			Storage: &rediscommon.Storage{
 				VolumeClaimTemplate: corev1.PersistentVolumeClaim{
-					ObjectMeta: metav1.ObjectMeta{
-						Labels: BuildWandbRedisLabels(wandb),
-					},
+					// Ownership labels are reconciled on the actual PVCs.
 					Spec: corev1.PersistentVolumeClaimSpec{
 						AccessModes: []corev1.PersistentVolumeAccessMode{
 							corev1.ReadWriteOnce,
