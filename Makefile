@@ -54,8 +54,13 @@ manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and Cust
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd:allowDangerousTypes=true,generateEmbeddedObjectMeta=true,maxDescLen=0 webhook paths="{./api/v1,./api/v2,./internal/controller/...,./internal/webhook/...}" output:crd:artifacts:config=config/crd/bases
 
 .PHONY: generate
-generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
+generate: controller-gen generate-seaweedfs ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="{./api/v1,./api/v2,./pkg/vendored/keda/...}"
+
+# SeaweedFS's curated upstream API snapshot retains only object-generation markers.
+.PHONY: generate-seaweedfs
+generate-seaweedfs: controller-gen ## Regenerate DeepCopy methods for the vendored SeaweedFS API.
+	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./pkg/vendored/seaweedfs-operator/seaweed.seaweedfs.com/v1"
 
 .PHONY: generate-vendored
 generate-vendored: ## Regenerate CRDs from the operator's Helm chart dependencies.

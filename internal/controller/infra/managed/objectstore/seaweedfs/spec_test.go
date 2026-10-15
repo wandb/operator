@@ -17,8 +17,11 @@ import (
 )
 
 var _ = Describe("SeaweedFS vendor specs", func() {
-	BeforeEach(func() { utils.SetOpenShiftMode(false) })
-	AfterEach(func() { utils.SetOpenShiftMode(false) })
+	BeforeEach(func() {
+		previousMode := utils.IsOpenShift()
+		DeferCleanup(utils.SetOpenShiftMode, previousMode)
+		utils.SetOpenShiftMode(false)
+	})
 
 	It("gives all four components independent read-only contexts", func() {
 		wandb := seaweedWandb()
