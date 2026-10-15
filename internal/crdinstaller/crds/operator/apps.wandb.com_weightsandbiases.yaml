@@ -6826,7 +6826,12 @@ spec:
                     type: string
                   image:
                     type: string
+                  lastSuccessfulTime:
+                    format: date-time
+                    type: string
                   ready:
+                    type: boolean
+                  running:
                     type: boolean
                   version:
                     type: string

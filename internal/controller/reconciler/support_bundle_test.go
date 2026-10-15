@@ -303,6 +303,25 @@ func TestSupportBundleLifecycle(t *testing.T) {
 		require.True(t, wandb.Status.SupportBundle.Ready)
 	})
 
+	t.Run("reports whether a collection is running and when one last succeeded", func(t *testing.T) {
+		// Launched by hand, like WSM does: the CronJob controller never lists it in status.active.
+		job := launchSupportBundleJob(t, c, wandb, "sb-run")
+		reconcileSupportBundle(ctx, c, wandb, supportBundleTelemetry)
+		require.True(t, wandb.Status.SupportBundle.Running)
+		require.True(t, wandb.Status.SupportBundle.Ready, "a running collection does not make the template unready")
+
+		failJob(t, c, job)
+		app := &apiv2.Application{}
+		require.NoError(t, c.Get(ctx, ctrlClient.ObjectKey{Name: supportbundle.Name(wandb), Namespace: wandb.Namespace}, app))
+		lastSuccess := metav1.NewTime(time.Now().Truncate(time.Second))
+		app.Status.CronJobStatuses = map[string]batchv1.CronJobStatus{supportbundle.CronJobName(wandb): {LastSuccessfulTime: &lastSuccess}}
+		require.NoError(t, c.Status().Update(ctx, app))
+
+		reconcileSupportBundle(ctx, c, wandb, supportBundleTelemetry)
+		require.False(t, wandb.Status.SupportBundle.Running)
+		require.True(t, wandb.Status.SupportBundle.LastSuccessfulTime.Equal(&lastSuccess))
+	})
+
 	t.Run("removes the telemetry namespace Role when telemetry is turned off", func(t *testing.T) {
 		reconcileSupportBundle(ctx, c, wandb, telemetry.DefaultTelemetryRuntimeConfig())
 		err := c.Get(ctx, ctrlClient.ObjectKeyFromObject(objects.telemetryRole), &rbacv1.Role{})

@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -893,6 +894,49 @@ var _ = Describe("Application Controller", func() {
 			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(apierrors.IsNotFound(k8sClient.Get(ctx, cronJobKey, cronJob))).To(BeTrue())
+		})
+
+		It("copies each CronJob's run status onto the Application", func() {
+			key := types.NamespacedName{Name: "test-cronjob-status", Namespace: "default"}
+			resource := &apiv2.Application{
+				ObjectMeta: metav1.ObjectMeta{Name: key.Name, Namespace: key.Namespace},
+				Spec: apiv2.ApplicationSpec{
+					Kind:        "CronJob",
+					PodTemplate: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{}}},
+					CronJobs:    []batchv1.CronJob{suspendedCronJob("test-cronjob-status-template")},
+				},
+			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+			reconciler := &ApplicationReconciler{
+				Client: client.WithFieldOwner(k8sClient, ApplicationFieldManager),
+				Scheme: k8sClient.Scheme(),
+			}
+			for i := 0; i < 2; i++ {
+				_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+				Expect(err).NotTo(HaveOccurred())
+			}
+
+			cronJob := &batchv1.CronJob{}
+			cronJobKey := types.NamespacedName{Name: "test-cronjob-status-template", Namespace: "default"}
+			Expect(k8sClient.Get(ctx, cronJobKey, cronJob)).To(Succeed())
+			lastSuccess := metav1.NewTime(time.Now().Truncate(time.Second))
+			cronJob.Status = batchv1.CronJobStatus{
+				Active:             []corev1.ObjectReference{{Kind: "Job", Namespace: "default", Name: "run-1"}},
+				LastSuccessfulTime: &lastSuccess,
+			}
+			Expect(k8sClient.Status().Update(ctx, cronJob)).To(Succeed())
+
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Get(ctx, key, resource)).To(Succeed())
+			status := resource.Status.CronJobStatuses["test-cronjob-status-template"]
+			Expect(status.Active).To(HaveLen(1))
+			Expect(status.Active[0].Name).To(Equal("run-1"))
+			Expect(status.LastSuccessfulTime.Equal(&lastSuccess)).To(BeTrue())
+
+			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+			Expect(err).NotTo(HaveOccurred())
 		})
 
 		It("does not update a Deployment Application's CronJob on a steady-state reconcile", func() {

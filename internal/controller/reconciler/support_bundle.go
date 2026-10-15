@@ -126,6 +126,12 @@ func applySupportBundle(
 	if err != nil {
 		return ctrl.Result{}, err
 	}
+	if status.Running, err = supportBundleJobRunning(ctx, c, wandb); err != nil {
+		return ctrl.Result{}, err
+	}
+	if run, ok := currentApplication.Status.CronJobStatuses[supportbundle.CronJobName(wandb)]; ok {
+		status.LastSuccessfulTime = run.LastSuccessfulTime
+	}
 	status.Ready = currentApplication.Status.Ready && current
 	if !status.Ready {
 		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
@@ -333,6 +339,19 @@ func managedBySupportBundle(wandb *apiv2.WeightsAndBiases, obj ctrlClient.Object
 		}
 	}
 	return true
+}
+
+func supportBundleJobRunning(ctx context.Context, c ctrlClient.Client, wandb *apiv2.WeightsAndBiases) (bool, error) {
+	jobs := &batchv1.JobList{}
+	if err := c.List(ctx, jobs, ctrlClient.InNamespace(wandb.Namespace), ctrlClient.MatchingLabels(supportbundle.SelectorLabels(wandb))); err != nil {
+		return false, err
+	}
+	for i := range jobs.Items {
+		if !jobFinished(&jobs.Items[i]) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func jobFinished(job *batchv1.Job) bool {

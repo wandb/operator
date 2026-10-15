@@ -10,7 +10,7 @@ import (
 const (
 	supportBundleImageRepository = "us-docker.pkg.dev/wandb-production/public/wandb/lumen"
 	DefaultSupportBundleVersion  = "0.4.8"
-	supportBundleComponent       = "support-bundle"
+	Component                    = "support-bundle"
 	supportBundleNameSuffix      = "-support-bundle"
 	collectorCronJobSuffix       = "-support-bundle-collector"
 
@@ -57,7 +57,7 @@ func ClusterScopedName(wandb *apiv2.WeightsAndBiases) string {
 
 // SelectorLabels identifies every support-bundle object for an installation
 func SelectorLabels(wandb *apiv2.WeightsAndBiases) map[string]string {
-	labels := common.BuildWandbLabels(wandb, supportBundleComponent)
+	labels := common.BuildWandbLabels(wandb, Component)
 	labels["app.kubernetes.io/part-of"] = "wandb"
 	return labels
 }

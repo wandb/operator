@@ -742,6 +742,8 @@ func (r *ApplicationReconciler) deleteJobs(ctx context.Context, app *wandbv2.App
 func (r *ApplicationReconciler) reconcileCronJobs(ctx context.Context, app *wandbv2.Application) error {
 	logger := logx.GetSlog(ctx)
 
+	var statuses map[string]batchv1.CronJobStatus
+
 	for i, cronJob := range app.Spec.CronJobs {
 		cronJobName := cronJob.Name
 		if cronJobName == "" {
@@ -762,6 +764,10 @@ func (r *ApplicationReconciler) reconcileCronJobs(ctx context.Context, app *wand
 			return fmt.Errorf("CronJob %s/%s already exists and is not controlled by Application %s/%s",
 				app.Namespace, cronJobName, app.Namespace, app.Name)
 		}
+		if statuses == nil {
+			statuses = map[string]batchv1.CronJobStatus{}
+		}
+		statuses[cronJobName] = currentCronJob.Status
 
 		// Set up the cronjob with the provided spec
 		cronJobToReconcile := cronJob.DeepCopy()
@@ -800,6 +806,7 @@ func (r *ApplicationReconciler) reconcileCronJobs(ctx context.Context, app *wand
 		}
 	}
 
+	app.Status.CronJobStatuses = statuses
 	return nil
 }
 
