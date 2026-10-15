@@ -146,6 +146,7 @@ func mocoContainerSecurityContext() *corev1ac.SecurityContextApplyConfiguration 
 	securityContext := corev1ac.SecurityContext().
 		WithRunAsNonRoot(true).
 		WithAllowPrivilegeEscalation(false).
+		WithReadOnlyRootFilesystem(true).
 		WithCapabilities(corev1ac.Capabilities().WithDrop(mocoMySQLCapabilityAll)).
 		WithSeccompProfile(corev1ac.SeccompProfile().
 			WithType(corev1.SeccompProfileTypeRuntimeDefault))
@@ -157,9 +158,17 @@ func mocoContainerSecurityContext() *corev1ac.SecurityContextApplyConfiguration 
 	return securityContext
 }
 
+// The pinned MOCO chart 0.26.0/controller 0.36.0 supports the copy init
+// container override. Our Go API dependency predates its named constant.
+const mocoCopyInitContainerName mocov1beta2.OverwriteableContainerName = mococonstants.CopyInitContainerName
+
 func mocoOverwriteContainers() []mocov1beta2.OverwriteContainer {
 	securityContext := (*mocov1beta2.SecurityContextApplyConfiguration)(mocoContainerSecurityContext())
 	return []mocov1beta2.OverwriteContainer{
+		{
+			Name:            mocoCopyInitContainerName,
+			SecurityContext: securityContext.DeepCopy(),
+		},
 		{
 			Name:            mocov1beta2.AgentContainerName,
 			SecurityContext: securityContext.DeepCopy(),
