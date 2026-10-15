@@ -233,7 +233,7 @@ func ToRedisStandaloneVendorSpec(
 			Storage: &rediscommon.Storage{
 				VolumeClaimTemplate: corev1.PersistentVolumeClaim{
 					// The upstream CRD does not admit template metadata labels.
-					// WriteState labels the actual PVCs for retention and cleanup.
+					// WriteState labels live PVCs; purge also discovers unlabeled claims.
 					Spec: corev1.PersistentVolumeClaimSpec{
 						AccessModes: []corev1.PersistentVolumeAccessMode{
 							corev1.ReadWriteOnce,

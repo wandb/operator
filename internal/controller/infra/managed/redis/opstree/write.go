@@ -86,18 +86,9 @@ func ensurePVCLabels(
 	labels map[string]string,
 ) error {
 	log := logx.GetSlog(ctx)
-	var namePrefixes []string
-	for _, name := range statefulSetNames {
-		sts := &appsv1.StatefulSet{}
-		if err := cl.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, sts); err != nil {
-			if apierrors.IsNotFound(err) {
-				continue // The dependency controller has not created it yet.
-			}
-			return err
-		}
-		for _, template := range sts.Spec.VolumeClaimTemplates {
-			namePrefixes = append(namePrefixes, fmt.Sprintf("%s-%s-", template.Name, sts.Name))
-		}
+	namePrefixes, err := redisClaimPrefixes(ctx, cl, namespace, statefulSetNames)
+	if err != nil {
+		return err
 	}
 	if len(namePrefixes) == 0 {
 		return nil
@@ -127,6 +118,24 @@ func ensurePVCLabels(
 		log.Debug("patched wandb labels onto PVC", "pvc", pvc.Name)
 	}
 	return nil
+}
+
+// redisClaimPrefixes uses actual templates so custom claim names are preserved.
+func redisClaimPrefixes(ctx context.Context, cl client.Client, namespace string, statefulSetNames []string) ([]string, error) {
+	var namePrefixes []string
+	for _, name := range statefulSetNames {
+		sts := &appsv1.StatefulSet{}
+		if err := cl.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, sts); err != nil {
+			if apierrors.IsNotFound(err) {
+				continue
+			}
+			return nil, err
+		}
+		for _, template := range sts.Spec.VolumeClaimTemplates {
+			namePrefixes = append(namePrefixes, fmt.Sprintf("%s-%s-", template.Name, sts.Name))
+		}
+	}
+	return namePrefixes, nil
 }
 
 func matchesPVCName(name string, prefixes []string) bool {

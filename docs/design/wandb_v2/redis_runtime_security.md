@@ -39,3 +39,12 @@ and labels those PVCs, including retained ordinals after scale-down. This handle
 the current upstream CR-name default as well as legacy/custom template names;
 it does not assume a fixed `redis-data` prefix. Validate renderer output with strict API field
 validation rather than disabling validation to apply it.
+
+Purge does not wait for asynchronous W&B ownership labeling. It discovers PVCs
+from the instance's actual StatefulSet claim templates, with current/legacy
+name fallbacks after StatefulSet deletion. Custom-template orphans can be
+identified by their exact instance suffix and upstream instance/type labels
+(or W&B ownership labels). Ordinals must be canonical nonnegative integers.
+Other instances, namespaces, prefix-lookalike names and conflicting W&B
+ownership labels are excluded; detach never purges these claims. API discovery
+errors keep the finalizer pending rather than skipping cleanup.
