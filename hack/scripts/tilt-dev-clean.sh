@@ -9,13 +9,30 @@ WAIT_TIMEOUT="10m"
 DRY_RUN="false"
 APP_NAMESPACE=""
 APP_NAME=""
+KUBE_CONTEXT=""
+
+kubectl() {
+  if [[ -n "${KUBE_CONTEXT}" ]]; then
+    command kubectl --context "${KUBE_CONTEXT}" "$@"
+  else
+    command kubectl "$@"
+  fi
+}
+
+helm() {
+  if [[ -n "${KUBE_CONTEXT}" ]]; then
+    command helm --kube-context "${KUBE_CONTEXT}" "$@"
+  else
+    command helm "$@"
+  fi
+}
 
 usage() {
   cat <<EOF
 Usage: ${SCRIPT_NAME} [--namespace <ns>] [--name <wandb-name>] [--dry-run]
 
 Safely cleans up dev W&B installs before a fresh Tilt rebuild:
-1. Deletes the W&B CR while the operator is still running
+1. Stops test Launch agents/jobs, then deletes the W&B CR while the operator is running
 2. Waits for finalizer-driven cleanup to complete
 3. Uninstalls Tilt-managed Helm releases
 4. Deletes dev-only PVCs and generated secrets for the app
@@ -24,6 +41,7 @@ By default, it targets all WeightsAndBiases resources labeled:
   app.kubernetes.io/managed-by=tilt
 
 Options:
+  --context <context> Select the Kubernetes context for kubectl and Helm
   --namespace <ns>   Limit cleanup to a single namespace
   --name <name>      Limit cleanup to a single WeightsAndBiases resource
   --dry-run          Print actions without executing them
@@ -46,6 +64,10 @@ run() {
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --context)
+      KUBE_CONTEXT="${2:?missing context value}"
+      shift 2
+      ;;
     --namespace)
       APP_NAMESPACE="${2:?missing namespace value}"
       shift 2
@@ -110,6 +132,22 @@ delete_app_and_wait() {
   fi
 }
 
+delete_launch_for_app() {
+  local namespace="$1"
+  local name="$2"
+  local launch_namespace release_name
+  while IFS=$'\t' read -r launch_namespace release_name; do
+    [[ -z "${launch_namespace}" ]] && continue
+    if [[ -n "${release_name}" ]]; then
+      uninstall_release "${launch_namespace}" "${release_name}"
+    fi
+    log "Deleting test Launch namespace ${launch_namespace}"
+    run kubectl delete namespace "${launch_namespace}" --ignore-not-found --timeout="${WAIT_TIMEOUT}"
+  done < <(kubectl get namespaces \
+    -l "app.kubernetes.io/managed-by=wandb-dev-bootstrap,wandb.ai/test-instance=${name},wandb.ai/test-namespace=${namespace}" \
+    -o json | jq -r '.items[] | [.metadata.name, (.metadata.annotations["wandb.ai/launch-release"] // "")] | @tsv')
+}
+
 delete_state_for_app() {
   local namespace="$1"
   local name="$2"
@@ -137,6 +175,8 @@ delete_state_for_app() {
   fi
 
   run kubectl delete secret -n "${namespace}" wandb-otel-connection --ignore-not-found
+  run kubectl delete secret -n "${namespace}" \
+    -l "app.kubernetes.io/managed-by=wandb-dev-bootstrap,wandb.ai/test-instance=${name},wandb.ai/test-namespace=${namespace}" --ignore-not-found
 }
 
 uninstall_release() {
@@ -166,6 +206,7 @@ fi
 for app in "${apps[@]}"; do
   namespace="${app%%$'\t'*}"
   name="${app##*$'\t'}"
+  delete_launch_for_app "${namespace}" "${name}"
   delete_app_and_wait "${namespace}" "${name}"
 done
 

@@ -23,6 +23,27 @@ SETTINGS = {
     # authenticate gh with read access to wandb/watchtower.
     "adminConsoleEnabled": False,
 
+    # Creates/reuses ONE W&B user for both human login and Launch. Credentials
+    # are saved in <wandbName>-dev-credentials; local output includes the password
+    # and API key. CI suppresses credential output. Existing installations can
+    # supply WANDB_DEV_PASSWORD or WANDB_DEV_API_KEY in the environment.
+    # Enables spec.wandb.enableGlobalAdminAPIKey; a supporting server manifest
+    # supplies the operator-generated key to the API and Gorilla migrations.
+    "bootstrapUserEnabled": False,
+    "bootstrapUsername": "wandb-dev",
+    "bootstrapEmail": "wandb-dev@example.test",
+    "bootstrapShowCredentials": True,
+    "bootstrapCAFile": "",  # Optional CA PEM; Tilt's generated CA is auto-detected.
+
+    # Launch implies bootstrapUserEnabled. Requires uv and a pod-reachable
+    # wandbHostname (e.g. http://wandb.localhost:8080), plus CoreDNS rewrites.
+    # Kind/Kubernetes only; the upstream agent chart pins UID 1000.
+    "launchAgentEnabled": False,
+    "launchNamespace": "wandb-launch-test",
+    "launchRelease": "wandb-launch-test",
+    "launchQueue": "operator-test",
+    "launchProject": "launch-test",
+
     # Default to the published server manifest repository. Use
     # local mode only when developing against repo-local manifest definitions.
     "manifestSource": "published",

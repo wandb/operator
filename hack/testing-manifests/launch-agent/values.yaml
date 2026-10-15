@@ -1,0 +1,29 @@
+# Test-only upstream launch-agent 0.13.12 values. Bootstrap creates the Secret.
+namespace: wandb-launch-test
+baseUrl: http://wandb.localhost:8080
+additionalTargetNamespaces: []
+agent:
+  image: wandb/launch-agent:0.30.0@sha256:fce403879d0b13c29d19da79eba5da4c8c41fceec546855624dca5f7030dbad5
+  imagePullPolicy: IfNotPresent
+  useExternalWandbSecret: true
+  minAvailable: 0
+  startTimeout: 300
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+customCABundle:
+  configMap:
+    name: wandb-launch-ca
+    key: ca.crt
+launchConfig: |
+  entity: wandb-dev
+  queues:
+    - operator-test
+  max_jobs: 1
+  max_schedulers: 0
+  builder:
+    type: noop

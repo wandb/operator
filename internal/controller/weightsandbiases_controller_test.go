@@ -36,7 +36,35 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 		interval       = time.Millisecond * 250
 	)
 
+	completeMigrationJobs := func() {
+		jobs := &batchv1.JobList{}
+		Expect(k8sClient.List(ctx, jobs, client.InNamespace(WandbNamespace), client.MatchingLabels{"app.kubernetes.io/component": "migration"})).Should(Succeed())
+		for i := range jobs.Items {
+			job := &jobs.Items[i]
+			job.Status.Succeeded = 1
+			now := metav1.Now()
+			job.Status.StartTime = &now
+			job.Status.CompletionTime = &now
+			job.Status.Conditions = []batchv1.JobCondition{
+				{Type: batchv1.JobSuccessCriteriaMet, Status: v1.ConditionTrue},
+				{Type: batchv1.JobComplete, Status: v1.ConditionTrue},
+			}
+			Expect(k8sClient.Status().Update(ctx, job)).Should(Succeed())
+		}
+	}
+
 	AfterEach(func() {
+		// Envtest has no Job controller or garbage collector.
+		migrationJobs := &batchv1.JobList{}
+		Expect(k8sClient.List(ctx, migrationJobs, client.InNamespace(WandbNamespace), client.MatchingLabels{"app.kubernetes.io/component": "migration"})).Should(Succeed())
+		for i := range migrationJobs.Items {
+			job := &migrationJobs.Items[i]
+			if len(job.Finalizers) > 0 {
+				job.Finalizers = nil
+				Expect(k8sClient.Update(ctx, job)).Should(Succeed())
+			}
+			Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, job, client.PropagationPolicy(metav1.DeletePropagationBackground)))).Should(Succeed())
+		}
 		// Cleanup
 		wandb := &apiv2.WeightsAndBiases{ObjectMeta: metav1.ObjectMeta{Name: WandbName, Namespace: WandbNamespace}}
 		wandbLookupKey := types.NamespacedName{Name: wandb.Name, Namespace: wandb.Namespace}
@@ -441,6 +469,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 				"observedGeneration must not advance before applications carry the new generation's spec")
 
 			By("Completing the migration and reconciling to completion")
+			completeMigrationJobs()
 			wandb.Status.Wandb.Migration.Version = wandb.Spec.Wandb.Version
 			wandb.Status.Wandb.Migration.LastSuccessVersion = wandb.Spec.Wandb.Version
 			wandb.Status.Wandb.Migration.Ready = true
@@ -566,6 +595,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			}
 
 			By("Reconciling again: the gate must pass on live Deployments even though the status map says not-ready")
+
 			Expect(k8sClient.Get(ctx, wandbLookupKey, wandb)).Should(Succeed())
 			_, err = v2.ReconcileWandbManifest(ctx, k8sClient, wandb, wandbManifest, telemetry.DefaultTelemetryRuntimeConfig())
 			Expect(err).Should(Succeed())
@@ -656,6 +686,7 @@ var _ = Describe("WeightsAndBiases Controller V2", func() {
 			Expect(ctrlResult.RequeueAfter).Should(BeNumerically(">", 0), "Expected requeue when migration failed")
 
 			By("Simulating migration Complete")
+			completeMigrationJobs()
 			Expect(k8sClient.Get(ctx, wandbLookupKey, wandb)).Should(Succeed())
 			wandb.Status.Wandb.Migration.Ready = true
 			wandb.Status.Wandb.Migration.Reason = "Complete"

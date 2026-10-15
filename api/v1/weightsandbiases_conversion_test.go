@@ -2098,3 +2098,40 @@ func TestConvertTo_ClickHouseOnlyNonConnectionKeys(t *testing.T) {
 		"only non-connection keys must not assert an external clickhouse")
 	require.NotContains(t, dst.Annotations, ClickHousePendingAnnotation)
 }
+
+func TestGlobalAdminFlagRoundTrip(t *testing.T) {
+	withConversionManifestApps(t)
+	for _, enabled := range []bool{true, false} {
+		src := &appsv2.WeightsAndBiases{}
+		src.Spec.Wandb.EnableGlobalAdminAPIKey = enabled
+		src.Annotations = map[string]string{V1ValuesAnnotation: `{"app":{"image":{"tag":"0.83.0-test"}}}`}
+		spoke := &WeightsAndBiases{}
+		require.NoError(t, spoke.ConvertFrom(src))
+		hub := &appsv2.WeightsAndBiases{}
+		require.NoError(t, spoke.ConvertTo(hub))
+		require.Equal(t, enabled, hub.Spec.Wandb.EnableGlobalAdminAPIKey)
+		// A later disable must override a previously stashed true value.
+		hub.Spec.Wandb.EnableGlobalAdminAPIKey = false
+		require.NoError(t, spoke.ConvertFrom(hub))
+		require.NoError(t, spoke.ConvertTo(hub))
+		require.False(t, hub.Spec.Wandb.EnableGlobalAdminAPIKey)
+	}
+}
+
+func TestGlobalAdminFlagOverridesLegacyActiveSpec(t *testing.T) {
+	withConversionManifestApps(t)
+	withConversionReader(t, activeSpecSecret(t, "default", "wandb", map[string]interface{}{
+		"app":    map[string]interface{}{"image": map[string]interface{}{"tag": testLegacyVersion}},
+		"global": map[string]interface{}{"enableGlobalAdminAPIKey": false},
+	}))
+	src := newV1(map[string]interface{}{
+		"app":    map[string]interface{}{"image": map[string]interface{}{"tag": testLegacyVersion}},
+		"global": map[string]interface{}{"enableGlobalAdminAPIKey": true},
+	})
+	dst := &appsv2.WeightsAndBiases{}
+	require.NoError(t, src.ConvertTo(dst))
+	require.True(t, dst.Spec.Wandb.EnableGlobalAdminAPIKey)
+	require.NoError(t, src.ConvertFrom(dst))
+	require.NoError(t, src.ConvertTo(dst))
+	require.True(t, dst.Spec.Wandb.EnableGlobalAdminAPIKey)
+}

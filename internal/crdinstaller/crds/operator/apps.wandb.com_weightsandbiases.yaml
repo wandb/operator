@@ -4535,6 +4535,9 @@ spec:
                     type: object
                   bucketProxy:
                     type: boolean
+                  enableGlobalAdminAPIKey:
+                    default: false
+                    type: boolean
                   features:
                     additionalProperties:
                       type: boolean
@@ -7818,6 +7821,8 @@ spec:
                           properties:
                             failed:
                               type: boolean
+                            inputHash:
+                              type: string
                             message:
                               type: string
                             name:
@@ -7846,6 +7851,8 @@ spec:
                       properties:
                         failed:
                           type: boolean
+                        inputHash:
+                          type: string
                         message:
                           type: string
                         name:

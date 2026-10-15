@@ -100,11 +100,24 @@ func applyValueMappings(src *WeightsAndBiases, dst *appsv2.WeightsAndBiases) err
 		}
 	}
 
+	// This opt-in belongs to the CR, even when an older active-spec Secret
+	// supplies the legacy chart values used by the other conversion mappings.
+	if enabled, found, err := unstructured.NestedBool(src.Spec.Values.Object, "global", "enableGlobalAdminAPIKey"); err != nil {
+		return fmt.Errorf("spec.values.global.enableGlobalAdminAPIKey: %w", err)
+	} else if found {
+		dst.Spec.Wandb.EnableGlobalAdminAPIKey = enabled
+	}
+
 	return nil
 }
 
 // applyGlobalMappings runs every mapper sourced from spec.values.global.
 func applyGlobalMappings(globalMap map[string]interface{}, dst *appsv2.WeightsAndBiases) error {
+	if enabled, found, err := unstructured.NestedBool(globalMap, "enableGlobalAdminAPIKey"); err != nil {
+		return fmt.Errorf("spec.values.global.enableGlobalAdminAPIKey: %w", err)
+	} else if found {
+		dst.Spec.Wandb.EnableGlobalAdminAPIKey = enabled
+	}
 	if err := mapHostnameLicense(globalMap, dst); err != nil {
 		return err
 	}

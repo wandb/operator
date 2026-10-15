@@ -143,7 +143,7 @@ func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		// refreshing status.wandb.applications once the estate settles.
 		Owns(&apiv2.Application{}, builder.MatchEveryOwner).
 		Owns(&batchv1.Job{}).
-		Owns(&corev1.Secret{}).
+		Owns(&corev1.Secret{}, builder.MatchEveryOwner).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&networkingv1.Ingress{})
 	if utils.IsRegistered(r.Scheme, &gatewayv1.Gateway{}) {

@@ -158,5 +158,15 @@ func loadV1Source(src *appsv2.WeightsAndBiases, dst *WeightsAndBiases) error {
 			return fmt.Errorf("unmarshal %s: %w", V1ValuesAnnotation, err)
 		}
 	}
+	global, _ := dst.Spec.Values.Object["global"].(map[string]interface{})
+	_, previouslySet := global["enableGlobalAdminAPIKey"]
+	if src.Spec.Wandb.EnableGlobalAdminAPIKey || previouslySet {
+		if global == nil {
+			global = map[string]interface{}{}
+		}
+		global["enableGlobalAdminAPIKey"] = src.Spec.Wandb.EnableGlobalAdminAPIKey
+		dst.Spec.Values.Object["global"] = global
+	}
+
 	return nil
 }

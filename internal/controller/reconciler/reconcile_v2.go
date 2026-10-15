@@ -33,14 +33,11 @@ import (
 	"github.com/wandb/operator/internal/logx"
 	wmetrics "github.com/wandb/operator/internal/observability/metrics"
 	"github.com/wandb/operator/internal/observability/telemetry"
-	oputils "github.com/wandb/operator/pkg/utils"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
 	"github.com/wandb/operator/pkg/wandb/manifest/registryauth"
-	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
@@ -198,9 +195,12 @@ func Reconcile(
 		return ctrl.Result{}, err
 	}
 
-	// Override features from CR spec if present
-	for key, enabled := range wandb.Spec.Wandb.Features {
-		manifest.Features[key] = enabled
+	manifest, err = resolveManifestFeatures(wandb, manifest)
+	if err != nil {
+		return ctrl.Result{}, errors.Join(err, updateReadyStatus(ctx, client, wandb, wandb.DeepCopy().Status, false, "InvalidManifest", err.Error()))
+	}
+	if err := validateGlobalAdminConfiguration(wandb, manifest); err != nil {
+		return ctrl.Result{}, errors.Join(err, updateReadyStatus(ctx, client, wandb, wandb.DeepCopy().Status, false, "InvalidConfiguration", err.Error()))
 	}
 
 	// Apply manifest-derived infra sizing before provisioning
@@ -287,9 +287,8 @@ func Reconcile(
 	}
 
 	res, err = ReconcileWandbManifest(ctx, client, wandb, manifest, telemetryConfig)
-	// send up the manifest error for now
 	if err != nil {
-		return res, err
+		return res, errors.Join(err, updateReadyStatus(ctx, client, wandb, wandb.DeepCopy().Status, false, "ReconciliationFailed", "server manifest reconciliation failed; see operator logs"))
 	}
 	ctrlResults = append(ctrlResults, res)
 
@@ -421,6 +420,8 @@ func ReconcileWandbManifest(
 	}
 
 	logger.Info("Manifest Features", "features", manifest.Features)
+
+	resolveWandbHostname(ctx, client, wandb, manifest)
 
 	validateLegacyOverrides(ctx, wandb, manifest)
 
@@ -635,13 +636,26 @@ func reconcileApplications(
 		application.Spec.PodTemplate.Spec.Affinity = wandb.Spec.Affinity
 		application.Spec.PodTemplate.Spec.Tolerations = *wandb.Spec.Tolerations
 		application.Spec.PodTemplate.Spec.ImagePullSecrets = wandb.Spec.Global.ImagePullSecrets
+		application.Spec.PodTemplate.Spec.ServiceAccountName = serviceAccountName
 		setCustomCACertsChecksumAnnotation(&application.Spec.PodTemplate, caChecksum)
+		if hasConditionalEnvs(manifest, app.CommonEnvs, app.Env) || application.Spec.PodTemplate.Annotations[workloadInputsAnnotation] != "" {
+			credentials, err := generatedSecretChecksum(ctx, client, wandb, envVars)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			delete(application.Spec.PodTemplate.Annotations, workloadInputsAnnotation)
+			hash, err := workloadInputHash(application.Spec.PodTemplate, wandb.Spec.Wandb.Version, credentials)
+			if err != nil {
+				return ctrl.Result{}, err
+			}
+			if application.Spec.PodTemplate.Annotations == nil {
+				application.Spec.PodTemplate.Annotations = map[string]string{}
+			}
+			application.Spec.PodTemplate.Annotations[workloadInputsAnnotation] = hash
+		}
 
 		application.Spec.HpaTemplate = ResolveAutoscaling(app, wandb)
 		application.Spec.Triage = resolveApplicationTriage(app.Triage)
-
-		// Set shared service account for all W&B applications
-		application.Spec.PodTemplate.Spec.ServiceAccountName = serviceAccountName
 
 		// Reconcile Service ports: fully replace the ServiceTemplate ports with
 		// the ports declared in the manifest for this app. This ensures that any
@@ -722,34 +736,6 @@ func reconcileApplications(
 			}
 			delete(wandb.Status.Wandb.Applications, app.Name)
 			wmetrics.DeleteApplicationInfo(app.Name, wandb.Namespace)
-		}
-	}
-
-	hostname, err := url.Parse(wandb.Spec.Wandb.Hostname)
-	if err != nil {
-		logger.Error("Failed to parse provided hostname", "hostname", wandb.Spec.Wandb.Hostname, "err", err)
-	} else {
-		if wandb.Spec.Networking.Mode == apiv2.NetworkingModeNone {
-			// Only override with NodePort if user didn't specify a port in the hostname
-			if manifest.FeaturesEnabled([]string{"proxy"}) && hostname.Port() == "" {
-				proxyService := &corev1.Service{}
-				proxyServiceName := fmt.Sprintf("%s-%s", wandb.Name, "nginx-proxy")
-				err := client.Get(ctx, types.NamespacedName{Name: proxyServiceName, Namespace: wandb.Namespace}, proxyService)
-				if err != nil {
-					logger.Error("Failed to get proxy service", "service", proxyServiceName, "err", err)
-				} else {
-					if len(proxyService.Spec.Ports) == 0 {
-						logger.Error("Proxy service has no ports", "service", proxyServiceName)
-					} else {
-						nodePort := proxyService.Spec.Ports[0].NodePort
-						hostname.Host = fmt.Sprintf("%s:%d", hostname.Hostname(), nodePort)
-					}
-				}
-			}
-		}
-
-		if wandb.Status.Wandb.Hostname != hostname.String() {
-			wandb.Status.Wandb.Hostname = hostname.String()
 		}
 	}
 
@@ -1048,331 +1034,6 @@ func resolveInlineFiles(ctx context.Context, client ctrlClient.Client, wandb *ap
 	return volumes, volumeMounts, nil
 }
 
-func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (ctrl.Result, error) {
-	statusBefore := wandb.DeepCopy().Status
-	version := wandb.Spec.Wandb.Version
-
-	if wandb.Status.Wandb.Migration.Ready && wandb.Status.Wandb.Migration.Version == version {
-		wandb.Status.Wandb.Migration.Phase = migrationPhaseSucceeded
-		if wandb.Status.Wandb.Migration.Reason == "" {
-			wandb.Status.Wandb.Migration.Reason = "Complete"
-		}
-		for name, jobStatus := range wandb.Status.Wandb.Migration.Jobs {
-			if jobStatus.Succeeded && jobStatus.Phase == "" {
-				jobStatus.Phase = migrationPhaseSucceeded
-				jobStatus.Reason = "JobSucceeded"
-				wandb.Status.Wandb.Migration.Jobs[name] = jobStatus
-			}
-		}
-		for name := range manifest.Migrations {
-			jobName := fmt.Sprintf("%s-%s", wandb.Name, name)
-			job := &batchv1.Job{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      jobName,
-					Namespace: wandb.Namespace,
-				},
-			}
-			propagation := metav1.DeletePropagationBackground
-			deleteOptions := &ctrlClient.DeleteOptions{PropagationPolicy: &propagation}
-			err := client.Delete(ctx, job, deleteOptions)
-			if err != nil {
-				if !apiErrors.IsNotFound(err) {
-					return ctrl.Result{}, fmt.Errorf("failed to delete migration job %s: %v", jobName, err)
-				}
-			}
-		}
-		if err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore); err != nil {
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{}, nil
-	}
-
-	if wandb.Status.Wandb.Migration.Version != version {
-		wandb.Status.Wandb.Migration.Version = version
-		wandb.Status.Wandb.Migration.Ready = false
-		wandb.Status.Wandb.Migration.Phase = migrationPhaseRunning
-		wandb.Status.Wandb.Migration.Reason = "Running"
-		wandb.Status.Wandb.Migration.Jobs = make(map[string]apiv2.MigrationJobStatus)
-		if err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore); err != nil {
-			return ctrl.Result{}, err
-		}
-		statusBefore = wandb.DeepCopy().Status
-	}
-
-	if len(manifest.Migrations) == 0 {
-		wandb.Status.Wandb.Migration.Ready = true
-		wandb.Status.Wandb.Migration.Phase = migrationPhaseSucceeded
-		wandb.Status.Wandb.Migration.Reason = "Complete"
-		wandb.Status.Wandb.Migration.LastSuccessVersion = version
-		if err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore); err != nil {
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{}, nil
-	}
-
-	if wandb.Status.Wandb.Migration.Jobs == nil {
-		wandb.Status.Wandb.Migration.Jobs = make(map[string]apiv2.MigrationJobStatus)
-	}
-
-	allSucceeded := true
-	anyFailed := false
-	anyRunning := false
-
-	for name, migrationTask := range manifest.Migrations {
-		jobName := fmt.Sprintf("%s-%s", wandb.Name, name)
-		job := &batchv1.Job{}
-		err := client.Get(ctx, types.NamespacedName{Name: jobName, Namespace: wandb.Namespace}, job)
-
-		jobStatus := apiv2.MigrationJobStatus{
-			Name: jobName,
-		}
-
-		if err != nil && !apiErrors.IsNotFound(err) {
-			return ctrl.Result{}, err
-		}
-
-		if apiErrors.IsNotFound(err) {
-
-			envVars, err := resolveEnvvars(ctx, client, wandb, manifest, migrationTask.CommonEnvs, migrationTask.Env)
-			if err != nil {
-				return ctrl.Result{}, err
-			}
-
-			volumes, volumeMounts, err := resolveVolumeMounts(ctx, manifest, migrationTask.CommonVolumeMounts, migrationTask.VolumeMounts)
-			if err != nil {
-				return ctrl.Result{}, err
-			}
-
-			var caChecksum string
-			envVars, volumes, volumeMounts, caChecksum, err = applyCustomCACertsToWorkload(ctx, client, wandb, envVars, volumes, volumeMounts)
-			if err != nil {
-				return ctrl.Result{}, err
-			}
-
-			// spec.global.proxy env (migration Jobs egress too — v1 parity); before
-			// legacy overrides so the escape hatch still wins.
-			envVars = applyProxyToWorkload(wandb, envVars)
-
-			// v1's global env reached job pods too (e.g. HTTP_PROXY); per-app entries don't apply here.
-			envVars = overrideEnvVars(ctx, envVars, wandb.Spec.Wandb.LegacyOverrides[apiv2.LegacyOverridesGlobalKey].Env)
-
-			podTemplate := corev1.PodTemplateSpec{
-				Spec: corev1.PodSpec{
-					RestartPolicy: corev1.RestartPolicyOnFailure,
-					Containers: []corev1.Container{
-						{
-							Name:         "migrate",
-							Image:        migrationTask.Image.GetImage(wandb.Spec.Global.ImageRegistry),
-							Args:         migrationTask.Args,
-							Command:      migrationTask.Command,
-							Env:          envVars,
-							VolumeMounts: volumeMounts,
-						},
-					},
-					Volumes:            volumes,
-					ServiceAccountName: wandb.Spec.Wandb.ServiceAccount.ServiceAccountName,
-					ImagePullSecrets:   wandb.Spec.Global.ImagePullSecrets,
-				},
-			}
-			if hasWorkloadSecurityProfile(migrationTask.SecurityProfile) {
-				applyWorkloadSecurityProfile(&podTemplate.Spec, migrationTask.SecurityProfile)
-			}
-			setCustomCACertsChecksumAnnotation(&podTemplate, caChecksum)
-
-			job = &batchv1.Job{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      jobName,
-					Namespace: wandb.Namespace,
-					Labels: map[string]string{
-						"app.kubernetes.io/managed-by": "wandb-operator",
-						"app.kubernetes.io/instance":   wandb.Name,
-						"app.kubernetes.io/component":  "migration",
-					},
-				},
-				Spec: batchv1.JobSpec{
-					Template: podTemplate,
-				},
-			}
-
-			if err := controllerutil.SetOwnerReference(wandb, job, client.Scheme()); err != nil {
-				return ctrl.Result{}, err
-			}
-
-			if err := client.Create(ctx, job); err != nil {
-				return ctrl.Result{}, err
-			}
-
-			jobStatus.Succeeded = false
-			jobStatus.Phase = migrationPhaseRunning
-			jobStatus.Reason = "JobCreated"
-			wandb.Status.Wandb.Migration.Jobs[name] = jobStatus
-			wandb.Status.Wandb.Migration.Phase = migrationPhaseRunning
-			wandb.Status.Wandb.Migration.Reason = "Running"
-			wandb.Status.Wandb.Migration.Ready = false
-			if err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore); err != nil {
-				return ctrl.Result{}, err
-			}
-
-			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
-		}
-
-		if job.Status.Succeeded > 0 {
-			jobStatus.Succeeded = true
-			jobStatus.Phase = migrationPhaseSucceeded
-			jobStatus.Reason = "JobSucceeded"
-			for _, cond := range job.Status.Conditions {
-				if cond.Type == batchv1.JobComplete && cond.Status == corev1.ConditionTrue {
-					if cond.Reason != "" {
-						jobStatus.Reason = cond.Reason
-					}
-					jobStatus.Message = cond.Message
-					break
-				}
-			}
-		} else {
-			allSucceeded = false
-			for _, cond := range job.Status.Conditions {
-				if cond.Type == batchv1.JobFailed && cond.Status == corev1.ConditionTrue {
-					jobStatus.Failed = true
-					jobStatus.Phase = migrationPhaseFailed
-					jobStatus.Reason = cond.Reason
-					if jobStatus.Reason == "" {
-						jobStatus.Reason = "JobFailed"
-					}
-					jobStatus.Message = cond.Message
-					anyFailed = true
-					break
-				}
-			}
-			if !jobStatus.Failed {
-				anyRunning = true
-				jobStatus.Phase = migrationPhaseRunning
-				if job.Status.Active > 0 {
-					jobStatus.Reason = "JobRunning"
-				} else {
-					jobStatus.Reason = "JobPending"
-				}
-			}
-		}
-
-		wandb.Status.Wandb.Migration.Jobs[name] = jobStatus
-	}
-
-	if anyFailed {
-		wandb.Status.Wandb.Migration.Phase = migrationPhaseFailed
-		wandb.Status.Wandb.Migration.Reason = "Failed"
-		wandb.Status.Wandb.Migration.Ready = false
-	} else if anyRunning || !allSucceeded {
-		wandb.Status.Wandb.Migration.Phase = migrationPhaseRunning
-		wandb.Status.Wandb.Migration.Reason = "Running"
-		wandb.Status.Wandb.Migration.Ready = false
-	} else if allSucceeded {
-		wandb.Status.Wandb.Migration.Phase = migrationPhaseSucceeded
-		wandb.Status.Wandb.Migration.Reason = "Complete"
-		wandb.Status.Wandb.Migration.Ready = true
-		if wandb.Status.Wandb.Migration.LastSuccessVersion != version {
-			wandb.Status.Wandb.Migration.LastSuccessVersion = version
-		}
-	} else {
-		wandb.Status.Wandb.Migration.Phase = migrationPhaseUnknown
-		wandb.Status.Wandb.Migration.Reason = "Unknown"
-		wandb.Status.Wandb.Migration.Ready = false
-	}
-
-	if err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	if allSucceeded {
-		return ctrl.Result{}, nil
-	}
-
-	return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
-}
-
-func generateSecrets(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (ctrl.Result, error) {
-	statusBefore := wandb.DeepCopy().Status
-	// Ensure any manifest-declared generated secrets exist and capture their selectors in status
-	if wandb.Status.GeneratedSecrets == nil {
-		wandb.Status.GeneratedSecrets = map[string]corev1.SecretKeySelector{}
-	}
-	for _, gs := range manifest.GeneratedSecrets {
-		// Deterministic secret name scoped to the CR instance
-		// If UseExactName is true, use the exact name without prefixing
-		secretName := gs.Name
-		if !gs.UseExactName {
-			secretName = fmt.Sprintf("%s-%s", wandb.Name, gs.Name)
-		}
-		keyName := "key"
-		sec := &corev1.Secret{}
-		err := client.Get(ctx, types.NamespacedName{Name: secretName, Namespace: wandb.Namespace}, sec)
-		if err != nil {
-			if apiErrors.IsNotFound(err) {
-				// Create new secret with generated value
-				valueLen := gs.Length
-				if valueLen <= 0 {
-					valueLen = 32
-				}
-				pw, err := oputils.GenerateRandomPassword(valueLen)
-				if err != nil {
-					return ctrl.Result{}, err
-				}
-				sec = &corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      secretName,
-						Namespace: wandb.Namespace,
-						Labels: map[string]string{
-							"app.kubernetes.io/managed-by": "wandb-operator",
-							"app.kubernetes.io/instance":   wandb.Name,
-							"app.kubernetes.io/part-of":    "wandb",
-						},
-					},
-					StringData: map[string]string{keyName: pw},
-					Type:       corev1.SecretTypeOpaque,
-				}
-				if err := controllerutil.SetOwnerReference(wandb, sec, client.Scheme()); err != nil {
-					return ctrl.Result{}, err
-				}
-				if err := client.Create(ctx, sec); err != nil {
-					return ctrl.Result{}, err
-				}
-			} else {
-				return ctrl.Result{}, err
-			}
-		} else {
-			// Secret exists. Ensure it has the expected key; do not overwrite existing value.
-			if sec.Data == nil || (sec.Data != nil && sec.Data[keyName] == nil && sec.StringData == nil) {
-				if sec.StringData == nil {
-					sec.StringData = map[string]string{}
-				}
-				// Generate a value only if missing
-				valueLen := gs.Length
-				if valueLen <= 0 {
-					valueLen = 32
-				}
-				pw, err := oputils.GenerateRandomPassword(valueLen)
-				if err != nil {
-					return ctrl.Result{}, err
-				}
-				sec.StringData[keyName] = pw
-				if err := client.Update(ctx, sec); err != nil {
-					return ctrl.Result{}, err
-				}
-			}
-		}
-		// Record selector in status
-		wandb.Status.GeneratedSecrets[gs.Name] = corev1.SecretKeySelector{
-			LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
-			Key:                  keyName,
-		}
-	}
-	// Persist status after updating generated secret selectors
-	if err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore); err != nil {
-		return ctrl.Result{}, err
-	}
-	return ctrl.Result{}, nil
-}
-
 // resolveCRField traverses a dotted field path (e.g., "spec.wandb.license") in the
 // provided custom resource object and returns the raw terminal value if present.
 // Typed accessors (resolveCRFieldEnvValue, resolveCRFieldSecretSelector, ...) build on
@@ -1552,4 +1213,37 @@ func isOwnedBy(obj ctrlClient.Object, owner *apiv2.WeightsAndBiases) bool {
 		}
 	}
 	return false
+}
+
+// Resolve status-backed hostname inputs before hashing migrations or rendering apps.
+func resolveWandbHostname(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) {
+	logger := logx.GetSlog(ctx)
+	hostname, err := url.Parse(wandb.Spec.Wandb.Hostname)
+	if err != nil {
+		logger.Error("Failed to parse provided hostname", "hostname", wandb.Spec.Wandb.Hostname, "err", err)
+	} else {
+		if wandb.Spec.Networking.Mode == apiv2.NetworkingModeNone {
+			// Only override with NodePort if user didn't specify a port in the hostname
+			if manifest.FeaturesEnabled([]string{"proxy"}) && hostname.Port() == "" {
+				proxyService := &corev1.Service{}
+				proxyServiceName := fmt.Sprintf("%s-%s", wandb.Name, "nginx-proxy")
+				err := client.Get(ctx, types.NamespacedName{Name: proxyServiceName, Namespace: wandb.Namespace}, proxyService)
+				if err != nil {
+					logger.Error("Failed to get proxy service", "service", proxyServiceName, "err", err)
+				} else {
+					if len(proxyService.Spec.Ports) == 0 {
+						logger.Error("Proxy service has no ports", "service", proxyServiceName)
+					} else {
+						nodePort := proxyService.Spec.Ports[0].NodePort
+						hostname.Host = fmt.Sprintf("%s:%d", hostname.Hostname(), nodePort)
+					}
+				}
+			}
+		}
+
+		if wandb.Status.Wandb.Hostname != hostname.String() {
+			wandb.Status.Wandb.Hostname = hostname.String()
+		}
+	}
+
 }

@@ -7,6 +7,9 @@ GENERATED_DIR = "hack/testing-manifests/wandb/.generated"
 GENERATED_WANDB_CR = GENERATED_DIR + "/tilt-wandb-cr.yaml"
 GENERATED_OPERATOR_VALUES = GENERATED_DIR + "/tilt-operator-values.yaml"
 GENERATED_CUSTOM_CA_CONFIGMAP = GENERATED_DIR + "/tilt-custom-ca-configmap.yaml"
+GENERATED_LAUNCH_VALUES = GENERATED_DIR + "/tilt-launch-values.yaml"
+LAUNCH_PROFILE = "hack/testing-manifests/launch-agent/values.yaml"
+LAUNCH_CHART = "https://github.com/wandb/helm-charts/releases/download/launch-agent-0.13.12/launch-agent-0.13.12.tgz"
 
 GATEWAY_API_CRDS_URL = "https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.0/standard-install.yaml"
 IMG = "controller:latest"
@@ -61,6 +64,17 @@ settings = {
     "externalObjectStoreHostname": "s3.localhost",
     "externalObjectStorePort": 8333,
     "useCustomCA": False,
+
+    "bootstrapUserEnabled": False,
+    "bootstrapUsername": "wandb-dev",
+    "bootstrapEmail": "wandb-dev@example.test",
+    "bootstrapCAFile": "",
+    "bootstrapShowCredentials": True,
+    "launchAgentEnabled": False,
+    "launchNamespace": "wandb-launch-test",
+    "launchRelease": "wandb-launch-test",
+    "launchQueue": "operator-test",
+    "launchProject": "launch-test",
 }
 
 if os.path.exists("tilt-settings.json"):
@@ -408,6 +422,14 @@ def helper_bool_flag(name, value):
     return " --%s=%s" % (name, bool_string(as_bool(value)))
 
 
+def configure_bootstrap_admin(cr):
+    spec = cr.setdefault("spec", {})
+    if cr.get("apiVersion") == "apps.wandb.com/v1":
+        spec.setdefault("values", {}).setdefault("global", {})["enableGlobalAdminAPIKey"] = True
+    else:
+        spec.setdefault("wandb", {})["enableGlobalAdminAPIKey"] = True
+
+
 def build_wandb_cr():
     if settings.get("wandbCR"):
       return settings.get("wandbCR")
@@ -519,6 +541,16 @@ else:
 
 WANDB_ENDPOINT_PORT = url_port(WANDB_HOSTNAME)
 WANDB_ENDPOINT_HOST = url_host(WANDB_HOSTNAME)
+LAUNCH_ENABLED = as_bool(settings.get("launchAgentEnabled"))
+BOOTSTRAP_ENABLED = as_bool(settings.get("bootstrapUserEnabled")) or LAUNCH_ENABLED
+if BOOTSTRAP_ENABLED and not as_bool(settings.get("includeCR")):
+    fail("User bootstrap and Launch require includeCR=True")
+if BOOTSTRAP_ENABLED:
+    configure_bootstrap_admin(WANDB_CR_CONTENT)
+if LAUNCH_ENABLED and WANDB_ENDPOINT_HOST in ["localhost", "127.0.0.1", "::1"]:
+    fail("Launch requires a pod-reachable wandbHostname, for example http://wandb.localhost:8080 with enableCoreDNSRewrite=True")
+if LAUNCH_ENABLED and settings.get("openshiftSCC"):
+    fail("The test Launch chart pins UID 1000; this integration currently supports Kind/Kubernetes, not OpenShift SCCs")
 if USE_EXTERNAL_OBJECT_STORE:
     if EXTERNAL_OBJECT_STORE_HOSTNAME == WANDB_ENDPOINT_HOST:
         fail("externalObjectStoreHostname must differ from the W&B endpoint hostname")
@@ -912,7 +944,7 @@ local_resource(
 
 local_resource(
     "Dev-Clean",
-    "./hack/scripts/tilt-dev-clean.sh",
+    "./hack/scripts/tilt-dev-clean.sh" + helper_flag("context", currentContext),
     auto_init=False,
     labels=[GROUP_WANDB_APP],
 )
@@ -936,7 +968,7 @@ if as_bool(settings.get("includeCR")):
         build_wandb_ca(WANDB_NAME, WANDB_NAMESPACE)
         wandb_deps.append("WandB-CA")
 
-    k8s_yaml(WANDB_CR)
+    k8s_yaml_object(WANDB_CR_CONTENT)
 
     k8s_resource(
         new_name="Wandb",
@@ -1040,6 +1072,75 @@ if as_bool(settings.get("includeCR")):
             },
             labels=[GROUP_WANDB_APP],
         )
+
+if BOOTSTRAP_ENABLED:
+    bootstrap_common = helper_flag("context", currentContext)
+    bootstrap_common += helper_flag("namespace", WANDB_NAMESPACE)
+    bootstrap_common += helper_flag("name", WANDB_NAME)
+    bootstrap_cmd = "python3 hack/scripts/wandb_dev.py bootstrap" + bootstrap_common
+    bootstrap_cmd += helper_flag("base-url", WANDB_HOSTNAME)
+    bootstrap_cmd += helper_flag("username", settings.get("bootstrapUsername"))
+    bootstrap_cmd += helper_flag("email", settings.get("bootstrapEmail"))
+    if settings.get("bootstrapCAFile"):
+        bootstrap_cmd += helper_flag("ca-file", settings.get("bootstrapCAFile"))
+    elif str(WANDB_HOSTNAME).startswith("https://") and as_bool(settings.get("createCA")):
+        bootstrap_cmd += helper_flag("ca-secret", WANDB_NAME + "-root-cert")
+    if as_bool(settings.get("bootstrapShowCredentials")):
+        bootstrap_cmd += " --show-credentials"
+
+    # Tilt's endpoint readiness does not include the custom resource's status.
+    local_resource(
+        "WandB-User-Bootstrap",
+        cmd=bootstrap_cmd,
+        deps=["hack/scripts/wandb_dev.py"],
+        resource_deps=["Wandb", "Wandb-Endpoint"],
+        labels=[GROUP_WANDB_APP],
+    )
+    local_resource(
+        "WandB-Show-Credentials",
+        cmd="python3 hack/scripts/wandb_dev.py show-credentials" + bootstrap_common,
+        auto_init=False,
+        trigger_mode=TRIGGER_MODE_MANUAL,
+        resource_deps=["WandB-User-Bootstrap"],
+        labels=[GROUP_WANDB_APP],
+    )
+
+if LAUNCH_ENABLED:
+    launch_common = bootstrap_common
+    launch_common += helper_flag("launch-namespace", settings.get("launchNamespace"))
+    launch_common += helper_flag("release", settings.get("launchRelease"))
+    launch_common += helper_flag("queue", settings.get("launchQueue"))
+    launch_common += helper_flag("project", settings.get("launchProject"))
+    launch_deps = ["WandB-User-Bootstrap"]
+    if COREDNS_REWRITE_RESOURCE:
+        launch_deps.append(COREDNS_REWRITE_RESOURCE)
+    if USE_EXTERNAL_OBJECT_STORE:
+        launch_deps.append("S3-Endpoint")
+    local_resource(
+        "Launch-Prepare",
+        cmd="uv run hack/scripts/wandb_launch.py prepare" + launch_common + helper_flag("values-output", GENERATED_LAUNCH_VALUES),
+        deps=["hack/scripts/wandb_dev.py", "hack/scripts/wandb_launch.py", LAUNCH_PROFILE],
+        resource_deps=launch_deps,
+        labels=[GROUP_WANDB_APP],
+    )
+    helm_resource(
+        "Launch-Agent",
+        chart=LAUNCH_CHART,
+        release_name=settings.get("launchRelease"),
+        namespace=settings.get("launchNamespace"),
+        flags=["--wait", "--timeout=10m", "-f", GENERATED_LAUNCH_VALUES],
+        deps=[GENERATED_LAUNCH_VALUES, LAUNCH_PROFILE],
+        resource_deps=["Launch-Prepare"],
+        labels=[GROUP_WANDB_APP],
+    )
+    local_resource(
+        "Launch-Smoke-Test",
+        cmd="uv run hack/scripts/wandb_launch.py smoke" + launch_common,
+        auto_init=False,
+        trigger_mode=TRIGGER_MODE_MANUAL,
+        resource_deps=["Launch-Agent"],
+        labels=[GROUP_WANDB_APP],
+    )
 
 if settings.get("observabilityMode") == "full":
     managed_endpoint_resource(
