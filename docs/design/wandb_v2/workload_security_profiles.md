@@ -1,67 +1,97 @@
-# Server-manifest workload security profiles
+# Workload security profiles
 
-Server manifests can opt each application and migration into security settings
-supported by its images. These fields belong to the server manifest, not the
-WeightsAndBiases CR. There is no server-version threshold or automatic activation.
+Configure workload security through the WeightsAndBiases CR. Server manifests
+can supply release-specific defaults while compatible image versions roll out.
+Both use the same optional `runAsNonRoot` and `readOnlyRootFilesystem` fields.
+
+## CR overrides
+
+Settings resolve per field, with the last explicit value winning:
+
+1. Operator defaults.
+2. The application's or migration's server-manifest `securityProfile`.
+3. `spec.wandb.securityProfile` in the CR.
+4. `spec.wandb.applications.<name>.securityProfile` or
+   `spec.wandb.migrations.<name>.securityProfile` in the CR.
+
+Omitted fields inherit. Explicit `false` overrides `true`. Empty profiles inherit
+all fields. Removing a CR override restores the underlying manifest or operator
+value; it does not necessarily disable the setting.
+
+```yaml
+apiVersion: apps.wandb.com/v2
+kind: WeightsAndBiases
+metadata:
+  name: wandb
+spec:
+  wandb:
+    # Other installation settings omitted.
+    securityProfile:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
+    applications:
+      weave:
+        securityProfile:
+          readOnlyRootFilesystem: false
+    migrations:
+      weave-trace:
+        securityProfile:
+          readOnlyRootFilesystem: false
+```
+
+Names match manifest application names and migration keys. Unknown names do not
+create workloads. The shared profile applies to manifest applications and
+migrations; managed dependencies and Watchtower have separate security settings.
+
+`runAsNonRoot` applies to the Pod. `readOnlyRootFilesystem` applies to every
+application container, sidecar, and manifest init container. Migration settings
+apply when a Job is created; changes do not modify or restart existing/completed
+Jobs. Application profile changes reconcile into the generated pod template.
+
+Application Pods retain RuntimeDefault seccomp, and application/init containers
+retain disabled privilege escalation, dropped ALL capabilities and RuntimeDefault
+seccomp. Migration Jobs receive that baseline when either resolved profile field
+is set, including explicit `false`. Neither runtime flag disables that baseline.
+The profile supplies no numeric UID, GID or filesystem group.
+
+## Shipping defaults
+
+Operator defaults currently leave both runtime flags unset. Core can opt compatible
+workloads in through its versioned server manifest:
 
 ```yaml
 applications:
   api:
-    name: api
-    image:
-      repository: example/api
-      tag: nonroot-compatible
+    # Other application fields omitted.
     securityProfile:
       runAsNonRoot: true
       readOnlyRootFilesystem: true
 migrations:
-  database:
-    image:
-      repository: example/migrate
-      tag: nonroot-compatible
+  gorilla:
+    # Other migration fields omitted.
     securityProfile:
       runAsNonRoot: true
+      readOnlyRootFilesystem: true
 ```
 
-Both settings are optional booleans. Omitted settings remain unset; explicit
-`false` is preserved. An omitted or empty profile retains legacy behavior.
-`runAsNonRoot` applies to the pod; `readOnlyRootFilesystem` applies to every
-application container, sidecar, and manifest init container. Migrations have
-independent profiles applied when their Jobs are created. Existing/completed
-migration Jobs are not restarted when only the profile changes.
+Once the supported server images can use these settings by default, enable them
+in `defaultWorkloadSecurityProfile` in the operator and remove redundant profiles
+from new server manifests. The CR override paths and precedence stay unchanged;
+customers will not need explicit manifest profiles to receive the defaults.
+That later release must establish the supported image/version floor. This change
+does not introduce a version threshold or turn those defaults on prematurely.
 
-Application pods retain RuntimeDefault seccomp, and application/init containers
-retain disabled privilege escalation, dropped ALL capabilities, and RuntimeDefault
-seccomp. Unprofiled migration Jobs retain their existing security contexts; a
-migration with either field explicitly set also receives that baseline hardening.
-No numeric UID, GID, or filesystem group is supplied by this profile.
+Enable flags only when all affected images support them. Non-root execution needs
+a compatible image user or platform-assigned identity. Read-only roots need
+explicit writable mounts for runtime paths. Manifest activation must require an
+operator release supporting the contract. Image, upgrade and OpenShift acceptance
+remain separate runtime validation.
 
-## Fragment merging and rollback
+## Manifest fragments
 
-Manifest fragments load in lexicographic filename order. For an application,
-later explicitly supplied profile fields override earlier ones, including `false`.
-Omitted fields and `{}` preserve values from earlier fragments; they do not clear
-a prior opt-in. Sizing-only fragments preserve the profile.
-
-Migration definitions retain the existing whole-entry replacement behavior: a
-later fragment with the same migration key replaces the entire definition,
-including image, arguments, and profile. Supply the complete migration definition
-when overriding it; profile-only migration overlays are not supported.
-
-To remove application settings, remove them from all contributing fragments.
-Reconciliation clears those settings from the generated Application pod template.
-Use explicit `false` when an overriding fragment must disable a setting inherited
-from another fragment.
-
-## Compatibility and activation
-
-Only opt in after all of the application's images (including init containers and
-sidecars) support the requested settings. Non-root execution needs a compatible
-image user or platform-assigned identity; the profile does not select one.
-Read-only root execution needs explicit writable mounts for every runtime write
-path. Image tags alone do not prove compatibility.
-
-Core owns activation in its server-manifest source and must select an operator
-release supporting this contract. This operator change does not activate shipping
-manifests, modify dependency security profiles, or establish image/OpenShift
-runtime acceptance. Those require separate rendered and running-workload evidence.
+Application fragments merge in filename order: later explicit fields win, while
+omitted fields, null and empty profiles inherit. Sizing fragments preserve the
+profile. Migration fragments replace the whole entry, including its image,
+arguments and profile; supply the complete definition when overriding a migration
+in another manifest fragment. CR migration overrides change only the profile and
+do not replace the manifest's image or arguments.

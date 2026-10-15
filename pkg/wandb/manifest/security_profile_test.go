@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	apiv2 "github.com/wandb/operator/api/v2"
 	manifest "github.com/wandb/operator/pkg/wandb/manifest"
 )
 
@@ -230,7 +231,7 @@ migrations:
 
 func profileBool(value bool) *bool { return &value }
 
-func checkProfile(t *testing.T, profile manifest.WorkloadSecurityProfile, nonRoot, readOnly *bool) {
+func checkProfile(t *testing.T, profile apiv2.WorkloadSecurityProfile, nonRoot, readOnly *bool) {
 	t.Helper()
 	for _, pair := range []struct {
 		name      string
