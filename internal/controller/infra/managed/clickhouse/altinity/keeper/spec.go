@@ -52,6 +52,10 @@ func ToKeeperVendorSpec(
 	}
 
 	labels := common.BuildWandbLabels(wandb, KeeperModuleName)
+	// Keeper otherwise saves preprocessed configuration beside its immutable
+	// /etc config. Use the existing data PVC for that startup/reload write.
+	settings := chiv1.NewSettings()
+	settings.Set("path", chiv1.NewSettingScalar("/var/lib/clickhouse-keeper/"))
 
 	podSpec := corev1.PodSpec{
 		ImagePullSecrets: wandb.Spec.Global.ImagePullSecrets,
@@ -92,6 +96,7 @@ func ToKeeperVendorSpec(
 		},
 		Spec: chkv1.ChkSpec{
 			Configuration: &chkv1.Configuration{
+				Settings: settings,
 				Clusters: []*chkv1.Cluster{
 					{
 						Name: ClusterName,
@@ -164,6 +169,7 @@ func keeperContainerSecurityContext() *corev1.SecurityContext {
 	sc := &corev1.SecurityContext{
 		RunAsNonRoot:             ptr.To(true),
 		AllowPrivilegeEscalation: ptr.To(false),
+		ReadOnlyRootFilesystem:   ptr.To(true),
 		Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
 		SeccompProfile:           runtimeDefaultSeccompProfile(),
 	}
