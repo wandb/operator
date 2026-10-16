@@ -31,17 +31,26 @@ same ref are serialized, and a new dispatch does not cancel an active run.
 
 ## Container and chart versions
 
-The workflow pins the public multi-architecture WESTest v0.4.0 image by digest:
+The action hardcodes the public WESTest image repository. The workflow selects
+only the tag through `WESTEST_IMAGE_TAG`, currently `0.4.0`:
 
 ```text
-us-docker.pkg.dev/wandb-production/public/westest/westest@sha256:a23a657156cd5e7f9bde57d771f40877dcbd4ca919663a85a2e083ebb05dda97
+us-docker.pkg.dev/wandb-production/public/westest/westest:0.4.0
 ```
+
+To test a different WESTest release, change `WESTEST_IMAGE_TAG` in the workflow.
+The action's `image-tag` input accepts Docker tags only; full image references,
+repository paths and digest overrides are rejected before credentials are prepared.
 
 The image contains WESTest, its scenarios and Terraform fixtures, Terraform,
 Helm, kubectl, Kind, Docker CLI, the AWS and Google Cloud CLIs, the GKE auth plugin,
 and the W&B Python CLI. Tests no longer download a release binary or install
 these tools on the host. The image is publicly pullable without a GitHub App
 installation token.
+
+The host still needs Docker CLI and GNU coreutils `timeout`. The wrapper checks
+both before preparing credentials or starting containers and reports a clear
+dependency error if either is missing.
 
 The shared [Docker action](../.github/actions/westest-run/action.yml) mounts a
 fresh runner-local work directory at `/work`. Local tests also mount the Docker

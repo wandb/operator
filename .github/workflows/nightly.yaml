@@ -49,8 +49,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # Public multi-arch image from WESTest v0.4.0; no release-download token needed.
-  WESTEST_IMAGE: us-docker.pkg.dev/wandb-production/public/westest/westest@sha256:a23a657156cd5e7f9bde57d771f40877dcbd4ca919663a85a2e083ebb05dda97
+  # The action fixes the public WESTest repository; jobs can select only its tag.
+  WESTEST_IMAGE_TAG: "0.4.0"
 
 jobs:
   build:
@@ -128,7 +128,7 @@ jobs:
         uses: ./.github/actions/westest-run
         with:
           scenario: ${{ matrix.scenario }}
-          image: ${{ env.WESTEST_IMAGE }}
+          image-tag: ${{ env.WESTEST_IMAGE_TAG }}
           operator-version: ${{ needs.setup.outputs.chart_version }}
 
   cloud-test:
@@ -170,7 +170,7 @@ jobs:
         with:
           scenario: ${{ matrix.scenario }}
           provider: ${{ matrix.provider }}
-          image: ${{ env.WESTEST_IMAGE }}
+          image-tag: ${{ env.WESTEST_IMAGE_TAG }}
           operator-version: ${{ needs.setup.outputs.chart_version }}
           license: ${{ secrets.WESTEST_LICENSE }}
 

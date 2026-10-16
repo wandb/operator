@@ -10,6 +10,16 @@ import sys
 import time
 
 
+WESTEST_IMAGE_REPOSITORY = "us-docker.pkg.dev/wandb-production/public/westest/westest"
+
+
+def image_for_tag(tag):
+    # Accept only a Docker tag, never a registry, repository, or digest override.
+    if not re.fullmatch(r"[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}", tag):
+        raise ValueError("Invalid WESTest image tag: supply a tag such as 0.4.0, not an image reference")
+    return f"{WESTEST_IMAGE_REPOSITORY}:{tag}"
+
+
 def write_private(path, content):
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     path.touch(mode=0o600)
@@ -74,7 +84,7 @@ def run(env):
     version = env["OPERATOR_VERSION"]
     if not re.fullmatch(r"[a-zA-Z0-9.+-]+", version):
         raise ValueError("Invalid operator chart version")
-    image = env["WESTEST_IMAGE"]
+    image = image_for_tag(env["WESTEST_IMAGE_TAG"])
     root = Path(env["RUNNER_TEMP"]) / f"westest-{scenario}"
     (root / "work").mkdir(parents=True, exist_ok=True)
     name = f"westest-{scenario}-{env['GITHUB_RUN_ID']}-{env['GITHUB_RUN_ATTEMPT']}"
@@ -86,6 +96,11 @@ def run(env):
     (root / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     start = time.monotonic()
     try:
+        missing = [tool for tool in ("docker", "timeout") if shutil.which(tool) is None]
+        if missing:
+            print("::error::Required runner tools not found on PATH: " + ", ".join(missing)
+                  + ". Install Docker CLI and GNU coreutils before running WESTest.", file=sys.stderr)
+            return 1
         args = docker_args(root, provider, env)
         subprocess.run(["docker", "pull", image], check=True)
         subprocess.run(args + [image, "version"], check=True)
@@ -112,8 +127,11 @@ def collect(root):
     # Usually already removed by --rm. If the docker client was interrupted,
     # allow the still-running container to perform its normal teardown.
     grace = "660" if summary["provider"] == "local" else "2760"
-    subprocess.run(["docker", "stop", "--time", grace, summary["container"]],
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+    if shutil.which("docker"):
+        subprocess.run(["docker", "stop", "--time", grace, summary["container"]],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+    else:
+        print("::warning::Docker CLI is unavailable; cannot stop the WESTest container.", file=sys.stderr)
     summary["cleanup_checkpoint_count"] = len(list((root / "work/artifacts/_state").glob("*/*.json")))
     public = root / "public"
     public.mkdir(exist_ok=True)

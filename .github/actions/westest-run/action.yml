@@ -8,8 +8,8 @@ inputs:
   provider:
     description: local, aws, or gcp.
     default: local
-  image:
-    description: Published WESTest container image, pinned by digest.
+  image-tag:
+    description: WESTest image tag (e.g. 0.4.0). The registry and repository are fixed by the action.
     required: true
   operator-version:
     description: Published operator chart version to pass to every scenario phase.
@@ -36,7 +36,7 @@ runs:
         ACTION_PATH: ${{ github.action_path }}
         SCENARIO: ${{ inputs.scenario }}
         PROVIDER: ${{ inputs.provider }}
-        WESTEST_IMAGE: ${{ inputs.image }}
+        WESTEST_IMAGE_TAG: ${{ inputs.image-tag }}
         OPERATOR_VERSION: ${{ inputs.operator-version }}
         WESTEST_LICENSE: ${{ inputs.license }}
       run: python3 "$ACTION_PATH/run.py"

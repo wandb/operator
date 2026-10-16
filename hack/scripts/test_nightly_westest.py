@@ -1,6 +1,7 @@
 """Offline regression tests for nightly selection and the Docker credential boundary."""
 
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -66,10 +67,61 @@ class RunnerTests(unittest.TestCase):
             "RUNNER_TEMP": str(self.root), "GITHUB_OUTPUT": str(self.root / "output"),
             "GITHUB_REF": "refs/heads/main", "GITHUB_RUN_ID": "123", "GITHUB_RUN_ATTEMPT": "1",
             "SCENARIO": "local-kind-ingress", "PROVIDER": "local",
-            "OPERATOR_VERSION": "2.0.0-dev-test-20261016-120000", "WESTEST_IMAGE": "registry/westest@sha256:test",
+            "OPERATOR_VERSION": "2.0.0-dev-test-20261016-120000", "WESTEST_IMAGE_TAG": "0.4.0",
             "AWS_ACCESS_KEY_ID": "test-id", "AWS_SECRET_ACCESS_KEY": "test-secret",
             "AWS_SESSION_TOKEN": "test-session-token",
         }
+        tools = patch.object(runner.shutil, "which", side_effect=lambda tool: f"/usr/bin/{tool}")
+        self.which = tools.start()
+        self.addCleanup(tools.stop)
+
+    def test_version_tags_cannot_change_the_image_repository(self):
+        repository = "us-docker.pkg.dev/wandb-production/public/westest/westest"
+        # A legacy image variable must not override the repository either.
+        self.env["WESTEST_IMAGE"] = "untrusted.example/westest:latest"
+        for tag in ["0.4.0", "0.4.1-rc.1", "nightly_20261016"]:
+            with self.subTest(tag=tag):
+                self.env["WESTEST_IMAGE_TAG"] = tag
+                with patch.object(runner.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as command:
+                    self.assertEqual(runner.run(self.env), 0)
+                calls = [call.args[0] for call in command.call_args_list]
+                expected = f"{repository}:{tag}"
+                self.assertEqual(calls[0], ["docker", "pull", expected])
+                for args in calls:
+                    self.assertIn(expected, args)
+                    self.assertNotIn(self.env["WESTEST_IMAGE"], args)
+                summary = json.loads((self.root / "westest-local-kind-ingress/summary.json").read_text())
+                self.assertEqual(summary["image"], expected)
+
+    def test_invalid_tags_fail_before_credentials_or_docker(self):
+        self.env.update(PROVIDER="aws", SCENARIO="aws-eks-s3-irsa")
+        for tag in ["", "evil.example/westest:0.4.0", "../westest", "0.4.0@sha256:abc",
+                    "sha256:abc", "--privileged", ".hidden", "0.4.0\n", "a" * 129, "тest"]:
+            with self.subTest(tag=tag):
+                self.env["WESTEST_IMAGE_TAG"] = tag
+                with patch.object(runner.subprocess, "run") as command:
+                    with self.assertRaisesRegex(ValueError, "Invalid WESTest image tag"):
+                        runner.run(self.env)
+                    command.assert_not_called()
+                self.assertFalse((self.root / "westest-aws-eks-s3-irsa").exists())
+
+    def test_missing_tools_fail_before_credentials_and_still_collect_summary(self):
+        self.env.update(PROVIDER="aws", SCENARIO="aws-eks-s3-irsa")
+        root = self.root / "westest-aws-eks-s3-irsa"
+        for missing in ["docker", "timeout"]:
+            with self.subTest(missing=missing):
+                self.which.side_effect = lambda tool: None if tool == missing else f"/usr/bin/{tool}"
+                with patch.object(runner.subprocess, "run") as command, patch("sys.stderr", new_callable=io.StringIO) as stderr:
+                    self.assertEqual(runner.run(self.env), 1)
+                    command.assert_not_called()
+                    self.assertIn(f"Required runner tools not found on PATH: {missing}", stderr.getvalue())
+                    self.assertFalse((root / "auth").exists())
+                    with patch.dict(os.environ, {"GITHUB_STEP_SUMMARY": str(self.root / "step-summary")}):
+                        runner.collect(root)
+                    if missing == "docker":
+                        command.assert_not_called()
+                summary = json.loads((root / "public/summary.json").read_text())
+                self.assertEqual(summary["exit_code"], 1)
 
     def test_local_uses_host_network_and_docker_socket(self):
         args = runner.docker_args(self.root, "local", self.env)
