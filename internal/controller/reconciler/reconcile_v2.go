@@ -142,6 +142,9 @@ func Reconcile(
 			if err = deleteWatchtower(ctx, client, wandb); err != nil {
 				return ctrl.Result{}, err
 			}
+			if _, err = deleteSupportBundle(ctx, client, wandb, false); err != nil {
+				return ctrl.Result{}, err
+			}
 			if wandb.Spec.Networking.Mode == apiv2.NetworkingModeIngress {
 				if err = deleteConsolidatedIngress(ctx, client, wandb); err != nil {
 					return ctrl.Result{}, err
@@ -165,6 +168,8 @@ func Reconcile(
 		// continue post-finalizer logic in a future pass of the reconciliation loop
 		return ctrl.Result{}, nil
 	}
+
+	supportBundleResult := reconcileSupportBundle(ctx, client, wandb, telemetryConfig)
 
 	/////////////////////////
 	// Migrate legacy v1 conversion annotations into typed spec fields
@@ -272,6 +277,8 @@ func Reconcile(
 		return ctrl.Result{}, err
 	}
 	ctrlResults = append(ctrlResults, res)
+
+	ctrlResults = append(ctrlResults, supportBundleResult)
 
 	redisReady := redisAllReady(wandb)
 	mysqlReady := mysqlAllReady(wandb)

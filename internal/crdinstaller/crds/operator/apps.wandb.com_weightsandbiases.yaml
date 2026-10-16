@@ -69,6 +69,10 @@ spec:
     - jsonPath: .status.wandb.migration.phase
       name: Migration
       type: string
+    - jsonPath: .status.supportBundle.version
+      name: SupportBundle
+      priority: 1
+      type: string
     name: v2
     schema:
       openAPIV3Schema:
@@ -4491,6 +4495,17 @@ spec:
                 - xlarge
                 - xxlarge
                 type: string
+              supportBundle:
+                default:
+                  enabled: true
+                properties:
+                  enabled:
+                    default: true
+                    type: boolean
+                  version:
+                    pattern: ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$
+                    type: string
+                type: object
               tolerations:
                 items:
                   properties:
@@ -6804,6 +6819,24 @@ spec:
                   required:
                   - ready
                   type: object
+                type: object
+              supportBundle:
+                properties:
+                  cronJob:
+                    type: string
+                  image:
+                    type: string
+                  lastSuccessfulTime:
+                    format: date-time
+                    type: string
+                  ready:
+                    type: boolean
+                  running:
+                    type: boolean
+                  version:
+                    type: string
+                required:
+                - ready
                 type: object
               telemetryStatus:
                 properties:

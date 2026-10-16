@@ -62,6 +62,7 @@ type Options struct {
 	IssuerName        string
 
 	AdminConsoleEnabled    bool
+	SupportBundleEnabled   bool
 	ExternalMySQL          bool
 	ExternalRedis          bool
 	ExternalObjectStore    bool
@@ -82,6 +83,7 @@ func main() {
 	flag.StringVar(&opts.RetentionPolicy, "retention-policy", string(defaultRetentionPolicy), "Retention policy on delete")
 	flag.StringVar(&opts.LicenseFile, "license-file", "", "Path to W&B license file")
 	flag.BoolVar(&opts.AdminConsoleEnabled, "admin-console-enabled", false, "Enable the operator-managed admin console")
+	flag.BoolVar(&opts.SupportBundleEnabled, "support-bundle-enabled", true, "Install the suspended support-bundle CronJob template")
 	flag.StringVar(&opts.ManifestSource, "manifest-source", defaultManifestSource, "Server manifest source: published or local")
 	flag.StringVar(&opts.ObservabilityMode, "observability-mode", "", "Observability mode: off, full, or forward. Unset leaves telemetry to the operator.")
 	flag.StringVar(&opts.NetworkMode, "network-mode", "gateway", "Networking mode: gateway or ingress")
@@ -351,6 +353,7 @@ func patchScalarSpec(cr *v2.WeightsAndBiases, opts Options) {
 	cr.Spec.Size = v2.Size(opts.Size)
 	cr.Spec.RetentionPolicy.OnDelete = v2.OnDeletePolicy(opts.RetentionPolicy)
 	cr.Spec.AdminConsoleEnabled = boolPtr(opts.AdminConsoleEnabled)
+	cr.Spec.SupportBundle.Enabled = boolPtr(opts.SupportBundleEnabled)
 }
 
 func patchManifestRepository(cr *v2.WeightsAndBiases, manifestSource string) error {
