@@ -1,5 +1,8 @@
 # String-or-secret connection fields
 
+> Status: Implemented design record; use the current API and validator for field behavior.
+> Current guidance: [developer guide](../../developer/api-development.md).
+
 **Status:** Implemented (Option 2) — validated by `make lint`/`make test` and westest
 **Scope:** `api/v2` external-connection, OIDC, and notification (email/Slack) fields
 **Target release:** during v2 beta (`2.0.0-beta.3` today), before v2 GA
@@ -159,7 +162,7 @@ and the managed writers (`moco/conn.go:95`, `opstree/conn.go:97`,
 `bufstream/conn.go:93`, `altinity/conn.go:108`, `objectstore/secret.go:64`).
 So **changing the struct type ripples into every status writer**, not just spec
 input. This is fine — status always uses the *secret* arm of the union — but it
-must be handled (see [Consumption changes](#consumption-changes)).
+must be handled (see [Consumption changes](#consumption-changes-as-implemented)).
 
 ## The core constraint: no scalar-or-object in a structural schema
 

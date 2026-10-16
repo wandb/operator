@@ -1,5 +1,8 @@
 # Struct Usage Graph v2
 
+> Status: Historical type and package snapshot; not a current architecture reference.
+> Current guidance: [developer guide](../../developer/architecture.md).
+
 This document visualizes struct usage across the wandb operator codebase with clear separation between struct definitions (data) and code that operates on them (logic).
 
 ## Node Shape Legend

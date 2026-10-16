@@ -1,5 +1,8 @@
 # Tilt Resource Dependency Graph
 
+> Status: Dependency snapshot; consult the current workflow before relying on resource names.
+> Current guidance: [developer guide](../../developer/workflow.md).
+
 Resources shown with their labels in parentheses. The default path installs one
 `wandb-operator` Helm release, Gateway API networking, an optional W&B CR, and
 telemetry disabled.
