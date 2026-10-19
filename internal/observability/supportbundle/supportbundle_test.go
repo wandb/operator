@@ -256,6 +256,8 @@ func TestApplicationIsSuspendedCronJobTemplate(t *testing.T) {
 	}
 	require.Equal(t, "/dev/termination-log", env["LUMEN_SUPPORT_BUNDLE_RESULT_PATH"].Value)
 	require.Equal(t, "metadata.labels['batch.kubernetes.io/job-name']", env["SUPPORT_BUNDLE_ID"].ValueFrom.FieldRef.FieldPath)
+	require.Equal(t, "metadata.name", env["SELF_POD_NAME"].ValueFrom.FieldRef.FieldPath)
+	require.Equal(t, "metadata.namespace", env["SELF_POD_NAMESPACE"].ValueFrom.FieldRef.FieldPath)
 	for _, name := range []string{"WANDB_DATA_ROOT", "AWS_REGION"} {
 		require.Empty(t, env[name].Value, name)
 		require.NotNil(t, env[name].ValueFrom.SecretKeyRef, name)
@@ -288,7 +290,7 @@ func TestDefaultBucketConnection(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "url", conn.URL.Key)
 	require.Nil(t, conn.Region)
-	require.Len(t, collectorEnv(conn), 3)
+	require.Len(t, collectorEnv(conn), 5)
 }
 
 func allRules(roles []*rbacv1.Role) []rbacv1.PolicyRule {
