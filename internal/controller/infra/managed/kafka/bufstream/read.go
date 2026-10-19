@@ -16,7 +16,6 @@ func ReadState(
 	cl client.Client,
 	specNamespacedName types.NamespacedName,
 	wandbOwner client.Object,
-	onDeleteRule ctrlcommon.OnDeleteRule,
 ) ([]metav1.Condition, *apiv2.KafkaConnection) {
 	ctx, log := logx.WithSlog(ctx, logx.Kafka)
 	nsnBuilder := createNsNameBuilder(specNamespacedName)
@@ -31,28 +30,17 @@ func ReadState(
 		}}, nil
 	}
 
-	conditions := make([]metav1.Condition, 0)
-
 	if !found {
 		log.Info("Bufstream Application CR not found")
-		bufApp = nil
-		if onDeleteRule.Policy == ctrlcommon.Purge {
-			if err := purgeAssociatedResources(ctx, cl, specNamespacedName, onDeleteRule.Selector); err != nil {
-				conditions = append(conditions, metav1.Condition{
-					Type:   BufstreamApplicationType,
-					Status: metav1.ConditionUnknown,
-					Reason: ctrlcommon.ApiErrorReason,
-				})
-			} else {
-				conditions = append(conditions, metav1.Condition{
-					Type:   BufstreamApplicationType,
-					Status: metav1.ConditionFalse,
-					Reason: ctrlcommon.PendingDeleteReason,
-				})
-			}
-		}
-		return conditions, nil
+		// Etcd may still be live during a partial deployment; only W&B deletion may purge its data.
+		return []metav1.Condition{{
+			Type:   BufstreamApplicationType,
+			Status: metav1.ConditionFalse,
+			Reason: ctrlcommon.NoResourceReason,
+		}}, nil
 	}
+
+	conditions := make([]metav1.Condition, 0)
 
 	etcdApp := &apiv2.Application{}
 	etcdReady := false
