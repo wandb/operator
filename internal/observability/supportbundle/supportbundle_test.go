@@ -52,7 +52,7 @@ func TestEnabledRequiresExplicitTrue(t *testing.T) {
 func TestImageResolution(t *testing.T) {
 	wandb := testWandb()
 	require.Equal(t, DefaultSupportBundleVersion, Version(wandb))
-	require.Equal(t, "us-docker.pkg.dev/wandb-production/public/wandb/lumen:0.4.8", Image(wandb))
+	require.Equal(t, "us-docker.pkg.dev/wandb-production/public/wandb/lumen:0.4.10", Image(wandb))
 
 	wandb.Spec.SupportBundle.Version = "0.5.0"
 	wandb.Spec.Global.ImageRegistry = "registry.corp"
@@ -209,7 +209,7 @@ func TestApplicationIsSuspendedCronJobTemplate(t *testing.T) {
 	require.Equal(t, "wandb-support-bundle-collector", cron.Name)
 	require.Equal(t, "0 0 * * *", cron.Spec.Schedule)
 	require.True(t, *cron.Spec.Suspend)
-	require.Equal(t, "0.4.8", cron.Labels["app.kubernetes.io/version"])
+	require.Equal(t, "0.4.10", cron.Labels["app.kubernetes.io/version"])
 
 	job := cron.Spec.JobTemplate.Spec
 	require.Equal(t, int32(0), *job.BackoffLimit)
@@ -256,6 +256,8 @@ func TestApplicationIsSuspendedCronJobTemplate(t *testing.T) {
 	}
 	require.Equal(t, "/dev/termination-log", env["LUMEN_SUPPORT_BUNDLE_RESULT_PATH"].Value)
 	require.Equal(t, "metadata.labels['batch.kubernetes.io/job-name']", env["SUPPORT_BUNDLE_ID"].ValueFrom.FieldRef.FieldPath)
+	require.Equal(t, "metadata.name", env["SELF_POD_NAME"].ValueFrom.FieldRef.FieldPath)
+	require.Equal(t, "metadata.namespace", env["SELF_POD_NAMESPACE"].ValueFrom.FieldRef.FieldPath)
 	for _, name := range []string{"WANDB_DATA_ROOT", "AWS_REGION"} {
 		require.Empty(t, env[name].Value, name)
 		require.NotNil(t, env[name].ValueFrom.SecretKeyRef, name)
@@ -288,7 +290,7 @@ func TestDefaultBucketConnection(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "url", conn.URL.Key)
 	require.Nil(t, conn.Region)
-	require.Len(t, collectorEnv(conn), 3)
+	require.Len(t, collectorEnv(conn), 5)
 }
 
 func allRules(roles []*rbacv1.Role) []rbacv1.PolicyRule {
