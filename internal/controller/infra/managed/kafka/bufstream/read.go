@@ -37,7 +37,7 @@ func ReadState(
 		log.Info("Bufstream Application CR not found")
 		bufApp = nil
 		if onDeleteRule.Policy == ctrlcommon.Purge {
-			if err := purgeAssociatedResources(ctx, cl, specNamespacedName.Namespace, onDeleteRule.Selector); err != nil {
+			if err := purgeAssociatedResources(ctx, cl, specNamespacedName, onDeleteRule.Selector); err != nil {
 				conditions = append(conditions, metav1.Condition{
 					Type:   BufstreamApplicationType,
 					Status: metav1.ConditionUnknown,

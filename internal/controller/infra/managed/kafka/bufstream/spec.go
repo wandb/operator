@@ -361,7 +361,7 @@ func ToEtcdApplication(
 			},
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
 				{
-					ObjectMeta: metav1.ObjectMeta{Name: EtcdDataVolumeName},
+					ObjectMeta: metav1.ObjectMeta{Name: EtcdDataVolumeName, Labels: BuildWandbKafkaLabels(wandb)},
 					Spec: corev1.PersistentVolumeClaimSpec{
 						AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
 						Resources: corev1.VolumeResourceRequirements{
