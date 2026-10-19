@@ -9,7 +9,7 @@ import (
 
 const (
 	supportBundleImageRepository = "us-docker.pkg.dev/wandb-production/public/wandb/lumen"
-	DefaultSupportBundleVersion  = "0.4.8"
+	DefaultSupportBundleVersion  = "0.4.10"
 	Component                    = "support-bundle"
 	supportBundleNameSuffix      = "-support-bundle"
 	collectorCronJobSuffix       = "-support-bundle-collector"

@@ -25,6 +25,9 @@ const (
 	bundleIDEnv       = "SUPPORT_BUNDLE_ID"
 	bundleIDFieldPath = "metadata.labels['batch.kubernetes.io/job-name']"
 
+	selfPodNameEnv      = "SELF_POD_NAME"
+	selfPodNamespaceEnv = "SELF_POD_NAMESPACE"
+
 	collectionVolumeName = "collection"
 	stagingVolumeName    = "staging"
 	tmpVolumeName        = "tmp"
@@ -165,6 +168,8 @@ func collectorEnv(bucket BucketConnection) []corev1.EnvVar {
 		secretEnv("WANDB_DATA_ROOT", bucket.URL, false),
 		{Name: "LUMEN_SUPPORT_BUNDLE_RESULT_PATH", Value: resultPath},
 		{Name: bundleIDEnv, ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: bundleIDFieldPath}}},
+		{Name: selfPodNameEnv, ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.name"}}},
+		{Name: selfPodNamespaceEnv, ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.namespace"}}},
 	}
 	if bucket.Region != nil {
 		env = append(env, secretEnv("AWS_REGION", bucket.Region, true))

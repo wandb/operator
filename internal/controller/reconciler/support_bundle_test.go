@@ -222,8 +222,8 @@ func TestSupportBundleLifecycle(t *testing.T) {
 		require.NoError(t, c.Get(ctx, ctrlClient.ObjectKeyFromObject(wandb), stored))
 		require.Equal(t, &apiv2.SupportBundleStatusSummary{
 			CronJob: "wandb-support-bundle-collector",
-			Version: "0.4.8",
-			Image:   "us-docker.pkg.dev/wandb-production/public/wandb/lumen:0.4.8",
+			Version: "0.4.10",
+			Image:   "us-docker.pkg.dev/wandb-production/public/wandb/lumen:0.4.10",
 		}, stored.Status.SupportBundle)
 
 		simulateApplicationController(t, c, wandb)
@@ -282,7 +282,7 @@ func TestSupportBundleLifecycle(t *testing.T) {
 		require.Equal(t, "0.4.9", cron.Labels["app.kubernetes.io/version"])
 		require.True(t, *cron.Spec.Suspend)
 
-		require.False(t, wandb.Status.SupportBundle.Ready, "the CronJob still runs 0.4.8")
+		require.False(t, wandb.Status.SupportBundle.Ready, "the CronJob still runs 0.4.10")
 		simulateApplicationController(t, c, wandb)
 		reconcileSupportBundle(ctx, c, wandb, supportBundleTelemetry)
 		require.True(t, wandb.Status.SupportBundle.Ready)
