@@ -63,6 +63,9 @@ jobs:
           GH_TOKEN: ${{ steps.watchtower-token.outputs.token }}
         run: make download-watchtower
 
+      - name: Download Grafana plugins
+        run: make download-grafana-plugins
+
       - name: Build and publish development image
         env:
           IMAGE_REPOSITORY: us-docker.pkg.dev/wandb-production/public/wandb/operator

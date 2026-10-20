@@ -25,6 +25,15 @@
         "namespace": {
           "type": "string"
         },
+        "grafana": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "pluginImage": {
+              "type": "string"
+            }
+          }
+        },
         "otel": {
           "type": "object",
           "additionalProperties": false,
