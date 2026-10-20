@@ -7,6 +7,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/pkg/utils"
 	seaweedv1 "github.com/wandb/operator/pkg/vendored/seaweedfs-operator/seaweed.seaweedfs.com/v1"
 	"github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
@@ -16,6 +17,56 @@ import (
 )
 
 var _ = Describe("SeaweedFS vendor specs", func() {
+	BeforeEach(func() {
+		previousMode := utils.IsOpenShift()
+		DeferCleanup(utils.SetOpenShiftMode, previousMode)
+		utils.SetOpenShiftMode(false)
+	})
+
+	It("gives all four components independent read-only contexts", func() {
+		wandb := seaweedWandb()
+		seaweed, err := ToObjectStoreVendorSpec(context.Background(), wandb, wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore, seaweedScheme(), manifest.Manifest{})
+		Expect(err).NotTo(HaveOccurred())
+		components := []*seaweedv1.ComponentSpec{&seaweed.Spec.Master.ComponentSpec, &seaweed.Spec.Volume.ComponentSpec, &seaweed.Spec.Filer.ComponentSpec, &seaweed.Spec.S3.ComponentSpec}
+		for _, component := range components {
+			Expect(component.PodSecurityContext.RunAsNonRoot).To(BeNil())
+			Expect(component.PodSecurityContext.RunAsUser).To(BeNil())
+			Expect(component.PodSecurityContext.RunAsGroup).To(BeNil())
+			Expect(component.PodSecurityContext.FSGroup).To(BeNil())
+			Expect(component.PodSecurityContext.SeccompProfile.Type).To(Equal(corev1.SeccompProfileTypeRuntimeDefault))
+			sc := component.ContainerSecurityContext
+			Expect(sc.RunAsNonRoot).To(BeNil())
+			Expect(sc.RunAsUser).To(BeNil())
+			Expect(sc.RunAsGroup).To(BeNil())
+			Expect(sc.ReadOnlyRootFilesystem).To(HaveValue(BeTrue()))
+			Expect(sc.AllowPrivilegeEscalation).To(HaveValue(BeFalse()))
+			Expect(sc.Capabilities.Drop).To(ConsistOf(corev1.Capability("ALL")))
+			Expect(sc.SeccompProfile.Type).To(Equal(corev1.SeccompProfileTypeRuntimeDefault))
+		}
+		copy := seaweed.DeepCopy()
+		*copy.Spec.Master.ContainerSecurityContext.ReadOnlyRootFilesystem = false
+		*seaweed.Spec.Master.ContainerSecurityContext.ReadOnlyRootFilesystem = false
+		for _, component := range components[1:] {
+			Expect(component.ContainerSecurityContext.ReadOnlyRootFilesystem).To(HaveValue(BeTrue()))
+		}
+		Expect(copy.Spec.Filer.ContainerSecurityContext.ReadOnlyRootFilesystem).To(HaveValue(BeTrue()))
+	})
+
+	It("leaves identity allocation to OpenShift SCCs", func() {
+		utils.SetOpenShiftMode(true)
+		wandb := seaweedWandb()
+		seaweed, err := ToObjectStoreVendorSpec(context.Background(), wandb, wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore, seaweedScheme(), manifest.Manifest{})
+		Expect(err).NotTo(HaveOccurred())
+		for _, component := range []*seaweedv1.ComponentSpec{&seaweed.Spec.Master.ComponentSpec, &seaweed.Spec.Volume.ComponentSpec, &seaweed.Spec.Filer.ComponentSpec, &seaweed.Spec.S3.ComponentSpec} {
+			Expect(component.PodSecurityContext.RunAsUser).To(BeNil())
+			Expect(component.PodSecurityContext.RunAsGroup).To(BeNil())
+			Expect(component.PodSecurityContext.FSGroup).To(BeNil())
+			Expect(component.ContainerSecurityContext.RunAsUser).To(BeNil())
+			Expect(component.ContainerSecurityContext.RunAsGroup).To(BeNil())
+			Expect(component.ContainerSecurityContext.ReadOnlyRootFilesystem).To(HaveValue(BeTrue()))
+		}
+	})
+
 	It("renders writable runtime mounts for SeaweedFS components", func() {
 		wandb := seaweedWandb()
 

@@ -47,10 +47,11 @@ var _ = Describe("Moco MySQL specs", func() {
 		Expect(*podSpec.Containers[0].Name).To(Equal("mysqld"))
 		expectMocoContainerSecurityContext(podSpec.Containers[0].SecurityContext)
 
-		Expect(cluster.Spec.PodTemplate.OverwriteContainers).To(HaveLen(4))
+		Expect(cluster.Spec.PodTemplate.OverwriteContainers).To(HaveLen(5))
 		for _, overwrite := range cluster.Spec.PodTemplate.OverwriteContainers {
 			Expect(overwrite.Name).To(BeElementOf(
 				mocov1beta2.AgentContainerName,
+				mocoCopyInitContainerName,
 				mocov1beta2.InitContainerName,
 				mocov1beta2.SlowQueryLogAgentContainerName,
 				mocov1beta2.ExporterContainerName,
@@ -81,6 +82,9 @@ var _ = Describe("Moco MySQL specs", func() {
 		podSpec := cluster.Spec.PodTemplate.Spec
 		expectMocoOpenShiftPodSecurityContext(podSpec.SecurityContext)
 		expectMocoOpenShiftContainerSecurityContext(podSpec.Containers[0].SecurityContext)
+		for _, overwrite := range cluster.Spec.PodTemplate.OverwriteContainers {
+			expectMocoOpenShiftContainerSecurityContext((*corev1ac.SecurityContextApplyConfiguration)(overwrite.SecurityContext))
+		}
 	})
 
 	It("enables local_infile for LOAD DATA LOCAL INFILE bulk writes", func() {
@@ -269,6 +273,7 @@ func expectMocoContainerSecurityContext(securityContext *corev1ac.SecurityContex
 	Expect(*securityContext.RunAsNonRoot).To(BeTrue())
 	Expect(securityContext.AllowPrivilegeEscalation).NotTo(BeNil())
 	Expect(*securityContext.AllowPrivilegeEscalation).To(BeFalse())
+	Expect(securityContext.ReadOnlyRootFilesystem).To(HaveValue(BeTrue()))
 	Expect(securityContext.Capabilities).NotTo(BeNil())
 	Expect(securityContext.Capabilities.Drop).To(ContainElement(mocoMySQLCapabilityAll))
 	Expect(securityContext.SeccompProfile).NotTo(BeNil())
@@ -297,6 +302,7 @@ func expectMocoOpenShiftContainerSecurityContext(securityContext *corev1ac.Secur
 	Expect(*securityContext.RunAsNonRoot).To(BeTrue())
 	Expect(securityContext.AllowPrivilegeEscalation).NotTo(BeNil())
 	Expect(*securityContext.AllowPrivilegeEscalation).To(BeFalse())
+	Expect(securityContext.ReadOnlyRootFilesystem).To(HaveValue(BeTrue()))
 	Expect(securityContext.Capabilities).NotTo(BeNil())
 	Expect(securityContext.Capabilities.Drop).To(ContainElement(mocoMySQLCapabilityAll))
 	Expect(securityContext.SeccompProfile).NotTo(BeNil())

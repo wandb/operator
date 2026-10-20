@@ -142,6 +142,9 @@ func Reconcile(
 			if err = deleteWatchtower(ctx, client, wandb); err != nil {
 				return ctrl.Result{}, err
 			}
+			if _, err = deleteSupportBundle(ctx, client, wandb, false); err != nil {
+				return ctrl.Result{}, err
+			}
 			if wandb.Spec.Networking.Mode == apiv2.NetworkingModeIngress {
 				if err = deleteConsolidatedIngress(ctx, client, wandb); err != nil {
 					return ctrl.Result{}, err
@@ -165,6 +168,8 @@ func Reconcile(
 		// continue post-finalizer logic in a future pass of the reconciliation loop
 		return ctrl.Result{}, nil
 	}
+
+	supportBundleResult := reconcileSupportBundle(ctx, client, wandb, telemetryConfig)
 
 	/////////////////////////
 	// Migrate legacy v1 conversion annotations into typed spec fields
@@ -272,6 +277,8 @@ func Reconcile(
 		return ctrl.Result{}, err
 	}
 	ctrlResults = append(ctrlResults, res)
+
+	ctrlResults = append(ctrlResults, supportBundleResult)
 
 	redisReady := redisAllReady(wandb)
 	mysqlReady := mysqlAllReady(wandb)
@@ -609,6 +616,8 @@ func reconcileApplications(
 		// Applied last so legacy overrides beat manifest and injected env, as in v1.
 		envVars = applyLegacyOverrideEnv(ctx, wandb, app.Name, envVars)
 
+		app.SecurityProfile = resolveWorkloadSecurityProfile(app.SecurityProfile,
+			wandb.Spec.Wandb.SecurityProfile, wandb.Spec.Wandb.Applications[app.Name].SecurityProfile)
 		containers := resolveContainers(app, wandb, envVars, volumeMounts)
 
 		initContainers := resolveInitContainers(app, wandb, envVars, volumeMounts)
@@ -1174,8 +1183,10 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 					ImagePullSecrets:   wandb.Spec.Global.ImagePullSecrets,
 				},
 			}
-			if hasWorkloadSecurityProfile(migrationTask.SecurityProfile) {
-				applyWorkloadSecurityProfile(&podTemplate.Spec, migrationTask.SecurityProfile)
+			profile := resolveWorkloadSecurityProfile(migrationTask.SecurityProfile,
+				wandb.Spec.Wandb.SecurityProfile, wandb.Spec.Wandb.Migrations[name].SecurityProfile)
+			if hasWorkloadSecurityProfile(profile) {
+				applyWorkloadSecurityProfile(&podTemplate.Spec, profile)
 			}
 			setCustomCACertsChecksumAnnotation(&podTemplate, caChecksum)
 

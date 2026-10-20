@@ -24,3 +24,10 @@
 {{- if and (eq $mode "forward") (eq (default "" .Values.telemetry.forwarding.otlp.endpoint) "") -}}
 {{- fail "telemetry.mode=forward requires telemetry.forwarding.otlp.endpoint" -}}
 {{- end -}}
+{{- if $stackEnabled -}}
+{{- range (dig "global" "imagePullSecrets" (list) .Values.AsMap) -}}
+{{- if not (and (kindIs "map" .) (hasKey . "name")) -}}
+{{- fail "telemetry requires each global.imagePullSecrets entry to be a {name: <secret>} object" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}

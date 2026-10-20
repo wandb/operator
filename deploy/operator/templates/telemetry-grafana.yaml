@@ -1,0 +1,4 @@
+{{- if eq (include "telemetry.uiEnabled" .Subcharts.telemetry) "true" }}
+---
+{{ include "telemetry.grafana" (dict "root" .Subcharts.telemetry "pluginImage" (.Subcharts.telemetry.Values.grafana.pluginImage | default (include "wandb-operator.image" .))) }}
+{{- end }}

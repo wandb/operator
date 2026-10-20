@@ -9,6 +9,16 @@ on:
       - v2
       - main
 jobs:
+  westest-workflow:
+    name: WESTest workflow checks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Test scenario selection and Docker credential handling
+        run: python3 -B -m unittest discover -s hack/scripts -p test_nightly_westest.py
+
   test:
     name: Test
     runs-on: ubuntu-latest
@@ -17,7 +27,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version: 1.27.1
+          go-version: 1.27.2
       - name: Install dependencies
         run: go mod download
       - name: Install Ginkgo
@@ -49,7 +59,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version: 1.27.1
+          go-version: 1.27.2
       - name: Build
         run: make build
 
@@ -61,7 +71,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version: 1.27.1
+          go-version: 1.27.2
       - name: Install dependencies
         run: go mod download
       - name: Check for changes in go.mod or go.sum

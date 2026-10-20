@@ -9,6 +9,11 @@ WATCHTOWER_VERSION ?= v0.13.1
 WATCHTOWER_ARCH ?= amd64
 WATCHTOWER_BINARY ?= watchtower
 
+# Grafana plugins baked into the operator image so Grafana never downloads them at runtime.
+GRAFANA_PLUGIN_VERSION ?= 0.33.1
+GRAFANA_PLUGIN_SHA256 ?= 849edf4d86a6555bbf3fdbe1c53ed719a6c51c3d69965dcc0384e2c129ad991a
+GRAFANA_PLUGINS_DIR ?= grafana-plugins
+
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin
@@ -54,8 +59,13 @@ manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and Cust
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd:allowDangerousTypes=true,generateEmbeddedObjectMeta=true,maxDescLen=0 webhook paths="{./api/v1,./api/v2,./internal/controller/...,./internal/webhook/...}" output:crd:artifacts:config=config/crd/bases
 
 .PHONY: generate
-generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
+generate: controller-gen generate-seaweedfs ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="{./api/v1,./api/v2,./pkg/vendored/keda/...}"
+
+# SeaweedFS's curated upstream API snapshot retains only object-generation markers.
+.PHONY: generate-seaweedfs
+generate-seaweedfs: controller-gen ## Regenerate DeepCopy methods for the vendored SeaweedFS API.
+	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./pkg/vendored/seaweedfs-operator/seaweed.seaweedfs.com/v1"
 
 .PHONY: generate-vendored
 generate-vendored: ## Regenerate CRDs from the operator's Helm chart dependencies.
@@ -259,13 +269,36 @@ download-watchtower: ## Download the Watchtower binary into the repo root. Requi
 	chmod 0755 "$(WATCHTOWER_BINARY)"; \
 	echo "Wrote $(WATCHTOWER_BINARY) (linux/$(WATCHTOWER_ARCH))"
 
+.PHONY: download-grafana-plugins
+download-grafana-plugins: ## Download the pinned VictoriaLogs Grafana plugin into GRAFANA_PLUGINS_DIR.
+	@command -v curl >/dev/null 2>&1 || { echo "curl is required but was not found." >&2; exit 1; }
+	@set -eu; \
+	plugin="victoriametrics-logs-datasource"; \
+	asset="$$plugin-v$(GRAFANA_PLUGIN_VERSION).tar.gz"; \
+	tmp="$$(mktemp -d)"; \
+	trap 'rm -rf "$$tmp"' EXIT; \
+	echo "Fetching $$asset"; \
+	curl -fsSL -o "$$tmp/$$asset" \
+		"https://github.com/VictoriaMetrics/victorialogs-datasource/releases/download/v$(GRAFANA_PLUGIN_VERSION)/$$asset"; \
+	if command -v sha256sum >/dev/null 2>&1; then sha="sha256sum"; else sha="shasum -a 256"; fi; \
+	(cd "$$tmp" && echo "$(GRAFANA_PLUGIN_SHA256)  $$asset" | $$sha -c -); \
+	tar -xzf "$$tmp/$$asset" -C "$$tmp"; \
+	rm -rf "$(GRAFANA_PLUGINS_DIR)"; \
+	mkdir -p "$(GRAFANA_PLUGINS_DIR)"; \
+	mv "$$tmp/$$plugin" "$(GRAFANA_PLUGINS_DIR)/$$plugin"; \
+	echo "Wrote $(GRAFANA_PLUGINS_DIR)/$$plugin $(GRAFANA_PLUGIN_VERSION)"
+
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
-docker-build: ## Build controller docker image. Run download-watchtower first.
+docker-build: ## Build controller docker image. Run download-watchtower and download-grafana-plugins first.
 	@if [ ! -f "$(WATCHTOWER_BINARY)" ]; then \
 		echo "$(WATCHTOWER_BINARY) not found: run 'GH_TOKEN=\$$(gh auth token) make download-watchtower' first." >&2; \
+		exit 1; \
+	fi
+	@if [ ! -d "$(GRAFANA_PLUGINS_DIR)" ]; then \
+		echo "$(GRAFANA_PLUGINS_DIR) not found: run 'make download-grafana-plugins' first." >&2; \
 		exit 1; \
 	fi
 	$(CONTAINER_TOOL) build --platform linux/$(WATCHTOWER_ARCH) \
@@ -355,7 +388,7 @@ CONTROLLER_TOOLS_VERSION ?= v0.19.0
 ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
 #ENVTEST_K8S_VERSION is the version of Kubernetes to use for setting up ENVTEST binaries (i.e. 1.31)
 ENVTEST_K8S_VERSION ?= $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -F'[v.]' '{printf "1.%d", $$3}')
-GOLANGCI_LINT_VERSION ?= v2.13.2
+GOLANGCI_LINT_VERSION ?= v2.14.0
 
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.

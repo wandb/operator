@@ -30,6 +30,9 @@ jobs:
           GH_TOKEN: ${{ steps.watchtower-token.outputs.token }}
         run: make download-watchtower
 
+      - name: Download Grafana plugins
+        run: make download-grafana-plugins
+
       - name: Build Docker image
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:

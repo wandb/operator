@@ -87,14 +87,14 @@ func TestApplyWorkloadSecurityProfileValues(t *testing.T) {
 
 	tests := []struct {
 		name             string
-		profile          serverManifest.WorkloadSecurityProfile
+		profile          apiv2.WorkloadSecurityProfile
 		wantRunAsNonRoot *bool
 		wantReadOnlyRoot *bool
 	}{
 		{name: "empty"},
 		{
 			name: "enabled",
-			profile: serverManifest.WorkloadSecurityProfile{
+			profile: apiv2.WorkloadSecurityProfile{
 				RunAsNonRoot:           new(true),
 				ReadOnlyRootFilesystem: new(true),
 			},
@@ -103,7 +103,7 @@ func TestApplyWorkloadSecurityProfileValues(t *testing.T) {
 		},
 		{
 			name: "explicitly disabled",
-			profile: serverManifest.WorkloadSecurityProfile{
+			profile: apiv2.WorkloadSecurityProfile{
 				RunAsNonRoot:           new(false),
 				ReadOnlyRootFilesystem: new(false),
 			},
@@ -112,7 +112,7 @@ func TestApplyWorkloadSecurityProfileValues(t *testing.T) {
 		},
 		{
 			name: "mixed",
-			profile: serverManifest.WorkloadSecurityProfile{
+			profile: apiv2.WorkloadSecurityProfile{
 				RunAsNonRoot: new(true),
 			},
 			wantRunAsNonRoot: new(true),
@@ -145,7 +145,7 @@ func TestApplyWorkloadSecurityProfileValues(t *testing.T) {
 func TestApplyApplicationSecurityProfileAndClearSettings(t *testing.T) {
 	t.Parallel()
 
-	profile := serverManifest.WorkloadSecurityProfile{
+	profile := apiv2.WorkloadSecurityProfile{
 		RunAsNonRoot:           new(true),
 		ReadOnlyRootFilesystem: new(true),
 	}
@@ -182,7 +182,7 @@ func TestApplyApplicationSecurityProfileAndClearSettings(t *testing.T) {
 		assertOptionalBool(t, container.Name+" independent readOnlyRootFilesystem", container.SecurityContext.ReadOnlyRootFilesystem, new(true))
 	}
 
-	applyWorkloadSecurityProfile(&pod, serverManifest.WorkloadSecurityProfile{})
+	applyWorkloadSecurityProfile(&pod, apiv2.WorkloadSecurityProfile{})
 	for _, container := range append(pod.Containers, pod.InitContainers...) {
 		assertContainerSecurityBaseline(t, container.SecurityContext)
 		assertOptionalBool(t, container.Name+" readOnlyRootFilesystem after rollback", container.SecurityContext.ReadOnlyRootFilesystem, nil)
@@ -197,7 +197,7 @@ func TestApplySingleContainerSecurityProfile(t *testing.T) {
 	app := serverManifest.Application{
 		Name:  "api",
 		Image: serverManifest.ImageRef{Repository: "api", Tag: "test"},
-		SecurityProfile: serverManifest.WorkloadSecurityProfile{
+		SecurityProfile: apiv2.WorkloadSecurityProfile{
 			ReadOnlyRootFilesystem: new(false),
 		},
 	}

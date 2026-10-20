@@ -71,6 +71,8 @@ const (
 
 	redisWritableTmpVolumeName = "redis-tmp"
 	redisWritableTmpMountPath  = "/tmp"
+	redisSentinelRunVolumeName = "redis-sentinel-run"
+	redisSentinelRunMountPath  = "/var/run"
 
 	redisCapabilityAll corev1.Capability = "ALL"
 )
@@ -106,6 +108,7 @@ func redisContainerSecurityContext() *corev1.SecurityContext {
 	securityContext := &corev1.SecurityContext{
 		RunAsNonRoot:             ptr.To(true),
 		AllowPrivilegeEscalation: ptr.To(false),
+		ReadOnlyRootFilesystem:   ptr.To(true),
 		Capabilities: &corev1.Capabilities{
 			Drop: []corev1.Capability{redisCapabilityAll},
 		},
@@ -116,6 +119,17 @@ func redisContainerSecurityContext() *corev1.SecurityContext {
 		securityContext.RunAsGroup = ptr.To(redisRunAsGroup)
 	}
 	return securityContext
+}
+
+// The pinned Redis operator's GenerateConfigInInitContainer feature uses this
+// context for its generated init-config container. Keep the separate custom
+// init container disabled; Image satisfies the vendor API's required field.
+func redisConfigInitContainer(image string) *rediscommon.InitContainer {
+	return &rediscommon.InitContainer{
+		Enabled:         ptr.To(false),
+		Image:           image,
+		SecurityContext: redisContainerSecurityContext(),
+	}
 }
 
 func redisWritableVolumeMount() rediscommon.AdditionalVolume {
@@ -136,6 +150,17 @@ func redisWritableVolumeMount() rediscommon.AdditionalVolume {
 
 func redisAdditionalVolumePtr() *rediscommon.AdditionalVolume {
 	volumeMount := redisWritableVolumeMount()
+	// The pinned upstream Sentinel config writes /var/run/redis-sentinel.pid.
+	// Keep that ephemeral runtime path writable while the root stays read-only.
+	volumeMount.Volume = append(volumeMount.Volume, corev1.Volume{
+		Name: redisSentinelRunVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		},
+	})
+	volumeMount.MountPath = append(volumeMount.MountPath, corev1.VolumeMount{
+		Name: redisSentinelRunVolumeName, MountPath: redisSentinelRunMountPath,
+	})
 	return &volumeMount
 }
 
@@ -203,12 +228,12 @@ func ToRedisStandaloneVendorSpec(
 			Affinity:           wandb.GetAffinity(spec.ManagedInfraSpec),
 			PodSecurityContext: redisPodSecurityContext(),
 			SecurityContext:    redisContainerSecurityContext(),
+			InitContainer:      redisConfigInitContainer(RedisStandaloneImage(mfst.Redis["default"].Images["standalone"], wandb.Spec.Global.ImageRegistry)),
 			Tolerations:        wandb.GetTolerations(spec.ManagedInfraSpec),
 			Storage: &rediscommon.Storage{
 				VolumeClaimTemplate: corev1.PersistentVolumeClaim{
-					ObjectMeta: metav1.ObjectMeta{
-						Labels: BuildWandbRedisLabels(wandb),
-					},
+					// The upstream CRD does not admit template metadata labels.
+					// WriteState labels live PVCs; purge also discovers unlabeled claims.
 					Spec: corev1.PersistentVolumeClaimSpec{
 						AccessModes: []corev1.PersistentVolumeAccessMode{
 							corev1.ReadWriteOnce,
@@ -289,6 +314,7 @@ func ToRedisSentinelVendorSpec(
 			},
 			PodSecurityContext: redisPodSecurityContext(),
 			SecurityContext:    redisContainerSecurityContext(),
+			InitContainer:      redisConfigInitContainer(RedisSentinelImage(mfst.Redis["default"].Images["sentinel"], wandb.Spec.Global.ImageRegistry)),
 			Affinity:           wandb.GetAffinity(spec.ManagedInfraSpec),
 			Tolerations:        wandb.GetTolerations(spec.ManagedInfraSpec),
 			VolumeMount:        redisAdditionalVolumePtr(),
@@ -369,13 +395,12 @@ func ToRedisReplicationVendorSpec(
 			},
 			PodSecurityContext: redisPodSecurityContext(),
 			SecurityContext:    redisContainerSecurityContext(),
+			InitContainer:      redisConfigInitContainer(RedisReplicationImage(mfst.Redis["default"].Images["replication"], wandb.Spec.Global.ImageRegistry)),
 			Affinity:           wandb.GetAffinity(spec.ManagedInfraSpec),
 			Tolerations:        wandb.GetTolerations(spec.ManagedInfraSpec),
 			Storage: &rediscommon.Storage{
 				VolumeClaimTemplate: corev1.PersistentVolumeClaim{
-					ObjectMeta: metav1.ObjectMeta{
-						Labels: BuildWandbRedisLabels(wandb),
-					},
+					// Ownership labels are reconciled on the actual PVCs.
 					Spec: corev1.PersistentVolumeClaimSpec{
 						AccessModes: []corev1.PersistentVolumeAccessMode{
 							corev1.ReadWriteOnce,

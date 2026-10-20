@@ -1,18 +1,17 @@
 name: Nightly WESTest
 
 # End-to-end testing of the operator via wandb/westest. Builds an operator
-# image+chart and runs WESTest scenarios against it on large runners.
+# image+chart and runs local Kind scenarios, plus AWS/GCP smoke tests on main.
 #   - schedule                    -> nightly build (2.0.0-nightly-<timestamp>)
 #   - manual (workflow_dispatch)  -> dev build (2.0.0-dev-[<tag>-]<timestamp>),
 #                                    builds the dispatched branch; set `dev_tag`
 #                                    to label it.
 #   - manual + `operator_version` -> skip the build and test that already-published
 #                                    chart version.
-# See docs/nightly-westest-testing.md for the full plan, prerequisites, and phases.
+# See docs/nightly-westest-testing.md for setup and first-run validation.
 #
 # Do NOT enable the schedule trigger until the prerequisites in
-# docs/nightly-westest-testing.md §7 are met (WESTEST_APP_ID /
-# WESTEST_APP_PRIVATE_KEY secrets, and ubuntu-latest-8-cores availability).
+# docs/nightly-westest-testing.md are met and cloud cleanup is validated.
 
 on:
   workflow_dispatch:
@@ -26,7 +25,7 @@ on:
           - dev
           - nightly
       scenario:
-        description: "Single scenario to run (blank = full smoke set)."
+        description: "Single supported scenario (blank = 5 local scenarios, plus AWS/GCP on main)."
         type: string
         required: false
         default: ""
@@ -50,9 +49,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # Pin the WESTest release; the action defaults to `latest`, which resolves by
-  # creation date and would make runs non-reproducible.
-  WESTEST_VERSION: v0.2.0
+  # The action fixes the public WESTest repository; jobs can select only its tag.
+  WESTEST_IMAGE_TAG: "0.4.0"
 
 jobs:
   build:
@@ -77,9 +75,14 @@ jobs:
     permissions:
       contents: read
     outputs:
-      matrix: ${{ steps.matrix.outputs.matrix }}
+      local_matrix: ${{ steps.matrix.outputs.local_matrix }}
+      cloud_matrix: ${{ steps.matrix.outputs.cloud_matrix }}
+      has_local: ${{ steps.matrix.outputs.has_local }}
+      has_cloud: ${{ steps.matrix.outputs.has_cloud }}
       chart_version: ${{ steps.version.outputs.chart_version }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Resolve operator chart version
         id: version
         env:
@@ -92,27 +95,22 @@ jobs:
             echo "no operator chart version resolved (build skipped and operator_version empty?)" >&2
             exit 1
           fi
+          if [[ ! "$v" =~ ^[a-zA-Z0-9.+-]+$ ]]; then
+            echo "invalid operator chart version" >&2
+            exit 1
+          fi
           echo "chart_version=${v}" >> "${GITHUB_OUTPUT}"
           echo "Testing operator chart version: ${v}"
       - name: Build scenario matrix
         id: matrix
         env:
           SCENARIO: ${{ inputs.scenario }}
-        run: |
-          set -euo pipefail
-          if [ -n "${SCENARIO}" ]; then
-            # A single scenario chosen at dispatch time.
-            matrix="$(printf '["%s"]' "${SCENARIO}")"
-          else
-            # Smoke set (self-contained, no license, no cloud).
-            matrix='["local-kind-ingress","local-kind-gateway","local-kind-oidc-pkce","local-kind-oidc-implicit","local-kind-proxy"]'
-          fi
-          echo "matrix=${matrix}" >> "${GITHUB_OUTPUT}"
+        run: python3 hack/scripts/nightly-westest-matrix.py
 
-  test:
+  local-test:
     name: ${{ matrix.scenario }}
     needs: [build, setup]
-    if: ${{ always() && needs.setup.result == 'success' && needs.build.result != 'failure' && needs.build.result != 'cancelled' }}
+    if: ${{ !cancelled() && needs.setup.result == 'success' && needs.setup.outputs.has_local == 'true' }}
     # The full local-kind stack needs >=8 vCPU; a standard runner leaves MySQL and
     # the ClickHouse keeper Pending on Insufficient cpu.
     runs-on: ubuntu-latest-8-cores
@@ -122,37 +120,62 @@ jobs:
     strategy:
       fail-fast: false
       max-parallel: 3
-      matrix:
-        scenario: ${{ fromJSON(needs.setup.outputs.matrix) }}
-    env:
-      # Point every scenario at the operator chart under test (built or published).
-      WESTEST_OPERATOR_CHART_VERSION: ${{ needs.setup.outputs.chart_version }}
+      matrix: ${{ fromJSON(needs.setup.outputs.local_matrix) }}
     steps:
       - name: Checkout (for the local westest-run action)
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - name: Mint a token to read wandb/westest releases
-        id: westest-token
-        # GitHub App installation token scoped to wandb/westest so the run action can
-        # download the release binary (the operator repo's GITHUB_TOKEN can't).
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-        with:
-          app-id: ${{ secrets.WESTEST_APP_ID }}
-          private-key: ${{ secrets.WESTEST_APP_PRIVATE_KEY }}
-          owner: wandb
-          repositories: westest
       - name: Run scenario
-        # Local reimplementation of wandb/westest/actions/run — wandb/operator is
-        # public and can't `uses:` a private repo's action. Keep in sync with
-        # upstream + WESTEST_VERSION. Downloads the westest binary via github-token.
         uses: ./.github/actions/westest-run
         with:
           scenario: ${{ matrix.scenario }}
-          github-token: ${{ steps.westest-token.outputs.token }}
-          westest-version: ${{ env.WESTEST_VERSION }}
-          upload-artifacts: "true"
+          image-tag: ${{ env.WESTEST_IMAGE_TAG }}
+          operator-version: ${{ needs.setup.outputs.chart_version }}
+
+  cloud-test:
+    name: ${{ matrix.scenario }}
+    needs: [build, setup]
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && needs.setup.result == 'success' && needs.setup.outputs.has_cloud == 'true' }}
+    runs-on: ubuntu-latest
+    environment: ${{ matrix.environment }}
+    permissions:
+      contents: read
+      id-token: write
+    # 75m test budget + 46m cleanup grace, with room for setup and finalization.
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix: ${{ fromJSON(needs.setup.outputs.cloud_matrix) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Authenticate to AWS
+        if: ${{ matrix.provider == 'aws' }}
+        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5
+        with:
+          role-to-assume: arn:aws:iam::770934259321:role/WestestGitHubActions
+          aws-region: us-west-2
+          role-duration-seconds: 14400
+          role-session-name: westest-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Authenticate to GCP
+        if: ${{ matrix.provider == 'gcp' }}
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: projects/27586067691/locations/global/workloadIdentityPools/westest-github/providers/github
+          service_account: westest-ci@playground-111.iam.gserviceaccount.com
+          project_id: playground-111
+          create_credentials_file: true
+      - name: Run scenario
+        uses: ./.github/actions/westest-run
+        with:
+          scenario: ${{ matrix.scenario }}
+          provider: ${{ matrix.provider }}
+          image-tag: ${{ env.WESTEST_IMAGE_TAG }}
+          operator-version: ${{ needs.setup.outputs.chart_version }}
+          license: ${{ secrets.WESTEST_LICENSE }}
 
   report:
-    needs: [build, setup, test]
+    needs: [build, setup, local-test, cloud-test]
     if: always()
     runs-on: ubuntu-latest
     permissions:
@@ -161,9 +184,9 @@ jobs:
       - name: Summarize
         run: |
           echo "build=${{ needs.build.result }} chart=${{ needs.setup.outputs.chart_version }}"
-          echo "test=${{ needs.test.result }}"
+          echo "local=${{ needs.local-test.result }} cloud=${{ needs.cloud-test.result }}"
       - name: Notify on failure
-        if: ${{ needs.build.result == 'failure' || needs.setup.result == 'failure' || needs.test.result == 'failure' }}
+        if: ${{ needs.build.result == 'failure' || needs.setup.result == 'failure' || needs.local-test.result == 'failure' || needs.cloud-test.result == 'failure' }}
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.WESTEST_SLACK_WEBHOOK }}
         run: |

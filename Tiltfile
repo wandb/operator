@@ -41,6 +41,7 @@ settings = {
     "retentionPolicy": "detach",
     "licenseFile": "",
     "adminConsoleEnabled": False,
+    "supportBundleEnabled": True,
     "manifestSource": "published",  # published or local
     "localManifestPath": "hack/testing-manifests/server-manifest",
     "networkMode": "gateway",  # gateway or ingress
@@ -218,6 +219,8 @@ USE_EXTERNAL_REDIS = as_bool(settings.get("useExternalRedis"))
 USE_EXTERNAL_OBJECT_STORE = as_bool(settings.get("useExternalObjectStore"))
 USE_CUSTOM_CA = as_bool(settings.get("useCustomCA"))
 ADMIN_CONSOLE_ENABLED = as_bool(settings.get("adminConsoleEnabled"))
+SUPPORT_BUNDLE_ENABLED = as_bool(settings.get("supportBundleEnabled"))
+GRAFANA_PLUGINS_ENABLED = settings.get("observabilityMode") == "full"
 USE_EXTERNAL_INFRA = USE_EXTERNAL_MYSQL or USE_EXTERNAL_REDIS or USE_EXTERNAL_OBJECT_STORE
 USE_TEST_INFRA_TLS = USE_CUSTOM_CA and (USE_EXTERNAL_MYSQL or USE_EXTERNAL_REDIS)
 EXTERNAL_OBJECT_STORE_HOSTNAME = str(settings.get("externalObjectStoreHostname"))
@@ -266,6 +269,9 @@ def operator_dockerfile():
 
     if ADMIN_CONSOLE_ENABLED:
         lines.append("COPY tilt_bin/watchtower /watchtower")
+
+    if GRAFANA_PLUGINS_ENABLED:
+        lines.append("COPY tilt_bin/grafana-plugins /opt/wandb/grafana-plugins")
 
     if settings.get("manifestSource") == "local":
         lines.append("ADD %s /server-manifest" % settings.get("localManifestPath"))
@@ -423,6 +429,7 @@ def build_wandb_cr():
       cmd += helper_flag("retention-policy", settings.get("retentionPolicy"))
       cmd += helper_flag("license-file", settings.get("licenseFile", ""))
       cmd += helper_bool_flag("admin-console-enabled", ADMIN_CONSOLE_ENABLED)
+      cmd += helper_bool_flag("support-bundle-enabled", SUPPORT_BUNDLE_ENABLED)
       cmd += helper_flag("manifest-source", settings.get("manifestSource"))
       cmd += helper_flag("observability-mode", settings.get("observabilityMode"))
       cmd += helper_flag("network-mode", settings.get("networkMode"))
@@ -623,6 +630,14 @@ if ADMIN_CONSOLE_ENABLED:
         "Watchtower-Download",
         # Match the architecture used by binary(), including any GOARCH override.
         cmd='mkdir -p tilt_bin && GH_TOKEN=$(gh auth token) make download-watchtower WATCHTOWER_ARCH="$(go env GOARCH)" WATCHTOWER_BINARY=tilt_bin/watchtower',
+        deps=["Makefile"],
+        labels=[GROUP_WANDB_OPERATOR],
+    )
+
+if GRAFANA_PLUGINS_ENABLED:
+    local_resource(
+        "Grafana-Plugins-Download",
+        cmd="make download-grafana-plugins GRAFANA_PLUGINS_DIR=tilt_bin/grafana-plugins",
         deps=["Makefile"],
         labels=[GROUP_WANDB_OPERATOR],
     )
@@ -847,6 +862,8 @@ helm_resource(
 operator_deps = ["Operator-Chart-Deps", "Operator-Build"]
 if ADMIN_CONSOLE_ENABLED:
     operator_deps.append("Watchtower-Download")
+if GRAFANA_PLUGINS_ENABLED:
+    operator_deps.append("Grafana-Plugins-Download")
 operator_deps.append("cert-manager")
 operator_deps.append("kube-state-metrics")
 if LOCAL_NETWORKING_MODE == "gateway":
@@ -1095,6 +1112,8 @@ if settings.get("observabilityMode") == "full":
 docker_only = ["./tilt_bin/manager", "./tilt_bin/crd-installer"]
 if ADMIN_CONSOLE_ENABLED:
     docker_only.append("./tilt_bin/watchtower")
+if GRAFANA_PLUGINS_ENABLED:
+    docker_only.append("./tilt_bin/grafana-plugins")
 
 if settings.get("manifestSource") == "local":
   path = repo_path(settings.get("localManifestPath"))

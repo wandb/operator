@@ -90,3 +90,15 @@ wandb-operator values. Each is inert unless a CA source is configured.
 - name: OPERATOR_IMAGE
   value: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
 {{- end -}}
+
+{{- /* The operator image exactly as wandb-base renders it for the operator container. */ -}}
+{{- define "wandb-operator.image" -}}
+{{- $image := index .Values "wandb-operator" "image" -}}
+{{- $repository := $image.repository -}}
+{{- with dig "global" "repositoryPrefix" "" .Values.AsMap }}{{ $repository = printf "%s/%s" . $repository }}{{ end -}}
+{{- if $image.digest -}}
+{{- printf "%s@%s" $repository $image.digest -}}
+{{- else -}}
+{{- printf "%s:%s" $repository (default "latest" $image.tag) -}}
+{{- end -}}
+{{- end -}}

@@ -11,6 +11,7 @@ func TestTelemetryChartFullModeRendersCoreStack(t *testing.T) {
 	output := runHelmTemplate(t,
 		"--set", "wandb-operator.enabled=false",
 		"--set", "telemetry.mode=full",
+		"--set", "telemetry.grafana.pluginImage=wandb/operator:test",
 		"--set", "victoria-metrics-operator.enabled=true",
 		"--set", "grafana-operator.enabled=true",
 	)
@@ -34,6 +35,10 @@ func TestTelemetryChartFullModeRendersCoreStack(t *testing.T) {
 	mustContain(t, output, "port: 8126")
 	mustContain(t, output, "kind: Grafana")
 	mustContain(t, output, "kind: GrafanaDatasource")
+	mustContain(t, output, "name: grafana-plugins")
+	mustContain(t, output, `image: "wandb/operator:test"`)
+	mustContain(t, output, `command: ["cp", "-R", "/opt/wandb/grafana-plugins/.", "/plugins/"]`)
+	mustNotContain(t, output, "GF_INSTALL_PLUGINS")
 	mustContain(t, output, "url: \"http://vmsingle-victoria-instance:8428\"")
 	mustContain(t, output, "url: \"http://vlsingle-victoria-logs:9428\"")
 	mustContain(t, output, "url: \"http://vtsingle-victoria-traces:10428/select/tempo\"")
@@ -115,10 +120,72 @@ func TestTelemetryChartRendersRuntimeConfigWithoutOperatorEnvPassthrough(t *test
 	mustNotContain(t, output, "key: TELEMETRY_OTEL_RESOURCE_ATTRIBUTES")
 }
 
+func TestTelemetryChartUsesPrivateRegistry(t *testing.T) {
+	output := runHelmTemplate(t,
+		"--values", filepath.Join(operatorChartPath, "profiles", "telemetry-full.yaml"),
+		"--set", "global.image.registry=mirror.example:5000",
+		"--set", "global.imagePullSecrets[0].name=mirror-pull",
+		"--set", "grafana-operator.global.imageRegistry=mirror.example:5000",
+		"--set", "grafana-operator.imagePullSecrets[0].name=mirror-pull",
+		"--set", "wandb-operator.image.repository=mirror.example:5000/wandb/operator",
+		"--set-string", "wandb-operator.image.tag=test",
+	)
+
+	for _, value := range []string{
+		`image: "mirror.example:5000/otel/opentelemetry-collector-contrib:`,
+		"repository: mirror.example:5000/victoriametrics/victoria-metrics",
+		`configReloaderImage: "mirror.example:5000/victoriametrics/operator:`,
+		`version: "mirror.example:5000/grafana/grafana:`,
+		"mirror.example:5000/victoriametrics/operator:",
+		"mirror.example:5000/grafana/grafana-operator:",
+		`image: "mirror.example:5000/wandb/operator:test"`,
+		"- name: mirror-pull",
+	} {
+		mustContain(t, output, value)
+	}
+}
+
+func TestGrafanaPluginImageDefaultsToOperatorImage(t *testing.T) {
+	full := []string{
+		"--values", filepath.Join(operatorChartPath, "profiles", "telemetry-full.yaml"),
+		"--set", "wandb-operator.image.repository=registry.example/wandb/operator",
+		"--set-string", "wandb-operator.image.tag=test",
+	}
+	for name, tc := range map[string]struct {
+		args []string
+		want string
+	}{
+		"operator image": {want: "registry.example/wandb/operator:test"},
+		"override":       {args: []string{"--set", "telemetry.grafana.pluginImage=registry.example/wandb/operator:override"}, want: "registry.example/wandb/operator:override"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			output := runHelmTemplate(t, append(full, tc.args...)...)
+			if count := strings.Count(output, "\nkind: Grafana\n"); count != 1 {
+				t.Fatalf("rendered %d Grafana resources, want 1", count)
+			}
+			mustContain(t, output, "- name: grafana-plugins\n              image: \""+tc.want+"\"")
+		})
+	}
+}
+
+func TestTelemetryChartRejectsStringPullSecrets(t *testing.T) {
+	output, err := runHelmTemplateWithError(t, operatorChartPath,
+		"--set", "telemetry.mode=forward",
+		"--set", "telemetry.forwarding.otlp.endpoint=https://otel.example.com",
+		"--set", "victoria-metrics-operator.enabled=true",
+		"--set", "global.imagePullSecrets[0]=mirror-pull",
+	)
+	if err == nil {
+		t.Fatalf("expected helm template to fail")
+	}
+	mustContain(t, output, "global.imagePullSecrets entry to be a {name: <secret>} object")
+}
+
 func TestStandaloneTelemetryChartFullModeRendersCoreStack(t *testing.T) {
 	output := runHelmTemplateForChart(t, filepath.Join("..", "..", "..", "deploy", "telemetry"),
 		"--set", "mode=full",
 		"--set", "namespace=wandb",
+		"--set", "grafana.pluginImage=wandb/operator:test",
 	)
 
 	mustContain(t, output, "kind: VMSingle")
@@ -132,6 +199,7 @@ func TestStandaloneTelemetryChartFullModeRendersCoreStack(t *testing.T) {
 func TestTelemetryReadEndpointsMatchChartServices(t *testing.T) {
 	output := runHelmTemplateForChart(t, filepath.Join("..", "..", "..", "deploy", "telemetry"),
 		"--set", "mode=full",
+		"--set", "grafana.pluginImage=wandb/operator:test",
 	)
 
 	cfg := DefaultTelemetryRuntimeConfig()
@@ -200,9 +268,11 @@ func hasGroup(groups, target string) bool {
 	return false
 }
 
+var operatorChartPath = filepath.Join("..", "..", "..", "deploy", "operator")
+
 func runHelmTemplate(t *testing.T, extraArgs ...string) string {
 	t.Helper()
-	output, err := runHelmTemplateWithError(t, filepath.Join("..", "..", "..", "deploy", "operator"), extraArgs...)
+	output, err := runHelmTemplateWithError(t, operatorChartPath, extraArgs...)
 	if err != nil {
 		t.Fatalf("helm template failed: %v\noutput:\n%s", err, output)
 	}

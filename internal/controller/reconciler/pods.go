@@ -16,7 +16,7 @@ import (
 
 const appWorkloadCapabilityAll v1.Capability = "ALL"
 
-func applyWorkloadSecurityProfile(pod *v1.PodSpec, profile serverManifest.WorkloadSecurityProfile) {
+func applyWorkloadSecurityProfile(pod *v1.PodSpec, profile v2.WorkloadSecurityProfile) {
 	pod.SecurityContext = resolvePodSecurityContext(profile)
 	for i := range pod.Containers {
 		pod.Containers[i].SecurityContext = resolveContainerSecurityContext(profile)
@@ -26,7 +26,7 @@ func applyWorkloadSecurityProfile(pod *v1.PodSpec, profile serverManifest.Worklo
 	}
 }
 
-func resolvePodSecurityContext(profile serverManifest.WorkloadSecurityProfile) *v1.PodSecurityContext {
+func resolvePodSecurityContext(profile v2.WorkloadSecurityProfile) *v1.PodSecurityContext {
 	securityContext := &v1.PodSecurityContext{
 		SeccompProfile: resolveRuntimeDefaultSeccompProfile(),
 	}
@@ -36,7 +36,7 @@ func resolvePodSecurityContext(profile serverManifest.WorkloadSecurityProfile) *
 	return securityContext
 }
 
-func resolveContainerSecurityContext(profile serverManifest.WorkloadSecurityProfile) *v1.SecurityContext {
+func resolveContainerSecurityContext(profile v2.WorkloadSecurityProfile) *v1.SecurityContext {
 	securityContext := &v1.SecurityContext{
 		AllowPrivilegeEscalation: new(false),
 		Capabilities: &v1.Capabilities{
@@ -50,7 +50,7 @@ func resolveContainerSecurityContext(profile serverManifest.WorkloadSecurityProf
 	return securityContext
 }
 
-func hasWorkloadSecurityProfile(profile serverManifest.WorkloadSecurityProfile) bool {
+func hasWorkloadSecurityProfile(profile v2.WorkloadSecurityProfile) bool {
 	return profile.RunAsNonRoot != nil || profile.ReadOnlyRootFilesystem != nil
 }
 
