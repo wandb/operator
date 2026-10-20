@@ -44,6 +44,34 @@ func TestRegistryConsistency(t *testing.T) {
 		if check.NewSpec == nil || check.Run == nil {
 			t.Errorf("Checks[%q] is missing NewSpec or Run", name)
 		}
+		switch check.Type {
+		case TypeStatic, TypeCluster, TypeConnection:
+		default:
+			t.Errorf("Checks[%q].Type = %q, want a known CheckType", name, check.Type)
+		}
+		if len(check.ResourceReqs) == 0 {
+			t.Errorf("Checks[%q].ResourceReqs is empty", name)
+		}
+		for _, req := range check.ResourceReqs {
+			switch req {
+			case ReqReadOnly, ReqReadWrite, ReqResourceCreate:
+			default:
+				t.Errorf("Checks[%q] has unknown ResourceReq %q", name, req)
+			}
+		}
+		if check.Requires(ReqReadOnly) && (check.Requires(ReqReadWrite) || check.Requires(ReqResourceCreate)) {
+			t.Errorf("Checks[%q] is readOnly but also declares %v", name, check.ResourceReqs)
+		}
+	}
+}
+
+func TestExternalMysqlCheckTags(t *testing.T) {
+	check := Checks[ExternalMysqlCheck]
+	if check.Type != TypeConnection {
+		t.Errorf("Type = %q, want %q", check.Type, TypeConnection)
+	}
+	if !reflect.DeepEqual(check.ResourceReqs, []ResourceReq{ReqReadOnly}) {
+		t.Errorf("ResourceReqs = %v, want [%s]", check.ResourceReqs, ReqReadOnly)
 	}
 }
 
