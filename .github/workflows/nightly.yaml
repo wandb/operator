@@ -82,7 +82,7 @@ jobs:
       chart_version: ${{ steps.version.outputs.chart_version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Resolve operator chart version
         id: version
         env:
@@ -123,7 +123,7 @@ jobs:
       matrix: ${{ fromJSON(needs.setup.outputs.local_matrix) }}
     steps:
       - name: Checkout (for the local westest-run action)
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Run scenario
         uses: ./.github/actions/westest-run
         with:
@@ -148,7 +148,7 @@ jobs:
       matrix: ${{ fromJSON(needs.setup.outputs.cloud_matrix) }}
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Authenticate to AWS
         if: ${{ matrix.provider == 'aws' }}
         uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5
