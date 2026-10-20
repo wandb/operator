@@ -1,10 +1,13 @@
 package telemetry
 
 import (
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"sigs.k8s.io/yaml"
 )
 
 func TestTelemetryChartFullModeRendersCoreStack(t *testing.T) {
@@ -115,6 +118,72 @@ func TestTelemetryChartRendersRuntimeConfigWithoutOperatorEnvPassthrough(t *test
 	mustNotContain(t, output, "key: TELEMETRY_OTEL_RESOURCE_ATTRIBUTES")
 }
 
+func TestTelemetryChartUsesPrivateRegistry(t *testing.T) {
+	output := runHelmTemplate(t,
+		"--values", filepath.Join(operatorChartPath, "profiles", "telemetry-full.yaml"),
+		"--set", "global.image.registry=mirror.example:5000",
+		"--set", "global.imagePullSecrets[0].name=mirror-pull",
+		"--set", "grafana-operator.global.imageRegistry=mirror.example:5000",
+		"--set", "grafana-operator.imagePullSecrets[0].name=mirror-pull",
+	)
+
+	for _, value := range []string{
+		`image: "mirror.example:5000/otel/opentelemetry-collector-contrib:0.102.1"`,
+		"repository: mirror.example:5000/victoriametrics/victoria-metrics",
+		`configReloaderImage: "mirror.example:5000/victoriametrics/operator:config-reloader-v0.73.1"`,
+		`version: "mirror.example:5000/grafana/grafana:12.3.0"`,
+		"mirror.example:5000/victoriametrics/operator:v0.73.1",
+		"mirror.example:5000/grafana/grafana-operator:v5.21.4",
+		"- name: mirror-pull",
+	} {
+		mustContain(t, output, value)
+	}
+}
+
+func TestTelemetryImagePinsMatchOperatorCharts(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(operatorChartPath, "Chart.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var chart struct {
+		Dependencies []struct{ Name, Version string }
+	}
+	if err := yaml.Unmarshal(data, &chart); err != nil {
+		t.Fatal(err)
+	}
+	pinned := map[string]string{
+		"victoria-metrics-operator": "0.66.3",
+		"grafana-operator":          "5.21.4",
+	}
+	for _, dependency := range chart.Dependencies {
+		want, ok := pinned[dependency.Name]
+		if !ok {
+			continue
+		}
+		delete(pinned, dependency.Name)
+		if dependency.Version != want {
+			t.Errorf("%s chart is %s, telemetry pins were chosen for %s: update the image tags in deploy/telemetry/templates (_helpers.tpl, telemetry-victoria-core.yaml, telemetry-alerting.yaml, telemetry-ui.yaml), then this test",
+				dependency.Name, dependency.Version, want)
+		}
+	}
+	if len(pinned) > 0 {
+		t.Errorf("operator chart no longer depends on %v", pinned)
+	}
+}
+
+func TestTelemetryChartRejectsStringPullSecrets(t *testing.T) {
+	output, err := runHelmTemplateWithError(t, operatorChartPath,
+		"--set", "telemetry.mode=forward",
+		"--set", "telemetry.forwarding.otlp.endpoint=https://otel.example.com",
+		"--set", "victoria-metrics-operator.enabled=true",
+		"--set", "global.imagePullSecrets[0]=mirror-pull",
+	)
+	if err == nil {
+		t.Fatalf("expected helm template to fail")
+	}
+	mustContain(t, output, "global.imagePullSecrets entry to be a {name: <secret>} object")
+}
+
 func TestStandaloneTelemetryChartFullModeRendersCoreStack(t *testing.T) {
 	output := runHelmTemplateForChart(t, filepath.Join("..", "..", "..", "deploy", "telemetry"),
 		"--set", "mode=full",
@@ -200,9 +269,11 @@ func hasGroup(groups, target string) bool {
 	return false
 }
 
+var operatorChartPath = filepath.Join("..", "..", "..", "deploy", "operator")
+
 func runHelmTemplate(t *testing.T, extraArgs ...string) string {
 	t.Helper()
-	output, err := runHelmTemplateWithError(t, filepath.Join("..", "..", "..", "deploy", "operator"), extraArgs...)
+	output, err := runHelmTemplateWithError(t, operatorChartPath, extraArgs...)
 	if err != nil {
 		t.Fatalf("helm template failed: %v\noutput:\n%s", err, output)
 	}

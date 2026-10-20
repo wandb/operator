@@ -10,6 +10,10 @@ metadata:
     app.kubernetes.io/component: telemetry
     app.kubernetes.io/part-of: wandb
 spec:
+  {{- with include "telemetry.registryPrefix" . }}
+  # Update with the grafana-operator 5.21.4 chart in deploy/operator/Chart.yaml
+  version: {{ printf "%sgrafana/grafana:12.3.0" . | quote }}
+  {{- end }}
   config:
     server:
       root_url: "/console/grafana/"
@@ -29,6 +33,10 @@ spec:
     spec:
       template:
         spec:
+          {{- with include "telemetry.imagePullSecrets" . }}
+          imagePullSecrets:
+            {{- . | nindent 12 }}
+          {{- end }}
           containers:
             - name: grafana
               env:

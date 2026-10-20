@@ -61,3 +61,20 @@ victoria-log-agent
 {{- define "telemetry.tracesEndpoint" -}}
 {{- printf "http://vtsingle-%s:10428/insert/opentelemetry/v1/traces" (include "telemetry.vtsingleName" .) -}}
 {{- end -}}
+
+{{- define "telemetry.registryPrefix" -}}
+{{- with dig "image" "registry" "" (.Values.global | default dict) -}}{{ trimSuffix "/" . }}/{{- end -}}
+{{- end -}}
+
+{{- define "telemetry.otelImage" -}}
+{{ include "telemetry.registryPrefix" . }}otel/opentelemetry-collector-contrib:0.102.1
+{{- end -}}
+
+{{- /* Update with the victoria-metrics-operator 0.66.3 chart in deploy/operator/Chart.yaml. */ -}}
+{{- define "telemetry.configReloaderImage" -}}
+{{ include "telemetry.registryPrefix" . }}victoriametrics/operator:config-reloader-v0.73.1
+{{- end -}}
+
+{{- define "telemetry.imagePullSecrets" -}}
+{{- with dig "imagePullSecrets" (list) (.Values.global | default dict) }}{{ toYaml . }}{{ end -}}
+{{- end -}}
