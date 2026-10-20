@@ -1,47 +1,8 @@
 {{- if eq (include "telemetry.uiEnabled" .) "true" }}
+{{- if .Chart.IsRoot }}
 ---
-apiVersion: grafana.integreatly.org/v1beta1
-kind: Grafana
-metadata:
-  name: grafana
-  namespace: {{ include "telemetry.namespace" . }}
-  labels:
-    dashboards: grafana
-    app.kubernetes.io/component: telemetry
-    app.kubernetes.io/part-of: wandb
-spec:
-  {{- with include "telemetry.registryPrefix" . }}
-  # Update with the grafana-operator 5.21.4 chart in deploy/operator/Chart.yaml
-  version: {{ printf "%sgrafana/grafana:12.3.0" . | quote }}
-  {{- end }}
-  config:
-    server:
-      root_url: "/console/grafana/"
-      serve_from_sub_path: "true"
-    log:
-      mode: console
-    auth:
-      disable_login_form: "true"
-    auth.anonymous:
-      enabled: "true"
-      org_role: Viewer
-    users:
-      viewers_can_edit: "true"
-  preferences:
-    homeDashboardUid: wandb-telemetry-overview
-  deployment:
-    spec:
-      template:
-        spec:
-          {{- with include "telemetry.imagePullSecrets" . }}
-          imagePullSecrets:
-            {{- . | nindent 12 }}
-          {{- end }}
-          containers:
-            - name: grafana
-              env:
-                - name: GF_INSTALL_PLUGINS
-                  value: victoriametrics-logs-datasource
+{{ include "telemetry.grafana" (dict "root" . "pluginImage" (required "grafana.pluginImage is required in full mode" .Values.grafana.pluginImage)) }}
+{{- end }}
 ---
 apiVersion: grafana.integreatly.org/v1beta1
 kind: GrafanaDatasource

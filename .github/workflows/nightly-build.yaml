@@ -140,6 +140,9 @@ jobs:
           GH_TOKEN: ${{ steps.watchtower-token.outputs.token }}
         run: make download-watchtower
 
+      - name: Download Grafana plugins
+        run: make download-grafana-plugins
+
       - name: Build and push operator image
         env:
           IMAGE_TAG: ${{ steps.version.outputs.image_tag }}

@@ -78,3 +78,69 @@ victoria-log-agent
 {{- define "telemetry.imagePullSecrets" -}}
 {{- with dig "imagePullSecrets" (list) (.Values.global | default dict) }}{{ toYaml . }}{{ end -}}
 {{- end -}}
+
+{{- /* The operator chart passes its own operator image; the standalone chart passes grafana.pluginImage. */ -}}
+{{- define "telemetry.grafana" -}}
+{{- $root := .root -}}
+apiVersion: grafana.integreatly.org/v1beta1
+kind: Grafana
+metadata:
+  name: grafana
+  namespace: {{ include "telemetry.namespace" $root }}
+  labels:
+    dashboards: grafana
+    app.kubernetes.io/component: telemetry
+    app.kubernetes.io/part-of: wandb
+spec:
+  {{- with include "telemetry.registryPrefix" $root }}
+  # Update with the grafana-operator 5.21.4 chart in deploy/operator/Chart.yaml
+  version: {{ printf "%sgrafana/grafana:12.3.0" . | quote }}
+  {{- end }}
+  config:
+    server:
+      root_url: "/console/grafana/"
+      serve_from_sub_path: "true"
+    log:
+      mode: console
+    auth:
+      disable_login_form: "true"
+    auth.anonymous:
+      enabled: "true"
+      org_role: Viewer
+    users:
+      viewers_can_edit: "true"
+    plugins:
+      preinstall_disabled: "true"
+  preferences:
+    homeDashboardUid: wandb-telemetry-overview
+  deployment:
+    spec:
+      template:
+        spec:
+          {{- with include "telemetry.imagePullSecrets" $root }}
+          imagePullSecrets:
+            {{- . | nindent 12 }}
+          {{- end }}
+          initContainers:
+            - name: grafana-plugins
+              image: {{ .pluginImage | quote }}
+              command: ["cp", "-R", "/opt/wandb/grafana-plugins/.", "/plugins/"]
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                capabilities:
+                  drop:
+                    - ALL
+              volumeMounts:
+                - name: grafana-plugins
+                  mountPath: /plugins
+          containers:
+            - name: grafana
+              volumeMounts:
+                - name: grafana-plugins
+                  mountPath: /var/lib/grafana/plugins
+          volumes:
+            - name: grafana-plugins
+              emptyDir: {}
+{{- end -}}
