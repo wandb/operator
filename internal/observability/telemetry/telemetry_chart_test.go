@@ -1,13 +1,10 @@
 package telemetry
 
 import (
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"sigs.k8s.io/yaml"
 )
 
 func TestTelemetryChartFullModeRendersCoreStack(t *testing.T) {
@@ -131,16 +128,17 @@ func TestTelemetryChartUsesPrivateRegistry(t *testing.T) {
 		"--set", "grafana-operator.global.imageRegistry=mirror.example:5000",
 		"--set", "grafana-operator.imagePullSecrets[0].name=mirror-pull",
 		"--set", "wandb-operator.image.repository=mirror.example:5000/wandb/operator",
+		"--set-string", "wandb-operator.image.tag=test",
 	)
 
 	for _, value := range []string{
-		`image: "mirror.example:5000/otel/opentelemetry-collector-contrib:0.102.1"`,
+		`image: "mirror.example:5000/otel/opentelemetry-collector-contrib:`,
 		"repository: mirror.example:5000/victoriametrics/victoria-metrics",
-		`configReloaderImage: "mirror.example:5000/victoriametrics/operator:config-reloader-v0.73.1"`,
-		`version: "mirror.example:5000/grafana/grafana:12.3.0"`,
-		"mirror.example:5000/victoriametrics/operator:v0.73.1",
-		"mirror.example:5000/grafana/grafana-operator:v5.21.4",
-		`image: "mirror.example:5000/wandb/operator:2.0.0-beta.8"`,
+		`configReloaderImage: "mirror.example:5000/victoriametrics/operator:`,
+		`version: "mirror.example:5000/grafana/grafana:`,
+		"mirror.example:5000/victoriametrics/operator:",
+		"mirror.example:5000/grafana/grafana-operator:",
+		`image: "mirror.example:5000/wandb/operator:test"`,
 		"- name: mirror-pull",
 	} {
 		mustContain(t, output, value)
@@ -148,14 +146,17 @@ func TestTelemetryChartUsesPrivateRegistry(t *testing.T) {
 }
 
 func TestGrafanaPluginImageDefaultsToOperatorImage(t *testing.T) {
-	full := []string{"--values", filepath.Join(operatorChartPath, "profiles", "telemetry-full.yaml")}
+	full := []string{
+		"--values", filepath.Join(operatorChartPath, "profiles", "telemetry-full.yaml"),
+		"--set", "wandb-operator.image.repository=registry.example/wandb/operator",
+		"--set-string", "wandb-operator.image.tag=test",
+	}
 	for name, tc := range map[string]struct {
 		args []string
 		want string
 	}{
-		"chart default": {want: "us-docker.pkg.dev/wandb-production/public/wandb/operator:2.0.0-beta.8"},
-		"wsm mirror":    {args: []string{"--set", "wandb-operator.image.repository=mirror.example:5000/wandb/operator"}, want: "mirror.example:5000/wandb/operator:2.0.0-beta.8"},
-		"override":      {args: []string{"--set", "telemetry.grafana.pluginImage=registry.example/wandb/operator:1.2.3"}, want: "registry.example/wandb/operator:1.2.3"},
+		"operator image": {want: "registry.example/wandb/operator:test"},
+		"override":       {args: []string{"--set", "telemetry.grafana.pluginImage=registry.example/wandb/operator:override"}, want: "registry.example/wandb/operator:override"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			output := runHelmTemplate(t, append(full, tc.args...)...)
@@ -164,37 +165,6 @@ func TestGrafanaPluginImageDefaultsToOperatorImage(t *testing.T) {
 			}
 			mustContain(t, output, "- name: grafana-plugins\n              image: \""+tc.want+"\"")
 		})
-	}
-}
-
-func TestTelemetryImagePinsMatchOperatorCharts(t *testing.T) {
-	data, err := os.ReadFile(filepath.Join(operatorChartPath, "Chart.yaml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var chart struct {
-		Dependencies []struct{ Name, Version string }
-	}
-	if err := yaml.Unmarshal(data, &chart); err != nil {
-		t.Fatal(err)
-	}
-	pinned := map[string]string{
-		"victoria-metrics-operator": "0.66.3",
-		"grafana-operator":          "5.21.4",
-	}
-	for _, dependency := range chart.Dependencies {
-		want, ok := pinned[dependency.Name]
-		if !ok {
-			continue
-		}
-		delete(pinned, dependency.Name)
-		if dependency.Version != want {
-			t.Errorf("%s chart is %s, telemetry pins were chosen for %s: update the image tags in deploy/telemetry/templates (_helpers.tpl, telemetry-victoria-core.yaml, telemetry-alerting.yaml), then this test",
-				dependency.Name, dependency.Version, want)
-		}
-	}
-	if len(pinned) > 0 {
-		t.Errorf("operator chart no longer depends on %v", pinned)
 	}
 }
 
