@@ -1,0 +1,19 @@
+apiVersion: apps.wandb.com/v2
+kind: WeightsAndBiases
+metadata:
+  name: wandb
+  namespace: wandb
+spec:
+  mysql:
+    default:
+      externalMysql:
+        host:
+          value: host.docker.internal
+        port:
+          value: "3307"
+        database:
+          value: wandb_local
+        username:
+          value: wandb
+        password:
+          value: wandb

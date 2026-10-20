@@ -3,6 +3,7 @@ package preflight
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	apiv2 "github.com/wandb/operator/api/v2"
@@ -20,6 +21,27 @@ const (
 	OutcomeSkipped Outcome = "skipped"
 )
 
+// CheckType is the cost class of a check, so callers can choose which classes to run (e.g. offline in wsm).
+type CheckType string
+
+const (
+	// TypeStatic checks only inspect the CR.
+	TypeStatic CheckType = "static"
+	// TypeCluster checks query the Kubernetes API.
+	TypeCluster CheckType = "cluster"
+	// TypeConnection checks dial a service outside the cluster API, such as an external database.
+	TypeConnection CheckType = "connection"
+)
+
+// ResourceReq declares what a check does to the resources it touches, so wsm can confirm with users before running it.
+type ResourceReq string
+
+const (
+	ReqReadOnly       ResourceReq = "readOnly"
+	ReqReadWrite      ResourceReq = "readWrite"
+	ReqResourceCreate ResourceReq = "resourceCreate"
+)
+
 type Result struct {
 	Check   string
 	Outcome Outcome
@@ -35,18 +57,31 @@ type CheckFunc func(ctx context.Context, spec any, resolve ValueResolver) Result
 type Check struct {
 	Name string
 	// CRField is the CR field path that requires this check; "*" matches any instance key.
-	CRField string
+	CRField      string
+	Type         CheckType
+	ResourceReqs []ResourceReq
 	// NewSpec returns an empty value of the CRField's type, so callers can decode the matched field into it.
 	NewSpec func() any
 	Run     CheckFunc
 }
 
+func (c Check) Requires(req ResourceReq) bool {
+	return slices.Contains(c.ResourceReqs, req)
+}
+
 // typedCheck adapts a check written against its concrete spec type to the untyped registry signature.
-func typedCheck[T any](name, crField string, run func(context.Context, *T, ValueResolver) Result) Check {
+func typedCheck[T any](
+	name, crField string,
+	checkType CheckType,
+	reqs []ResourceReq,
+	run func(context.Context, *T, ValueResolver) Result,
+) Check {
 	return Check{
-		Name:    name,
-		CRField: crField,
-		NewSpec: func() any { return new(T) },
+		Name:         name,
+		CRField:      crField,
+		Type:         checkType,
+		ResourceReqs: reqs,
+		NewSpec:      func() any { return new(T) },
 		Run: func(ctx context.Context, spec any, resolve ValueResolver) Result {
 			typed, ok := spec.(*T)
 			if !ok || typed == nil {
