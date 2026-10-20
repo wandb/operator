@@ -33,13 +33,17 @@ clickhouseKeeper:
         repository: "altinity/clickhouse-keeper"
         tag: "25.8.16.10002.altinitystable"
 
-generatedSecrets:
+secrets:
   - name: session-key
-    length: 32
-    type: password
+    generated:
+      length: 32
+      type: password
   - name: weave-worker-auth
-    length: 32
-    type: password
+    useExactName: true
+    generated:
+      length: 32
+      type: password
+  - name: wandb-internal-signer
     useExactName: true
 
 kafka:
@@ -1129,6 +1133,12 @@ migrations:
       runAsNonRoot: true
       readOnlyRootFilesystem: true
   internal-signer:
+    serviceAccount:
+      automountServiceAccountToken: true
+      permissions:
+        - resources: [secrets]
+          resourceNames: [wandb-internal-signer]
+          verbs: [get, update]
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
       tag: 0.86.0-daily.14
