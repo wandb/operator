@@ -41,9 +41,15 @@ func RunExternalRedisCheck(ctx context.Context, conn *apiv2.RedisConnection, env
 
 	addr := net.JoinHostPort(host, port)
 	client := redis.NewClient(&redis.Options{
-		Addr:        addr,
-		Password:    v["password"],
-		TLSConfig:   tlsCfg,
+		Addr:     addr,
+		Password: v["password"],
+		// A custom Dialer replaces go-redis's own, which is the only place TLSConfig is applied, so TLS happens here.
+		Dialer: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			if tlsCfg == nil {
+				return preflightDialer.DialContext(ctx, network, addr)
+			}
+			return (&tls.Dialer{NetDialer: preflightDialer, Config: tlsCfg}).DialContext(ctx, network, addr)
+		},
 		DialTimeout: externalRedisTimeout,
 		ReadTimeout: externalRedisTimeout,
 		// Preflight has its own retry interval; a retrying client would only stretch the timeout.
