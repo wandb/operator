@@ -27,7 +27,7 @@ import (
 const (
 	externalObjectStoreTimeout = 10 * time.Second
 	// SHA-256 of an empty body, which SigV4 signs for a HEAD request.
-	emptyPayloadSHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+	emptyPayloadSHA256  = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 	azureStorageVersion = "2021-08-06"
 )
 
@@ -220,7 +220,7 @@ func checkGCSBucket(ctx context.Context, conn *apiv2.ObjectStoreConnection, env 
 		return fail(fmt.Sprintf("bucket %q does not exist", bucket))
 	default:
 		return Result{Check: ExternalObjectStoreCheck, Outcome: OutcomeUnknown, Message: fmt.Sprintf("list objects returned HTTP %d", resp.StatusCode)}
-		}
+	}
 }
 
 func gcsTokenError(err *oauth2.RetrieveError) string {
@@ -305,7 +305,7 @@ func checkAzureContainer(ctx context.Context, conn *apiv2.ObjectStoreConnection,
 		return fail(fmt.Sprintf("container %q does not exist in storage account %q", container, account))
 	default:
 		return Result{Check: ExternalObjectStoreCheck, Outcome: OutcomeUnknown, Message: fmt.Sprintf("get container properties returned HTTP %d %s", resp.StatusCode, code)}
-		}
+	}
 }
 
 func azureStringToSign(req *http.Request, account string) string {

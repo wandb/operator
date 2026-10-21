@@ -11,6 +11,7 @@ const (
 	ManagedObjectStoreAPIsCheck = "managedObjectStoreApisCheck"
 	ManagedClickHouseAPIsCheck  = "managedClickHouseApisCheck"
 )
+
 var Checks = map[string]Check{
 	ExternalMysqlCheck: typedCheck(ExternalMysqlCheck, "spec.mysql.*.externalMysql",
 		TypeConnection, []ResourceReq{ReqReadOnly}, RunExternalMysqlCheck),
@@ -21,10 +22,10 @@ var Checks = map[string]Check{
 	ExternalObjectStoreCheck: typedCheck(ExternalObjectStoreCheck, "spec.objectStore.*.externalObjectStore",
 		TypeConnection, []ResourceReq{ReqReadOnly}, RunExternalObjectStoreCheck),
 
-	ManagedMysqlAPIsCheck:       managedAPIsCheck(ManagedMysqlAPIsCheck, "spec.mysql.*.managedMysql", managedMysqlAPIs),
-	ManagedRedisAPIsCheck:       managedAPIsCheck(ManagedRedisAPIsCheck, "spec.redis.*.managedRedis", managedRedisAPIs),
+	ManagedMysqlAPIsCheck: managedAPIsCheck(ManagedMysqlAPIsCheck, "spec.mysql.*.managedMysql", managedMysqlAPIs),
+	ManagedRedisAPIsCheck: managedAPIsCheck(ManagedRedisAPIsCheck, "spec.redis.*.managedRedis", managedRedisAPIs),
 	ManagedObjectStoreAPIsCheck: managedAPIsCheck(ManagedObjectStoreAPIsCheck, "spec.objectStore.*.managedObjectStore",
 		managedObjectStoreAPIs),
-	ManagedClickHouseAPIsCheck:  managedAPIsCheck(ManagedClickHouseAPIsCheck, "spec.clickhouse.*.managedClickhouse",
+	ManagedClickHouseAPIsCheck: managedAPIsCheck(ManagedClickHouseAPIsCheck, "spec.clickhouse.*.managedClickhouse",
 		managedClickHouseAPIs),
 }

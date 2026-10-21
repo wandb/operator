@@ -122,10 +122,6 @@ func resolveFields(ctx context.Context, resolve ValueResolver, fields map[string
 	return out, nil
 }
 
-func notImplemented(check, variant string) Result {
-	return Result{Check: check, Outcome: OutcomeSkipped, Message: variant + " check not implemented"}
-}
-
 func parsePEMPool(pemData string) (*x509.CertPool, bool) {
 	pool := x509.NewCertPool()
 	return pool, pool.AppendCertsFromPEM([]byte(pemData))

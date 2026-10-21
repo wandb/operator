@@ -35,7 +35,7 @@ func objectStoreWriteState(
 				outConds[key] = conds
 				continue
 			}
-			outConds[key], outConns[key] = managedObjectStoreWriteState(ctx, client, wandb, key, spec.ManagedObjectStore,mfst)
+			outConds[key], outConns[key] = managedObjectStoreWriteState(ctx, client, wandb, key, spec.ManagedObjectStore, mfst)
 		case spec.ExternalObjectStore != nil:
 			o := spec.ExternalObjectStore
 			if conds := gatePreflight(ctx, client, wandb, preflight.ExternalObjectStoreCheck,

@@ -54,7 +54,6 @@ func mysqlWriteState(
 	return out
 }
 
-
 func mysqlReadState(
 	ctx context.Context,
 	client client.Client,
