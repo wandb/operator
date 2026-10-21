@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/pkg/preflight"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -108,4 +109,46 @@ func TestRunPreflightOnce_Skipped(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, passed)
 	require.Zero(t, runs)
+}
+
+// A check that abstains (e.g. ambient credentials it can't verify) must not block reconcile.
+func TestRunPreflightOnce_SkippedOutcomePasses(t *testing.T) {
+	ctx := context.Background()
+	c, wandb := newPreflightFixture(t, nil)
+	runs := 0
+	check := countingCheck(preflight.OutcomeSkipped, &runs)
+
+	for range 3 {
+		passed, _, err := runPreflightOnce(ctx, c, wandb, check, testPreflightField, &apiv2.MysqlConnection{}, "v1")
+		require.NoError(t, err)
+		require.True(t, passed)
+	}
+	require.Equal(t, 1, runs, "a skipped outcome is cached like a pass")
+}
+
+func TestRunPreflightOnce_FreshFailureOverridesEarlierPass(t *testing.T) {
+	ctx := context.Background()
+	c, wandb := newPreflightFixture(t, nil)
+	runs := 0
+
+	passed, _, err := runPreflightOnce(ctx, c, wandb, countingCheck(preflight.OutcomePass, &runs), testPreflightField, &apiv2.MysqlConnection{}, "v1")
+	require.NoError(t, err)
+	require.True(t, passed)
+
+	wandb.Generation++
+	passed, msg, err := runPreflightOnce(ctx, c, wandb, countingCheck(preflight.OutcomeFail, &runs), testPreflightField, &apiv2.MysqlConnection{}, "v1")
+	require.NoError(t, err)
+	require.False(t, passed, "the new result decides, not the previous generation's pass")
+	require.Equal(t, "result", msg)
+}
+
+func TestPreflightBlocked(t *testing.T) {
+	failed := metav1.Condition{Type: common.ReconciledType, Status: metav1.ConditionFalse, Reason: common.PreflightFailedReason}
+	apiErr := metav1.Condition{Type: common.ReconciledType, Status: metav1.ConditionFalse, Reason: common.ApiErrorReason}
+	reconciled := metav1.Condition{Type: common.ReconciledType, Status: metav1.ConditionTrue, Reason: common.ResourceExistsReason}
+
+	require.True(t, preflightBlocked([]metav1.Condition{reconciled, failed}))
+	require.False(t, preflightBlocked([]metav1.Condition{reconciled}))
+	require.False(t, preflightBlocked([]metav1.Condition{apiErr}), "only a failed preflight gate counts")
+	require.False(t, preflightBlocked(nil))
 }

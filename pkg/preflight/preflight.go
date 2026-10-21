@@ -4,9 +4,13 @@ import (
 	"context"
 	"crypto/x509"
 	"fmt"
+	"net"
+	"net/http"
 	"slices"
 	"strconv"
 	"strings"
+	"syscall"
+	"time"
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -130,4 +134,19 @@ func parsePEMPool(pemData string) (*x509.CertPool, bool) {
 func validPort(port string) bool {
 	p, err := strconv.Atoi(strings.TrimSpace(port))
 	return err == nil && p >= 1 && p <= 65535
+}
+
+// preflightDialer refuses link-local targets such as cloud metadata endpoints; no W&B dependency lives there.
+var preflightDialer = &net.Dialer{Timeout: 10 * time.Second, Control: func(_, address string, _ syscall.RawConn) error {
+	host, _, _ := net.SplitHostPort(address)
+	if ip := net.ParseIP(host); ip != nil && (ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast()) {
+		return fmt.Errorf("refusing link-local address %s", host)
+	}
+	return nil
+}}
+
+// preflightHTTPClient doesn't follow redirects, so a probe can't be bounced to another host.
+var preflightHTTPClient = &http.Client{
+	Transport:     &http.Transport{DialContext: preflightDialer.DialContext, Proxy: http.ProxyFromEnvironment},
+	CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 }

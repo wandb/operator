@@ -246,6 +246,11 @@ func managedRedisInferStatus(
 	for _, e := range events {
 		recorder.Event(wandb, e.Type, e.Reason, e.Message)
 	}
+	// ComputeStatus only reads component conditions, so a blocked gate would otherwise leave a stale ready status.
+	if preflightBlocked(newConditions) {
+		updatedStatus.Ready = false
+		updatedStatus.State = common.ErrorState
+	}
 	wandb.Status.RedisStatus[key] = updatedStatus
 	err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore)
 

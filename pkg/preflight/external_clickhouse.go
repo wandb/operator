@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -16,6 +17,9 @@ import (
 )
 
 const externalClickHouseTimeout = 10 * time.Second
+
+// The body is server-controlled and lands in CR status, so keep only ClickHouse's error code and name.
+var clickHouseErrorName = regexp.MustCompile(`(?s)Code: (\d+)\..*\(([A-Z_]+)\)`)
 
 func RunExternalClickHouseCheck(ctx context.Context, conn *apiv2.ClickHouseConnection, env Env) Result {
 	v, err := resolveFields(ctx, env.Resolve, map[string]apiv2.ValueOrSecret{
@@ -33,8 +37,9 @@ func RunExternalClickHouseCheck(ctx context.Context, conn *apiv2.ClickHouseConne
 		return Result{Check: ExternalClickHouseCheck, Outcome: OutcomeUnknown, Message: fmt.Sprintf("resolve connection: %v",
 			err)}
 	}
+	password := v["password"]
 	fail := func(msg string) Result {
-		return Result{Check: ExternalClickHouseCheck, Outcome: OutcomeFail, Message: redact(msg, v["password"])}
+		return Result{Check: ExternalClickHouseCheck, Outcome: OutcomeFail, Message: redact(msg, password)}
 	}
 
 	replicated := false
@@ -50,13 +55,24 @@ func RunExternalClickHouseCheck(ctx context.Context, conn *apiv2.ClickHouseConne
 	if err != nil {
 		return fail(err.Error())
 	}
+	user := v["username"]
+	if base.User != nil {
+		if user == "" {
+			user = base.User.Username()
+		}
+		if p, ok := base.User.Password(); ok && password == "" {
+			password = p
+		}
+		// Credentials go in headers; left in the URL they would surface in transport errors.
+		base.User = nil
+	}
 	if p := v["tcpPort"]; p != "" && !validPort(p) {
 		return fail(fmt.Sprintf("tcpPort %q must be an integer between 1 and 65535", p))
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, externalClickHouseTimeout)
 	defer cancel()
-	ch := clickHouseHTTP{base: base, user: v["username"], password: v["password"], database: v["database"]}
+	ch := clickHouseHTTP{base: base, user: user, password: password, database: v["database"]}
 
 	// The database header makes ClickHouse reject a missing database, which the operator never creates.
 	version, err := ch.query(ctx, "SELECT version()", nil)
@@ -77,8 +93,11 @@ func RunExternalClickHouseCheck(ctx context.Context, conn *apiv2.ClickHouseConne
 		}
 	}
 	if p := v["tcpPort"]; p != "" {
-		var d net.Dialer
-		c, err := d.DialContext(ctx, "tcp", net.JoinHostPort(base.Hostname(), p))
+		nativeHost := strings.TrimSpace(v["host"])
+		if nativeHost == "" {
+			nativeHost = base.Hostname()
+		}
+		c, err := preflightDialer.DialContext(ctx, "tcp", net.JoinHostPort(nativeHost, p))
 		if err != nil {
 			return fail(fmt.Sprintf("native protocol port: %v", err))
 		}
@@ -97,7 +116,8 @@ func clickHouseHTTPBase(v map[string]string) (*url.URL, error) {
 			return nil, errors.New("url is not a valid URL")
 		}
 		if u.Scheme == "http" || u.Scheme == "https" {
-			return &url.URL{Scheme: u.Scheme, Host: u.Host}, nil
+			// The app gets this url verbatim, so probe its proxy path and query settings too.
+			return &url.URL{Scheme: u.Scheme, Host: u.Host, Path: u.Path, RawQuery: u.RawQuery, User: u.User}, nil
 		}
 	}
 	host := strings.TrimSpace(v["host"])
@@ -118,7 +138,7 @@ type clickHouseHTTP struct {
 // query runs q over the HTTP interface; params bind to {name:Type} placeholders so values are never spliced into SQL.
 func (c clickHouseHTTP) query(ctx context.Context, q string, params map[string]string) (string, error) {
 	u := *c.base
-	values := url.Values{}
+	values := u.Query()
 	for k, val := range params {
 		values.Set("param_"+k, val)
 	}
@@ -137,7 +157,7 @@ func (c clickHouseHTTP) query(ctx context.Context, q string, params map[string]s
 	if c.database != "" {
 		req.Header.Set("X-ClickHouse-Database", c.database)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := preflightHTTPClient.Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -145,7 +165,14 @@ func (c clickHouseHTTP) query(ctx context.Context, q string, params map[string]s
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 	text := strings.TrimSpace(string(body))
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("HTTP %d: %s", resp.StatusCode, text)
+		return "", clickHouseError(resp.StatusCode, text)
 	}
 	return text, nil
+}
+
+func clickHouseError(status int, body string) error {
+	if m := clickHouseErrorName.FindStringSubmatch(body); m != nil {
+		return fmt.Errorf("HTTP %d: code %s (%s)", status, m[1], m[2])
+	}
+	return fmt.Errorf("HTTP %d", status)
 }
