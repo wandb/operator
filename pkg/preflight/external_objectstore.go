@@ -38,7 +38,6 @@ var (
 )
 
 // RunExternalObjectStoreCheck dispatches on provider because one externalObjectStore field covers S3, GCS and Azure.
-// Not registered in Checks until the provider checks are implemented; until then it reports unknown.
 func RunExternalObjectStoreCheck(ctx context.Context, conn *apiv2.ObjectStoreConnection, env Env) Result {
 	provider, err := env.Resolve(ctx, conn.Provider)
 	if err != nil {
@@ -128,13 +127,14 @@ func checkS3Bucket(ctx context.Context, conn *apiv2.ObjectStoreConnection, env E
 		return Result{Check: ExternalObjectStoreCheck, Outcome: OutcomeUnknown, Message: fmt.Sprintf("sign request: %v", err)}
 	}
 
-	// A redirect means the bucket lives elsewhere; following it would drop the signature.
-	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	resp, err := client.Do(req)
+	// preflightHTTPClient doesn't follow redirects: one means the bucket lives elsewhere, and following it would
+	// drop the signature.
+	resp, err := preflightHTTPClient.Do(req)
 	if err != nil {
 		var unknownCA x509.UnknownAuthorityError
 		if errors.As(err, &unknownCA) {
-			return Result{Check: ExternalObjectStoreCheck, Outcome: OutcomeUnknown,
+			// W&B pods may trust this CA even though the operator doesn't, so don't block on it.
+			return Result{Check: ExternalObjectStoreCheck, Outcome: OutcomeSkipped,
 				Message: "endpoint certificate is not trusted here; CAs from spec.global are not applied to this check"}
 		}
 		return fail(fmt.Sprintf("cannot reach %s: %v", req.URL.Host, err))
@@ -199,7 +199,7 @@ func checkGCSBucket(ctx context.Context, conn *apiv2.ObjectStoreConnection, env 
 	if err != nil {
 		return fail(err.Error())
 	}
-	resp, err := cfg.Client(ctx).Do(req)
+	resp, err := cfg.Client(context.WithValue(ctx, oauth2.HTTPClient, preflightHTTPClient)).Do(req)
 	if err != nil {
 		var tokenErr *oauth2.RetrieveError
 		if errors.As(err, &tokenErr) {
@@ -288,7 +288,7 @@ func checkAzureContainer(ctx context.Context, conn *apiv2.ObjectStoreConnection,
 	_, _ = mac.Write([]byte(azureStringToSign(req, account)))
 	req.Header.Set("Authorization", "SharedKey "+account+":"+base64.StdEncoding.EncodeToString(mac.Sum(nil)))
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := preflightHTTPClient.Do(req)
 	if err != nil {
 		return fail(fmt.Sprintf("cannot reach storage account %q: %v", account, err))
 	}

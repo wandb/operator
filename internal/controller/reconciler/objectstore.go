@@ -40,7 +40,7 @@ func objectStoreWriteState(
 			o := spec.ExternalObjectStore
 			if conds := gatePreflight(ctx, client, wandb, preflight.ExternalObjectStoreCheck,
 				fmt.Sprintf("spec.objectStore.%s.externalObjectStore", key), o,
-				o.Provider, o.Endpoint, o.Port, o.AccessKey, o.SecretKey, o.Bucket, o.Region, o.TlsEnabled,
+				o.Provider, o.Endpoint, o.Port, o.AccessKey, o.SecretKey, o.Bucket, o.Path, o.Region, o.TlsEnabled,
 				o.ForcePathStyle); conds != nil {
 				outConds[key] = conds
 				continue
@@ -268,6 +268,11 @@ func managedObjectStoreInferStatus(
 	)
 	for _, e := range events {
 		recorder.Event(wandb, e.Type, e.Reason, e.Message)
+	}
+	// ComputeStatus only reads component conditions, so a blocked gate would otherwise leave a stale ready status.
+	if preflightBlocked(newConditions) {
+		updatedStatus.Ready = false
+		updatedStatus.State = common.ErrorState
 	}
 	wandb.Status.ObjectStoreStatus[key] = updatedStatus
 	err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore)

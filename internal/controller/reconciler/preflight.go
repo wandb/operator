@@ -2,6 +2,7 @@ package reconciler
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"time"
 
@@ -43,7 +44,7 @@ func runPreflightOnce(
 	if prev, ok := wandb.Status.Preflights[key]; ok &&
 		prev.ObservedGeneration == wandb.Generation &&
 		prev.InputVersion == inputVersion {
-		if prev.Outcome == string(preflight.OutcomePass) {
+		if preflightPassed(preflight.Outcome(prev.Outcome)) {
 			return true, "", nil
 		}
 		if time.Since(prev.LastRunTime.Time) < preflightRetryInterval {
@@ -73,7 +74,7 @@ func runPreflightOnce(
 	if err := updateWandbStatusIfChanged(ctx, c, wandb, statusBefore); err != nil {
 		return false, "", err
 	}
-	return result.Outcome == preflight.OutcomePass, result.Message, nil
+	return preflightPassed(result.Outcome), result.Message, nil
 }
 
 // secretInputVersion fingerprints referenced Secrets so a rotation invalidates a cached pass without
@@ -127,4 +128,11 @@ func gatePreflight(
 		return []metav1.Condition{{Type: common.ReconciledType, Status: metav1.ConditionFalse, Reason: common.PreflightFailedReason, Message: msg}}
 	}
 	return nil
+}
+
+// preflightBlocked reports a failed gate, which managed status inference doesn't otherwise look at.
+func preflightBlocked(conds []metav1.Condition) bool {
+	return slices.ContainsFunc(conds, func(c metav1.Condition) bool {
+		return c.Type == common.ReconciledType && c.Status == metav1.ConditionFalse && c.Reason == common.PreflightFailedReason
+	})
 }
