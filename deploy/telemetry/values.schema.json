@@ -10,6 +10,15 @@
     "namespace": {
       "type": "string"
     },
+    "grafana": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pluginImage": {
+          "type": "string"
+        }
+      }
+    },
     "forwarding": {
       "type": "object",
       "additionalProperties": false,

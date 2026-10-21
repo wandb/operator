@@ -4,10 +4,15 @@ IMG ?= controller:latest
 # Watchtower release whose binary is copied into the operator image as its second
 # entrypoint. Tag verbatim, leading "v" included. `make download-watchtower`
 # fetches it into WATCHTOWER_BINARY; the image build only copies that file.
-WATCHTOWER_VERSION ?= v0.13.1
+WATCHTOWER_VERSION ?= v0.14.0
 # The binary is arch-specific, so this also drives the image platform below.
 WATCHTOWER_ARCH ?= amd64
 WATCHTOWER_BINARY ?= watchtower
+
+# Grafana plugins baked into the operator image so Grafana never downloads them at runtime.
+GRAFANA_PLUGIN_VERSION ?= 0.33.1
+GRAFANA_PLUGIN_SHA256 ?= 849edf4d86a6555bbf3fdbe1c53ed719a6c51c3d69965dcc0384e2c129ad991a
+GRAFANA_PLUGINS_DIR ?= grafana-plugins
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -264,13 +269,36 @@ download-watchtower: ## Download the Watchtower binary into the repo root. Requi
 	chmod 0755 "$(WATCHTOWER_BINARY)"; \
 	echo "Wrote $(WATCHTOWER_BINARY) (linux/$(WATCHTOWER_ARCH))"
 
+.PHONY: download-grafana-plugins
+download-grafana-plugins: ## Download the pinned VictoriaLogs Grafana plugin into GRAFANA_PLUGINS_DIR.
+	@command -v curl >/dev/null 2>&1 || { echo "curl is required but was not found." >&2; exit 1; }
+	@set -eu; \
+	plugin="victoriametrics-logs-datasource"; \
+	asset="$$plugin-v$(GRAFANA_PLUGIN_VERSION).tar.gz"; \
+	tmp="$$(mktemp -d)"; \
+	trap 'rm -rf "$$tmp"' EXIT; \
+	echo "Fetching $$asset"; \
+	curl -fsSL -o "$$tmp/$$asset" \
+		"https://github.com/VictoriaMetrics/victorialogs-datasource/releases/download/v$(GRAFANA_PLUGIN_VERSION)/$$asset"; \
+	if command -v sha256sum >/dev/null 2>&1; then sha="sha256sum"; else sha="shasum -a 256"; fi; \
+	(cd "$$tmp" && echo "$(GRAFANA_PLUGIN_SHA256)  $$asset" | $$sha -c -); \
+	tar -xzf "$$tmp/$$asset" -C "$$tmp"; \
+	rm -rf "$(GRAFANA_PLUGINS_DIR)"; \
+	mkdir -p "$(GRAFANA_PLUGINS_DIR)"; \
+	mv "$$tmp/$$plugin" "$(GRAFANA_PLUGINS_DIR)/$$plugin"; \
+	echo "Wrote $(GRAFANA_PLUGINS_DIR)/$$plugin $(GRAFANA_PLUGIN_VERSION)"
+
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
-docker-build: ## Build controller docker image. Run download-watchtower first.
+docker-build: ## Build controller docker image. Run download-watchtower and download-grafana-plugins first.
 	@if [ ! -f "$(WATCHTOWER_BINARY)" ]; then \
 		echo "$(WATCHTOWER_BINARY) not found: run 'GH_TOKEN=\$$(gh auth token) make download-watchtower' first." >&2; \
+		exit 1; \
+	fi
+	@if [ ! -d "$(GRAFANA_PLUGINS_DIR)" ]; then \
+		echo "$(GRAFANA_PLUGINS_DIR) not found: run 'make download-grafana-plugins' first." >&2; \
 		exit 1; \
 	fi
 	$(CONTAINER_TOOL) build --platform linux/$(WATCHTOWER_ARCH) \
