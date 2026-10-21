@@ -2,6 +2,7 @@ package reconciler
 
 import (
 	"context"
+	"fmt"
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
@@ -9,6 +10,7 @@ import (
 	externalch "github.com/wandb/operator/internal/controller/infra/external/clickhouse"
 	"github.com/wandb/operator/internal/controller/infra/managed/clickhouse/altinity"
 	"github.com/wandb/operator/internal/controller/infra/managed/clickhouse/altinity/keeper"
+	"github.com/wandb/operator/pkg/preflight"
 	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/wandb/manifest"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,9 +35,23 @@ func clickHouseWriteState(
 	for key, spec := range wandb.Spec.ClickHouse {
 		switch {
 		case spec.ManagedClickHouse != nil:
+			if conds := gatePreflight(ctx, client, wandb, preflight.ManagedClickHouseAPIsCheck,
+				fmt.Sprintf("spec.clickhouse.%s.managedClickhouse", key), spec.ManagedClickHouse); conds != nil {
+				out[key] = conds
+				continue
+			}
 			out[key] = managedClickHouseWriteState(ctx, client, wandb, spec.ManagedClickHouse, mfst)
 		case spec.ExternalClickHouse != nil:
+			ch := spec.ExternalClickHouse
+			if conds := gatePreflight(ctx, client, wandb, preflight.ExternalClickHouseCheck,
+				fmt.Sprintf("spec.clickhouse.%s.externalClickhouse", key), ch,
+				ch.URL, ch.Host, ch.HTTPPort, ch.TCPPort, ch.Database, ch.Username, ch.Password, ch.Replicated,
+				ch.ClusterName); conds != nil {
+				out[key] = conds
+				continue
+			}
 			out[key] = externalch.WriteState(ctx, client, wandb, key, spec.ExternalClickHouse)
+
 		}
 	}
 	return out
@@ -289,6 +305,11 @@ func managedClickHouseInferStatus(
 	)
 	for _, e := range events {
 		recorder.Event(wandb, e.Type, e.Reason, e.Message)
+	}
+	// ComputeStatus only reads component conditions, so a blocked gate would otherwise leave a stale ready status.
+	if preflightBlocked(newConditions) {
+		updatedStatus.Ready = false
+		updatedStatus.State = common.ErrorState
 	}
 	wandb.Status.ClickHouseStatus[key] = updatedStatus
 	err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore)

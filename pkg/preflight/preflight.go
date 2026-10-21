@@ -2,11 +2,18 @@ package preflight
 
 import (
 	"context"
+	"crypto/x509"
 	"fmt"
+	"net"
+	"net/http"
 	"slices"
+	"strconv"
 	"strings"
+	"syscall"
+	"time"
 
 	apiv2 "github.com/wandb/operator/api/v2"
+	"k8s.io/apimachinery/pkg/api/meta"
 )
 
 // SkipPreflightsAnnotation holds a comma-separated list of check names to skip; empty runs all checks.
@@ -48,11 +55,16 @@ type Result struct {
 	Message string
 }
 
+type Env struct {
+	Resolve ValueResolver
+	Mapper  meta.RESTMapper
+}
+
 // ValueResolver turns a ValueOrSecret into its value; callers supply Secret access so checks stay client-agnostic.
 type ValueResolver func(ctx context.Context, v apiv2.ValueOrSecret) (string, error)
 
 // CheckFunc receives the CR struct found at the check's CRField, as returned by Check.NewSpec.
-type CheckFunc func(ctx context.Context, spec any, resolve ValueResolver) Result
+type CheckFunc func(ctx context.Context, spec any, env Env) Result
 
 type Check struct {
 	Name string
@@ -74,7 +86,7 @@ func typedCheck[T any](
 	name, crField string,
 	checkType CheckType,
 	reqs []ResourceReq,
-	run func(context.Context, *T, ValueResolver) Result,
+	run func(context.Context, *T, Env) Result,
 ) Check {
 	return Check{
 		Name:         name,
@@ -82,12 +94,12 @@ func typedCheck[T any](
 		Type:         checkType,
 		ResourceReqs: reqs,
 		NewSpec:      func() any { return new(T) },
-		Run: func(ctx context.Context, spec any, resolve ValueResolver) Result {
+		Run: func(ctx context.Context, spec any, env Env) Result {
 			typed, ok := spec.(*T)
 			if !ok || typed == nil {
 				return Result{Check: name, Outcome: OutcomeUnknown, Message: fmt.Sprintf("expected %T, got %T", typed, spec)}
 			}
-			return run(ctx, typed, resolve)
+			return run(ctx, typed, env)
 		},
 	}
 }
@@ -114,6 +126,27 @@ func resolveFields(ctx context.Context, resolve ValueResolver, fields map[string
 	return out, nil
 }
 
-func notImplemented(check, variant string) Result {
-	return Result{Check: check, Outcome: OutcomeUnknown, Message: variant + " check not implemented"}
+func parsePEMPool(pemData string) (*x509.CertPool, bool) {
+	pool := x509.NewCertPool()
+	return pool, pool.AppendCertsFromPEM([]byte(pemData))
+}
+
+func validPort(port string) bool {
+	p, err := strconv.Atoi(strings.TrimSpace(port))
+	return err == nil && p >= 1 && p <= 65535
+}
+
+// preflightDialer refuses link-local targets such as cloud metadata endpoints; no W&B dependency lives there.
+var preflightDialer = &net.Dialer{Timeout: 10 * time.Second, Control: func(_, address string, _ syscall.RawConn) error {
+	host, _, _ := net.SplitHostPort(address)
+	if ip := net.ParseIP(host); ip != nil && (ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast()) {
+		return fmt.Errorf("refusing link-local address %s", host)
+	}
+	return nil
+}}
+
+// preflightHTTPClient doesn't follow redirects, so a probe can't be bounced to another host.
+var preflightHTTPClient = &http.Client{
+	Transport:     &http.Transport{DialContext: preflightDialer.DialContext, Proxy: http.ProxyFromEnvironment},
+	CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 }

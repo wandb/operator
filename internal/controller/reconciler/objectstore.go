@@ -2,12 +2,14 @@ package reconciler
 
 import (
 	"context"
+	"fmt"
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/infra/external"
 	externalobjectstore "github.com/wandb/operator/internal/controller/infra/external/objectstore"
 	"github.com/wandb/operator/internal/controller/infra/managed/objectstore/seaweedfs"
+	"github.com/wandb/operator/pkg/preflight"
 	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/wandb/manifest"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -28,9 +30,23 @@ func objectStoreWriteState(
 	for key, spec := range wandb.Spec.ObjectStore {
 		switch {
 		case spec.ManagedObjectStore != nil:
+			if conds := gatePreflight(ctx, client, wandb, preflight.ManagedObjectStoreAPIsCheck,
+				fmt.Sprintf("spec.objectStore.%s.managedObjectStore", key), spec.ManagedObjectStore); conds != nil {
+				outConds[key] = conds
+				continue
+			}
 			outConds[key], outConns[key] = managedObjectStoreWriteState(ctx, client, wandb, key, spec.ManagedObjectStore, mfst)
 		case spec.ExternalObjectStore != nil:
+			o := spec.ExternalObjectStore
+			if conds := gatePreflight(ctx, client, wandb, preflight.ExternalObjectStoreCheck,
+				fmt.Sprintf("spec.objectStore.%s.externalObjectStore", key), o,
+				o.Provider, o.Endpoint, o.Port, o.AccessKey, o.SecretKey, o.Bucket, o.Path, o.Region, o.TlsEnabled,
+				o.ForcePathStyle); conds != nil {
+				outConds[key] = conds
+				continue
+			}
 			outConds[key], outConns[key] = externalobjectstore.WriteState(ctx, client, wandb, key, spec.ExternalObjectStore)
+
 		}
 	}
 	return outConds, outConns
@@ -252,6 +268,11 @@ func managedObjectStoreInferStatus(
 	)
 	for _, e := range events {
 		recorder.Event(wandb, e.Type, e.Reason, e.Message)
+	}
+	// ComputeStatus only reads component conditions, so a blocked gate would otherwise leave a stale ready status.
+	if preflightBlocked(newConditions) {
+		updatedStatus.Ready = false
+		updatedStatus.State = common.ErrorState
 	}
 	wandb.Status.ObjectStoreStatus[key] = updatedStatus
 	err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore)
