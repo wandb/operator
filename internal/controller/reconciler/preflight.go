@@ -6,6 +6,7 @@ import (
 	"time"
 
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/infra/external"
 	"github.com/wandb/operator/pkg/preflight"
 	corev1 "k8s.io/api/core/v1"
@@ -56,7 +57,7 @@ func runPreflightOnce(
 	resolve := func(ctx context.Context, v apiv2.ValueOrSecret) (string, error) {
 		return external.ResolveValue(ctx, c, wandb.Namespace, v)
 	}
-	result := check.Run(ctx, spec, resolve)
+	result := check.Run(ctx, spec, preflight.Env{Resolve: resolve, Mapper: c.RESTMapper()})
 	logger.Info("Preflight check finished", "outcome", result.Outcome, "message", result.Message)
 	if wandb.Status.Preflights == nil {
 		wandb.Status.Preflights = map[string]apiv2.PreflightStatus{}
@@ -93,4 +94,37 @@ func secretInputVersion(ctx context.Context, c client.Client, namespace string, 
 		parts = append(parts, ref.Name+"@"+s.ResourceVersion)
 	}
 	return strings.Join(parts, ","), nil
+}
+
+// preflightPassed lets a check that skipped itself (e.g. ambient credentials it can't verify) through.
+func preflightPassed(o preflight.Outcome) bool {
+	return o == preflight.OutcomePass || o == preflight.OutcomeSkipped
+}
+
+// gatePreflight runs a registered check for one CR field and returns the conditions that block reconciling
+// that instance, or nil to continue. secretFields are fingerprinted so a Secret rotation reruns the check.
+func gatePreflight(
+	ctx context.Context,
+	c client.Client,
+	wandb *apiv2.WeightsAndBiases,
+	checkName, fieldPath string,
+	spec any,
+	secretFields ...apiv2.ValueOrSecret,
+) []metav1.Condition {
+	if preflightSkipped(wandb, checkName) {
+		return nil
+	}
+	inputVersion, err := secretInputVersion(ctx, c, wandb.Namespace, secretFields...)
+	if err != nil {
+		return []metav1.Condition{{Type: common.ReconciledType, Status: metav1.ConditionFalse, Reason: common.ApiErrorReason,
+			Message: err.Error()}}
+	}
+	passed, msg, err := runPreflightOnce(ctx, c, wandb, preflight.Checks[checkName], fieldPath, spec, inputVersion)
+	if err != nil {
+		return []metav1.Condition{{Type: common.ReconciledType, Status: metav1.ConditionFalse, Reason: common.ApiErrorReason}}
+	}
+	if !passed {
+		return []metav1.Condition{{Type: common.ReconciledType, Status: metav1.ConditionFalse, Reason: common.PreflightFailedReason, Message: msg}}
+	}
+	return nil
 }
