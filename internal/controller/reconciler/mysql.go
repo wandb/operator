@@ -34,9 +34,17 @@ func mysqlWriteState(
 	for key, spec := range wandb.Spec.MySQL {
 		switch {
 		case spec.ManagedMysql != nil:
+			if conds := gatePreflight(ctx, client, wandb, preflight.ManagedMysqlAPIsCheck,
+				fmt.Sprintf("spec.mysql.%s.managedMysql", key), spec.ManagedMysql); conds != nil {
+				out[key] = conds
+				continue
+			}
 			out[key] = managedMysqlWriteState(ctx, client, wandb, spec.ManagedMysql, mfst)
 		case spec.ExternalMysql != nil:
-			if conds := externalMysqlPreflight(ctx, client, wandb, key, spec.ExternalMysql); conds != nil {
+			m := spec.ExternalMysql
+			if conds := gatePreflight(ctx, client, wandb, preflight.ExternalMysqlCheck,
+				fmt.Sprintf("spec.mysql.%s.externalMysql", key), m,
+				m.Host, m.Port, m.Database, m.Username, m.Password, m.Tls, m.SslCa, m.SslCert, m.SslKey); conds != nil {
 				out[key] = conds
 				continue
 			}
@@ -45,6 +53,7 @@ func mysqlWriteState(
 	}
 	return out
 }
+
 
 func mysqlReadState(
 	ctx context.Context,
@@ -479,25 +488,4 @@ func runMysqlInitJobInstance(ctx context.Context, client client.Client, wandb *a
 
 	logger.Info("MySQL init job still running")
 	return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
-}
-
-func externalMysqlPreflight(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, key string, spec *apiv2.MysqlConnection) []metav1.Condition {
-	if preflightSkipped(wandb, preflight.ExternalMysqlCheck) {
-		return nil
-	}
-	inputVersion, err := secretInputVersion(ctx, c, wandb.Namespace,
-		spec.Host, spec.Port, spec.Database, spec.Username, spec.Password, spec.Tls, spec.SslCa, spec.SslCert, spec.SslKey)
-	if err != nil {
-		return []metav1.Condition{{Type: common.ReconciledType, Status: metav1.ConditionFalse, Reason: common.ApiErrorReason}}
-	}
-
-	fieldPath := fmt.Sprintf("spec.mysql.%s.externalMysql", key)
-	passed, msg, err := runPreflightOnce(ctx, c, wandb, preflight.Checks[preflight.ExternalMysqlCheck], fieldPath, spec, inputVersion)
-	if err != nil {
-		return []metav1.Condition{{Type: common.ReconciledType, Status: metav1.ConditionFalse, Reason: common.ApiErrorReason}}
-	}
-	if !passed {
-		return []metav1.Condition{{Type: common.ReconciledType, Status: metav1.ConditionFalse, Reason: common.PreflightFailedReason, Message: msg}}
-	}
-	return nil
 }

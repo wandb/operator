@@ -19,8 +19,8 @@ const (
 	externalMysqlTimeout = 10 * time.Second
 )
 
-func RunExternalMysqlCheck(ctx context.Context, conn *apiv2.MysqlConnection, resolve ValueResolver) Result {
-	v, err := resolveFields(ctx, resolve, map[string]apiv2.ValueOrSecret{
+func RunExternalMysqlCheck(ctx context.Context, conn *apiv2.MysqlConnection, env Env) Result {
+	v, err := resolveFields(ctx, env.Resolve, map[string]apiv2.ValueOrSecret{
 		"host":     conn.Host,
 		"port":     conn.Port,
 		"database": conn.Database,
