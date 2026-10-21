@@ -1,4 +1,5 @@
 package preflight
+
 import (
 	"context"
 	"fmt"
@@ -21,15 +22,11 @@ type APIRequirement struct {
 var (
 	mocoMySQLClusterGVK      = schema.GroupVersionKind{Group: "moco.cybozu.com", Version: "v1beta2", Kind: "MySQLCluster"}
 	opstreeRedisGVK          = schema.GroupVersionKind{Group: "redis.redis.opstreelabs.in", Version: "v1beta2", Kind: "Redis"}
-	opstreeReplicationGVK    = schema.GroupVersionKind{Group: "redis.redis.opstreelabs.in", Version: "v1beta2", Kind:
-	"RedisReplication"}
-	opstreeSentinelGVK       = schema.GroupVersionKind{Group: "redis.redis.opstreelabs.in", Version: "v1beta2", Kind:
-	"RedisSentinel"}
+	opstreeReplicationGVK    = schema.GroupVersionKind{Group: "redis.redis.opstreelabs.in", Version: "v1beta2", Kind: "RedisReplication"}
+	opstreeSentinelGVK       = schema.GroupVersionKind{Group: "redis.redis.opstreelabs.in", Version: "v1beta2", Kind: "RedisSentinel"}
 	seaweedGVK               = schema.GroupVersionKind{Group: "seaweed.seaweedfs.com", Version: "v1", Kind: "Seaweed"}
-	altinityInstallationGVK  = schema.GroupVersionKind{Group: "clickhouse.altinity.com", Version: "v1", Kind:
-	"ClickHouseInstallation"}
-	altinityKeeperInstallGVK = schema.GroupVersionKind{Group: "clickhouse-keeper.altinity.com", Version: "v1", Kind:
-	"ClickHouseKeeperInstallation"}
+	altinityInstallationGVK  = schema.GroupVersionKind{Group: "clickhouse.altinity.com", Version: "v1", Kind: "ClickHouseInstallation"}
+	altinityKeeperInstallGVK = schema.GroupVersionKind{Group: "clickhouse-keeper.altinity.com", Version: "v1", Kind: "ClickHouseKeeperInstallation"}
 )
 
 // managedAPIsCheck builds a check that a managed instance's dependency operator is installed.

@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/redis/go-redis/v9"
+	apiv2 "github.com/wandb/operator/api/v2"
 )
 
 const externalRedisTimeout = 10 * time.Second

@@ -20,7 +20,7 @@ func countingCheck(outcome preflight.Outcome, runs *int) preflight.Check {
 		Name:    "testCheck",
 		CRField: "spec.mysql.*.externalMysql",
 		NewSpec: func() any { return &apiv2.MysqlConnection{} },
-		Run: func(context.Context, any, preflight.ValueResolver) preflight.Result {
+		Run: func(context.Context, any, preflight.Env) preflight.Result {
 			*runs++
 			return preflight.Result{Check: "testCheck", Outcome: outcome, Message: "result"}
 		},
