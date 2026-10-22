@@ -1132,13 +1132,9 @@ migrations:
     securityProfile:
       runAsNonRoot: true
       readOnlyRootFilesystem: true
-  internal-signer:
     serviceAccount:
-      automountServiceAccountToken: true
-      permissions:
-        - resources: [secrets]
-          resourceNames: [wandb-internal-signer]
-          verbs: [get, update]
+      automountServiceAccountToken: false
+  internal-signer:
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/megabinary
       tag: 0.86.0-rc.1792428318
@@ -1158,6 +1154,12 @@ migrations:
     securityProfile:
       runAsNonRoot: true
       readOnlyRootFilesystem: true
+    serviceAccount:
+      automountServiceAccountToken: true
+      permissions:
+        - resources: [ secrets ]
+          resourceNames: [ wandb-internal-signer ]
+          verbs: [ get, update ]
   weave-trace:
     image:
       repository: us-docker.pkg.dev/wandb-production/public/wandb/weave-trace
@@ -1174,3 +1176,5 @@ migrations:
     securityProfile:
       runAsNonRoot: true
       readOnlyRootFilesystem: true
+    serviceAccount:
+      automountServiceAccountToken: false

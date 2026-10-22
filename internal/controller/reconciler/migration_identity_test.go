@@ -2,314 +2,335 @@ package reconciler
 
 import (
 	"context"
-	"reflect"
-	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	apiv2 "github.com/wandb/operator/api/v2"
 	servermanifest "github.com/wandb/operator/pkg/wandb/manifest"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-func migrationIdentityFixture(t *testing.T) (client.Client, *apiv2.WeightsAndBiases, servermanifest.Manifest) {
+// migrationIdentityFixture describes the signer bootstrap scenario. Secret-only
+// tests use manifestSecretTestClient instead of inheriting migration configuration.
+func migrationIdentityFixture(t *testing.T) (client.WithWatch, *apiv2.WeightsAndBiases, servermanifest.Manifest) {
 	t.Helper()
-	scheme := runtime.NewScheme()
-	for _, add := range []func(*runtime.Scheme) error{apiv2.AddToScheme, corev1.AddToScheme, batchv1.AddToScheme, rbacv1.AddToScheme} {
-		if err := add(scheme); err != nil {
-			t.Fatal(err)
-		}
+	c, wandb := manifestSecretTestClient(t)
+	require.NoError(t, batchv1.AddToScheme(c.Scheme()))
+	require.NoError(t, rbacv1.AddToScheme(c.Scheme()))
+	wandb.Spec.Wandb = apiv2.WandbAppSpec{
+		Version:        "test",
+		ServiceAccount: apiv2.ServiceAccountSpec{ServiceAccountName: "shared"},
 	}
-	w := &apiv2.WeightsAndBiases{ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "test", UID: types.UID("install-1")}, Spec: apiv2.WeightsAndBiasesSpec{Wandb: apiv2.WandbAppSpec{Version: "test", ServiceAccount: apiv2.ServiceAccountSpec{ServiceAccountName: "shared"}}}}
-	c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(w).WithObjects(w).Build()
+	require.NoError(t, c.Update(context.Background(), wandb))
 	automount := true
 	task := servermanifest.MigrationJob{
-		Image: servermanifest.ImageRef{Repository: "example/signer", Tag: "test"}, Args: []string{"secret-generation-job"},
-		ServiceAccount: &servermanifest.MigrationServiceAccount{AutomountServiceAccountToken: &automount, Permissions: []rbacv1.PolicyRule{{Resources: []string{"secrets"}, ResourceNames: []string{"wandb-internal-signer"}, Verbs: []string{"get", "update"}}}},
+		Image: servermanifest.ImageRef{Repository: "example/signer", Tag: "test"},
+		Args:  []string{"secret-generation-job"},
+		ServiceAccount: &servermanifest.MigrationServiceAccount{
+			AutomountServiceAccountToken: &automount,
+			Permissions: []rbacv1.PolicyRule{{
+				Resources:     []string{"secrets"},
+				ResourceNames: []string{"wandb-internal-signer"},
+				Verbs:         []string{"get", "update"},
+			}},
+		},
 	}
-	m := servermanifest.Manifest{Secrets: []servermanifest.Secret{{Name: "wandb-internal-signer", UseExactName: true}}, Migrations: map[string]servermanifest.MigrationJob{"internal-signer": task}}
-	return c, w, m
+	manifest := servermanifest.Manifest{
+		Secrets:    []servermanifest.Secret{{Name: "wandb-internal-signer", UseExactName: true}},
+		Migrations: map[string]servermanifest.MigrationJob{"internal-signer": task},
+	}
+	return c, wandb, manifest
 }
 
 func TestSignerMigrationIdentityBootstrap(t *testing.T) {
-	c, w, m := migrationIdentityFixture(t)
+	c, wandb, manifest := migrationIdentityFixture(t)
 	ctx := context.Background()
-	if _, err := reconcileManifestSecrets(ctx, c, w, m); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := runMigrations(ctx, c, w, m); err != nil {
-		t.Fatal(err)
-	}
+	_, err := reconcileManifestSecrets(ctx, c, wandb, manifest)
+	require.NoError(t, err)
+
+	_, err = runMigrations(ctx, c, wandb, manifest)
+	require.NoError(t, err)
+
 	job := &batchv1.Job{}
-	if err := c.Get(ctx, client.ObjectKey{Name: "wandb-internal-signer", Namespace: w.Namespace}, job); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, c.Get(ctx, client.ObjectKey{Name: "wandb-internal-signer", Namespace: wandb.Namespace}, job))
 	pod := job.Spec.Template.Spec
-	if pod.ServiceAccountName != "wandb-migration-internal-signer" || pod.AutomountServiceAccountToken == nil || !*pod.AutomountServiceAccountToken {
-		t.Fatalf("wrong job identity: %+v", pod)
-	}
+	require.Equal(t, "wandb-migration-internal-signer", pod.ServiceAccountName)
+	require.NotNil(t, pod.AutomountServiceAccountToken)
+	require.True(t, *pod.AutomountServiceAccountToken)
 	sa := &corev1.ServiceAccount{}
-	key := client.ObjectKey{Name: pod.ServiceAccountName, Namespace: w.Namespace}
-	if err := c.Get(ctx, key, sa); err != nil {
-		t.Fatal(err)
-	}
-	if sa.AutomountServiceAccountToken == nil || !*sa.AutomountServiceAccountToken {
-		t.Fatal("service account automount disabled")
-	}
+	key := client.ObjectKey{Name: pod.ServiceAccountName, Namespace: wandb.Namespace}
+	require.NoError(t, c.Get(ctx, key, sa))
+	require.NotNil(t, sa.AutomountServiceAccountToken)
+	require.True(t, *sa.AutomountServiceAccountToken, "signer account needs API credentials")
 	role := &rbacv1.Role{}
-	if err := c.Get(ctx, key, role); err != nil {
-		t.Fatal(err)
-	}
-	want := []rbacv1.PolicyRule{{APIGroups: []string{""}, Resources: []string{"secrets"}, ResourceNames: []string{"wandb-internal-signer"}, Verbs: []string{"get", "update"}}}
-	if !reflect.DeepEqual(role.Rules, want) {
-		t.Fatalf("overbroad signer role: %+v", role.Rules)
-	}
+	require.NoError(t, c.Get(ctx, key, role))
+	// The empty API group denotes core Kubernetes resources such as Secrets.
+	want := []rbacv1.PolicyRule{{
+		APIGroups:     []string{""},
+		Resources:     []string{"secrets"},
+		ResourceNames: []string{"wandb-internal-signer"},
+		Verbs:         []string{"get", "update"},
+	}}
+	require.Equal(t, want, role.Rules, "signer Role must grant only the declared permissions")
 	binding := &rbacv1.RoleBinding{}
-	if err := c.Get(ctx, key, binding); err != nil {
-		t.Fatal(err)
-	}
-	if binding.RoleRef.Name != key.Name || len(binding.Subjects) != 1 || binding.Subjects[0].Name != sa.Name || binding.Subjects[0].Namespace != w.Namespace {
-		t.Fatalf("wrong binding: %+v", binding)
-	}
+	require.NoError(t, c.Get(ctx, key, binding))
+	require.Equal(t, key.Name, binding.RoleRef.Name)
+	require.Len(t, binding.Subjects, 1)
+	require.Equal(t, sa.Name, binding.Subjects[0].Name)
+	require.Equal(t, wandb.Namespace, binding.Subjects[0].Namespace)
 	secret := &corev1.Secret{}
-	if err := c.Get(ctx, client.ObjectKey{Name: "wandb-internal-signer", Namespace: w.Namespace}, secret); err != nil {
-		t.Fatal(err)
-	}
-	if len(secret.Data) != 0 || !hasOwnerReference(secret, w) {
-		t.Fatal("bootstrap Secret must be empty and owned by installation")
-	}
-	if len(pod.Volumes) != 0 || len(pod.Containers[0].VolumeMounts) != 0 {
-		t.Fatal("signer must rely on automatic credentials rather than explicit token volumes")
-	}
+	require.NoError(t, c.Get(ctx, client.ObjectKey{Name: "wandb-internal-signer", Namespace: wandb.Namespace}, secret))
+	require.Empty(t, secret.Data)
+	require.True(t, hasOwnerReference(secret, wandb), "bootstrap Secret must belong to the installation")
+	// API credentials come from automounting rather than explicit token volumes.
+	require.Empty(t, pod.Volumes)
+	require.NotEmpty(t, pod.Containers)
+	require.Empty(t, pod.Containers[0].VolumeMounts)
 }
 
-func TestSignerIdentityPreservesKeysAndRepairsRBAC(t *testing.T) {
-	for _, owned := range []bool{false, true} {
-		t.Run(map[bool]string{false: "legacy secret", true: "owned secret"}[owned], func(t *testing.T) {
-			c, w, m := migrationIdentityFixture(t)
+func TestSignerIdentityPreservesExistingKeys(t *testing.T) {
+	tests := []struct {
+		name         string
+		alreadyOwned bool
+	}{
+		{name: "legacy Secret is adopted", alreadyOwned: false},
+		{name: "owned Secret retains ownership", alreadyOwned: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			c, wandb, manifest := migrationIdentityFixture(t)
 			ctx := context.Background()
-			secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "wandb-internal-signer", Namespace: w.Namespace}, Data: map[string][]byte{"key.pem": []byte("existing signing material")}}
-			if owned {
-				secret.OwnerReferences = []metav1.OwnerReference{{APIVersion: apiv2.GroupVersion.String(), Kind: "WeightsAndBiases", Name: w.Name, UID: w.UID}}
+			owner := metav1.OwnerReference{APIVersion: apiv2.GroupVersion.String(), Kind: "WeightsAndBiases", Name: wandb.Name, UID: wandb.UID}
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: "wandb-internal-signer", Namespace: wandb.Namespace},
+				Data:       map[string][]byte{"key.pem": []byte("existing signing material")},
 			}
-			if err := c.Create(ctx, secret); err != nil {
-				t.Fatal(err)
+			if test.alreadyOwned {
+				secret.OwnerReferences = []metav1.OwnerReference{owner}
 			}
-			original := secret.DeepCopy()
-			if !owned {
-				original.OwnerReferences = []metav1.OwnerReference{{APIVersion: apiv2.GroupVersion.String(), Kind: "WeightsAndBiases", Name: w.Name, UID: w.UID}}
-			}
-			if original.Labels == nil {
-				original.Labels = map[string]string{}
-			}
-			original.Labels[manifestSecretLabel] = "true"
-			if _, err := reconcileManifestSecrets(ctx, c, w, m); err != nil {
-				t.Fatal(err)
-			}
-			if err := reconcileMigrationServiceAccounts(ctx, c, w, m); err != nil {
-				t.Fatal(err)
-			}
-			role := &rbacv1.Role{}
-			key := client.ObjectKey{Name: migrationServiceAccountName(w, "internal-signer", m.Migrations["internal-signer"].ServiceAccount), Namespace: w.Namespace}
-			if err := c.Get(ctx, key, role); err != nil {
-				t.Fatal(err)
-			}
-			role.Rules[0].Verbs = append(role.Rules[0].Verbs, "delete")
-			if err := c.Update(ctx, role); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := reconcileManifestSecrets(ctx, c, w, m); err != nil {
-				t.Fatal(err)
-			}
-			if err := reconcileMigrationServiceAccounts(ctx, c, w, m); err != nil {
-				t.Fatal(err)
-			}
-			if err := c.Get(ctx, client.ObjectKeyFromObject(secret), secret); err != nil {
-				t.Fatal(err)
-			}
-			if !reflect.DeepEqual(secret.Data, original.Data) || !reflect.DeepEqual(secret.OwnerReferences, original.OwnerReferences) || !reflect.DeepEqual(secret.Labels, original.Labels) {
-				t.Fatal("existing signing Secret data or adopted ownership was incorrect")
-			}
-			if err := c.Get(ctx, key, role); err != nil {
-				t.Fatal(err)
-			}
-			if !reflect.DeepEqual(role.Rules[0].Verbs, []string{"get", "update"}) {
-				t.Fatalf("RBAC drift not repaired: %+v", role.Rules)
-			}
+			require.NoError(t, c.Create(ctx, secret))
+			originalData := secret.DeepCopy().Data
+
+			_, err := reconcileManifestSecrets(ctx, c, wandb, manifest)
+			require.NoError(t, err)
+			_, err = reconcileManifestSecrets(ctx, c, wandb, manifest)
+			require.NoError(t, err, "repeated reconciliation must preserve the adopted Secret")
+
+			require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(secret), secret))
+			require.Equal(t, originalData, secret.Data, "adoption must preserve signing material")
+			require.Equal(t, []metav1.OwnerReference{owner}, secret.OwnerReferences)
+			require.Equal(t, map[string]string{manifestSecretLabel: "true"}, secret.Labels)
 		})
 	}
 }
 
-func TestMigrationIdentityCompatibility(t *testing.T) {
-	for _, mode := range []string{"legacy", "unprivileged", "completed", "running"} {
-		t.Run(mode, func(t *testing.T) {
-			c, w, m := migrationIdentityFixture(t)
-			ctx := context.Background()
-			task := m.Migrations["internal-signer"]
-			switch mode {
-			case "legacy":
-				task.ServiceAccount = nil
-			case "unprivileged":
-				task.ServiceAccount = &servermanifest.MigrationServiceAccount{}
-				task.VolumeMounts = nil
-			case "completed":
-				w.Status.Wandb.Migration = apiv2.WandbMigrationStatus{Version: w.Spec.Wandb.Version, Ready: true}
-			case "running":
-				old := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "wandb-internal-signer", Namespace: w.Namespace}, Spec: batchv1.JobSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{ServiceAccountName: "shared"}}}}
-				if err := c.Create(ctx, old); err != nil {
-					t.Fatal(err)
-				}
-			}
-			m.Migrations["internal-signer"] = task
-			if _, err := runMigrations(ctx, c, w, m); err != nil {
-				t.Fatal(err)
-			}
-			jobs := &batchv1.JobList{}
-			if err := c.List(ctx, jobs); err != nil {
-				t.Fatal(err)
-			}
-			if mode == "completed" {
-				if len(jobs.Items) != 0 {
-					t.Fatal("completed migration reran")
-				}
-				return
-			}
-			if len(jobs.Items) != 1 {
-				t.Fatalf("got %d jobs", len(jobs.Items))
-			}
-			pod := jobs.Items[0].Spec.Template.Spec
-			if mode == "legacy" || mode == "running" {
-				if pod.ServiceAccountName != "shared" || pod.AutomountServiceAccountToken != nil {
-					t.Fatal("existing identity changed")
-				}
-			} else if pod.ServiceAccountName == "shared" || len(pod.Volumes) != 0 || pod.AutomountServiceAccountToken == nil || *pod.AutomountServiceAccountToken {
-				t.Fatal("unprivileged identity gained API credentials")
-			}
-		})
+func TestSignerIdentityRepairsRBACDrift(t *testing.T) {
+	c, wandb, manifest := migrationIdentityFixture(t)
+	ctx := context.Background()
+	require.NoError(t, reconcileMigrationServiceAccounts(ctx, c, wandb, manifest))
+	role := &rbacv1.Role{}
+	key := client.ObjectKey{Name: "wandb-migration-internal-signer", Namespace: wandb.Namespace}
+	require.NoError(t, c.Get(ctx, key, role))
+	require.Len(t, role.Rules, 1)
+	// Simulate permission drift: the signer must never retain permission to delete Secrets.
+	role.Rules[0].Verbs = append(role.Rules[0].Verbs, "delete")
+	require.NoError(t, c.Update(ctx, role))
+
+	require.NoError(t, reconcileMigrationServiceAccounts(ctx, c, wandb, manifest))
+	require.NoError(t, c.Get(ctx, key, role))
+	require.Len(t, role.Rules, 1)
+	require.Equal(t, []string{"get", "update"}, role.Rules[0].Verbs)
+}
+
+func TestMigrationWithoutDedicatedIdentityUsesSharedAccount(t *testing.T) {
+	c, wandb, manifest := migrationIdentityFixture(t)
+	task := manifest.Migrations["internal-signer"]
+	task.ServiceAccount = nil
+	manifest.Migrations["internal-signer"] = task
+	ctx := context.Background()
+
+	_, err := runMigrations(ctx, c, wandb, manifest)
+	require.NoError(t, err)
+	jobs := &batchv1.JobList{}
+	require.NoError(t, c.List(ctx, jobs))
+	require.Len(t, jobs.Items, 1)
+	pod := jobs.Items[0].Spec.Template.Spec
+	require.Equal(t, "shared", pod.ServiceAccountName)
+	require.Nil(t, pod.AutomountServiceAccountToken, "legacy migrations must retain the existing automount default")
+}
+
+func TestMigrationWithEmptyDedicatedIdentityHasNoAPICredentials(t *testing.T) {
+	c, wandb, manifest := migrationIdentityFixture(t)
+	task := manifest.Migrations["internal-signer"]
+	// An explicit empty identity requests a dedicated account with credentials disabled.
+	task.ServiceAccount = &servermanifest.MigrationServiceAccount{}
+	manifest.Migrations["internal-signer"] = task
+	ctx := context.Background()
+
+	_, err := runMigrations(ctx, c, wandb, manifest)
+	require.NoError(t, err)
+	jobs := &batchv1.JobList{}
+	require.NoError(t, c.List(ctx, jobs))
+	require.Len(t, jobs.Items, 1)
+	pod := jobs.Items[0].Spec.Template.Spec
+	require.Equal(t, "wandb-migration-internal-signer", pod.ServiceAccountName)
+	require.Empty(t, pod.Volumes)
+	require.NotNil(t, pod.AutomountServiceAccountToken)
+	require.False(t, *pod.AutomountServiceAccountToken)
+}
+
+func TestCompletedMigrationDoesNotRunAgain(t *testing.T) {
+	c, wandb, manifest := migrationIdentityFixture(t)
+	wandb.Status.Wandb.Migration = apiv2.WandbMigrationStatus{Version: wandb.Spec.Wandb.Version, Ready: true}
+	ctx := context.Background()
+
+	_, err := runMigrations(ctx, c, wandb, manifest)
+	require.NoError(t, err)
+	jobs := &batchv1.JobList{}
+	require.NoError(t, c.List(ctx, jobs))
+	require.Empty(t, jobs.Items, "completed migration must not run again")
+}
+
+func TestRunningMigrationRetainsExistingIdentity(t *testing.T) {
+	c, wandb, manifest := migrationIdentityFixture(t)
+	ctx := context.Background()
+	// The running Job predates dedicated identities and must keep its shared account.
+	existing := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{Name: "wandb-internal-signer", Namespace: wandb.Namespace},
+		Spec:       batchv1.JobSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{ServiceAccountName: "shared"}}},
 	}
+	require.NoError(t, c.Create(ctx, existing))
+
+	_, err := runMigrations(ctx, c, wandb, manifest)
+	require.NoError(t, err)
+	jobs := &batchv1.JobList{}
+	require.NoError(t, c.List(ctx, jobs))
+	require.Len(t, jobs.Items, 1)
+	pod := jobs.Items[0].Spec.Template.Spec
+	require.Equal(t, "shared", pod.ServiceAccountName)
+	require.Nil(t, pod.AutomountServiceAccountToken)
 }
 
 func TestMigrationIdentityRejectsResourceTakeover(t *testing.T) {
-	c, w, m := migrationIdentityFixture(t)
-	sa := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: migrationServiceAccountName(w, "internal-signer", m.Migrations["internal-signer"].ServiceAccount), Namespace: w.Namespace}}
-	if err := c.Create(context.Background(), sa); err != nil {
-		t.Fatal(err)
+	c, wandb, manifest := migrationIdentityFixture(t)
+	// An account with the desired name but no installation owner must not be adopted.
+	sa := &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{Name: "wandb-migration-internal-signer", Namespace: wandb.Namespace},
 	}
-	if _, err := runMigrations(context.Background(), c, w, m); err == nil || !strings.Contains(err.Error(), "refusing to adopt") {
-		t.Fatalf("expected ownership error, got %v", err)
-	}
+	require.NoError(t, c.Create(context.Background(), sa))
+	_, err := runMigrations(context.Background(), c, wandb, manifest)
+	require.ErrorContains(t, err, "refusing to adopt")
 	jobs := &batchv1.JobList{}
-	if err := c.List(context.Background(), jobs); err != nil {
-		t.Fatal(err)
-	}
-	if len(jobs.Items) != 0 {
-		t.Fatal("job created before identity was ready")
-	}
+	require.NoError(t, c.List(context.Background(), jobs))
+	require.Empty(t, jobs.Items, "Job must not be created before identity is ready")
 }
 
 func TestMigrationIdentityRevokesRemovedPermissions(t *testing.T) {
-	c, w, m := migrationIdentityFixture(t)
+	c, wandb, manifest := migrationIdentityFixture(t)
 	ctx := context.Background()
-	if err := reconcileMigrationServiceAccounts(ctx, c, w, m); err != nil {
-		t.Fatal(err)
-	}
-	task := m.Migrations["internal-signer"]
-	task.ServiceAccount = &servermanifest.MigrationServiceAccount{Name: task.ServiceAccount.Name}
-	m.Migrations["internal-signer"] = task
-	if err := reconcileMigrationServiceAccounts(ctx, c, w, m); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, reconcileMigrationServiceAccounts(ctx, c, wandb, manifest))
+	task := manifest.Migrations["internal-signer"]
+	// Remove permissions while keeping the account and credential configuration.
+	task.ServiceAccount.Permissions = nil
+	manifest.Migrations["internal-signer"] = task
+	require.NoError(t, reconcileMigrationServiceAccounts(ctx, c, wandb, manifest))
 	roles := &rbacv1.RoleList{}
 	bindings := &rbacv1.RoleBindingList{}
-	if err := c.List(ctx, roles); err != nil {
-		t.Fatal(err)
-	}
-	if err := c.List(ctx, bindings); err != nil {
-		t.Fatal(err)
-	}
-	if len(roles.Items) != 0 || len(bindings.Items) != 0 {
-		t.Fatal("removed permissions were retained")
-	}
+	require.NoError(t, c.List(ctx, roles))
+	require.NoError(t, c.List(ctx, bindings))
+	require.Empty(t, roles.Items, "removing permissions must remove the Role")
+	require.Empty(t, bindings.Items, "removing permissions must remove the RoleBinding")
 }
 
 func TestMigrationIdentityPermissionsDoNotImplyCredentialsOrSecrets(t *testing.T) {
-	for _, automount := range []bool{false, true} {
-		t.Run(map[bool]string{false: "automatic credentials disabled", true: "automatic credentials"}[automount], func(t *testing.T) {
-			c, w, m := migrationIdentityFixture(t)
-			task := m.Migrations["internal-signer"]
-			m.Secrets = nil
-			task.VolumeMounts = nil
+	for _, test := range []struct {
+		name      string
+		automount bool
+	}{
+		{name: "automatic credentials disabled", automount: false},
+		{name: "automatic credentials enabled", automount: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			c, wandb, manifest := migrationIdentityFixture(t)
+			task := manifest.Migrations["internal-signer"]
+			// Permissions alone must not create Secrets or explicit credential volumes.
+			manifest.Secrets = nil
 			task.ServiceAccount = &servermanifest.MigrationServiceAccount{
-				Name: "custom-worker", AutomountServiceAccountToken: &automount,
-				Permissions: []rbacv1.PolicyRule{{APIGroups: []string{"example.com"}, Resources: []string{"tasks"}, Verbs: []string{"get", "patch"}}},
+				Name:                         "custom-worker",
+				AutomountServiceAccountToken: &test.automount,
+				Permissions:                  []rbacv1.PolicyRule{{APIGroups: []string{"example.com"}, Resources: []string{"tasks"}, Verbs: []string{"get", "patch"}}},
 			}
-			m.Migrations["internal-signer"] = task
-			if _, err := runMigrations(context.Background(), c, w, m); err != nil {
-				t.Fatal(err)
-			}
+			manifest.Migrations["internal-signer"] = task
+			_, err := runMigrations(context.Background(), c, wandb, manifest)
+			require.NoError(t, err)
 			job := &batchv1.Job{}
-			if err := c.Get(context.Background(), client.ObjectKey{Name: "wandb-internal-signer", Namespace: w.Namespace}, job); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, c.Get(context.Background(), client.ObjectKey{Name: "wandb-internal-signer", Namespace: wandb.Namespace}, job))
 			pod := job.Spec.Template.Spec
-			if pod.ServiceAccountName != "custom-worker" || pod.AutomountServiceAccountToken == nil || *pod.AutomountServiceAccountToken != automount || len(pod.Volumes) != 0 {
-				t.Fatalf("unexpected identity or implicit credentials: %+v", pod)
-			}
+			require.Equal(t, "custom-worker", pod.ServiceAccountName)
+			require.NotNil(t, pod.AutomountServiceAccountToken)
+			require.Equal(t, test.automount, *pod.AutomountServiceAccountToken)
+			require.Empty(t, pod.Volumes, "permissions must not introduce explicit credential volumes")
 			role := &rbacv1.Role{}
-			if err := c.Get(context.Background(), client.ObjectKey{Name: pod.ServiceAccountName, Namespace: w.Namespace}, role); err != nil {
-				t.Fatal(err)
-			}
-			if !reflect.DeepEqual(role.Rules, task.ServiceAccount.Permissions) {
-				t.Fatalf("declared rules changed: %+v", role.Rules)
-			}
+			require.NoError(t, c.Get(context.Background(), client.ObjectKey{Name: pod.ServiceAccountName, Namespace: wandb.Namespace}, role))
+			require.Equal(t, task.ServiceAccount.Permissions, role.Rules)
 			secrets := &corev1.SecretList{}
-			if err := c.List(context.Background(), secrets); err != nil {
-				t.Fatal(err)
-			}
-			if len(secrets.Items) != 0 {
-				t.Fatal("permissions implicitly created Secrets")
-			}
+			require.NoError(t, c.List(context.Background(), secrets))
+			require.Empty(t, secrets.Items, "permissions must not implicitly create Secrets")
 		})
 	}
 }
 
 func TestMigrationIdentityRejectsConflictingOrInvalidDeclarations(t *testing.T) {
-	for _, problem := range []string{"shared account", "duplicate name", "invalid name", "non-resource URL", "missing resources", "missing verbs"} {
-		t.Run(problem, func(t *testing.T) {
-			c, w, m := migrationIdentityFixture(t)
-			task := m.Migrations["internal-signer"]
-			switch problem {
-			case "shared account":
-				w.Spec.Wandb.ServiceAccount.ServiceAccountName = migrationServiceAccountName(w, "internal-signer", task.ServiceAccount)
-			case "duplicate name":
-				task.ServiceAccount.Name = "duplicate"
-				m.Migrations["another"] = task
-			case "invalid name":
-				task.ServiceAccount.Name = "invalid/name"
-			case "non-resource URL":
-				task.ServiceAccount.Permissions[0].NonResourceURLs = []string{"/metrics"}
-			case "missing resources":
-				task.ServiceAccount.Permissions[0].Resources = nil
-			case "missing verbs":
-				task.ServiceAccount.Permissions[0].Verbs = nil
+	tests := []struct {
+		name              string
+		accountName       string
+		sharedAccountName string
+		duplicateAccount  bool
+		permissions       []rbacv1.PolicyRule
+	}{
+		{
+			name:              "shared account collision",
+			sharedAccountName: "wandb-migration-internal-signer",
+			permissions:       []rbacv1.PolicyRule{{Resources: []string{"secrets"}, Verbs: []string{"get", "update"}}},
+		},
+		{
+			name: "duplicate account name", accountName: "duplicate", duplicateAccount: true,
+			permissions: []rbacv1.PolicyRule{{Resources: []string{"secrets"}, Verbs: []string{"get", "update"}}},
+		},
+		{
+			name: "invalid account name", accountName: "invalid/name",
+			permissions: []rbacv1.PolicyRule{{Resources: []string{"secrets"}, Verbs: []string{"get", "update"}}},
+		},
+		{
+			name:        "non-resource URL cannot be granted by namespaced Role",
+			permissions: []rbacv1.PolicyRule{{NonResourceURLs: []string{"/metrics"}, Resources: []string{"secrets"}, Verbs: []string{"get", "update"}}},
+		},
+		{name: "missing resources", permissions: []rbacv1.PolicyRule{{Verbs: []string{"get", "update"}}}},
+		{name: "missing verbs", permissions: []rbacv1.PolicyRule{{Resources: []string{"secrets"}}}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			c, wandb, manifest := migrationIdentityFixture(t)
+			if test.sharedAccountName != "" {
+				wandb.Spec.Wandb.ServiceAccount.ServiceAccountName = test.sharedAccountName
 			}
-			m.Migrations["internal-signer"] = task
-			if _, err := runMigrations(context.Background(), c, w, m); err == nil {
-				t.Fatal("invalid declaration accepted")
+			task := manifest.Migrations["internal-signer"]
+			task.ServiceAccount.Name = test.accountName
+			task.ServiceAccount.Permissions = test.permissions
+			manifest.Migrations["internal-signer"] = task
+			if test.duplicateAccount {
+				manifest.Migrations["another"] = task
 			}
+
+			_, err := runMigrations(context.Background(), c, wandb, manifest)
+			require.Error(t, err, "invalid declaration must be rejected")
 			accounts := &corev1.ServiceAccountList{}
-			if err := c.List(context.Background(), accounts); err != nil {
-				t.Fatal(err)
-			}
-			if len(accounts.Items) != 0 {
-				t.Fatal("created resources before validating manifest")
-			}
+			require.NoError(t, c.List(context.Background(), accounts))
+			require.Empty(t, accounts.Items, "all declarations must be validated before creating resources")
 		})
 	}
 }

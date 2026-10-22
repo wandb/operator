@@ -3,314 +3,412 @@ package reconciler
 import (
 	"context"
 	"errors"
-	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/internal/observability/telemetry"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
-	"reflect"
-	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
-	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/observability/telemetry"
 	servermanifest "github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 )
 
-func TestManifestSecretsCreateEmptyAndGenerated(t *testing.T) {
-	c, w, _ := migrationIdentityFixture(t)
-	m := servermanifest.Manifest{Secrets: []servermanifest.Secret{
-		{Name: "signing", UseExactName: true},
-		{Name: "session", Generated: &servermanifest.SecretGeneration{Length: 17, CharacterType: "password"}},
-		{Name: "default", UseExactName: true, Generated: &servermanifest.SecretGeneration{}},
-	}}
-	ctx := context.Background()
-	if _, err := reconcileManifestSecrets(ctx, c, w, m); err != nil {
-		t.Fatal(err)
+// manifestSecretTestClient supplies only the API client and installation identity.
+// Each test declares the manifest and any behavior-specific configuration itself.
+func manifestSecretTestClient(t *testing.T) (client.WithWatch, *apiv2.WeightsAndBiases) {
+	t.Helper()
+	scheme := runtime.NewScheme()
+	require.NoError(t, apiv2.AddToScheme(scheme))
+	require.NoError(t, corev1.AddToScheme(scheme))
+	wandb := &apiv2.WeightsAndBiases{
+		ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "test", UID: types.UID("install-1")},
 	}
-	empty := &corev1.Secret{}
-	if err := c.Get(ctx, client.ObjectKey{Name: "signing", Namespace: w.Namespace}, empty); err != nil {
-		t.Fatal(err)
-	}
-	if len(empty.Data) != 0 || !hasOwnerReference(empty, w) || empty.Type != corev1.SecretTypeOpaque {
-		t.Fatalf("invalid empty Secret: %+v", empty)
-	}
-	if _, exists := w.Status.GeneratedSecrets["signing"]; exists {
-		t.Fatal("empty Secret advertised a generated key")
-	}
-	for _, tc := range []struct {
-		name, logical string
-		length        int
-	}{{"wandb-session", "session", 17}, {"default", "default", 32}} {
-		secret := &corev1.Secret{}
-		if err := c.Get(ctx, client.ObjectKey{Name: tc.name, Namespace: w.Namespace}, secret); err != nil {
-			t.Fatal(err)
-		}
-		if len(secret.Data["key"]) != tc.length {
-			t.Fatalf("%s length = %d", tc.name, len(secret.Data["key"]))
-		}
-		selector := w.Status.GeneratedSecrets[tc.logical]
-		if selector.Name != tc.name || selector.Key != "key" {
-			t.Fatalf("wrong generated selector: %+v", selector)
-		}
-	}
-	env, err := resolveEnvvars(ctx, c, w, m, nil, []servermanifest.EnvVar{{Name: "SESSION", Sources: []servermanifest.EnvSource{{Type: "generatedSecret", Name: "session"}}}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(env) != 1 || env[0].ValueFrom == nil || env[0].ValueFrom.SecretKeyRef == nil || env[0].ValueFrom.SecretKeyRef.Name != "wandb-session" {
-		t.Fatalf("generated env source lost compatibility: %+v", env)
-	}
-	// A migration writes data after precreation; reconciliation must not reset it.
-	empty.Data = map[string][]byte{"key.pem": []byte("signer material")}
-	if err := c.Update(ctx, empty); err != nil {
-		t.Fatal(err)
-	}
-	before := &corev1.SecretList{}
-	if err := c.List(ctx, before); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := reconcileManifestSecrets(ctx, c, w, m); err != nil {
-		t.Fatal(err)
-	}
-	after := &corev1.SecretList{}
-	if err := c.List(ctx, after); err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(before.Items, after.Items) {
-		t.Fatal("reconciliation changed existing data or metadata")
-	}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(wandb).WithObjects(wandb).Build()
+	return c, wandb
 }
 
-func TestManifestSecretsPreserveLegacyGenerationAndRepairMissingKey(t *testing.T) {
-	c, w, _ := migrationIdentityFixture(t)
+func TestManifestSecretsCreatesEmptySecret(t *testing.T) {
+	c, wandb := manifestSecretTestClient(t)
+	manifest := servermanifest.Manifest{Secrets: []servermanifest.Secret{{Name: "signing", UseExactName: true}}}
 	ctx := context.Background()
-	existing := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "legacy", Namespace: w.Namespace, Annotations: map[string]string{"keep": "metadata"}}, Data: map[string][]byte{"other": []byte("preserved")}}
-	if err := c.Create(ctx, existing); err != nil {
-		t.Fatal(err)
-	}
-	m := servermanifest.Manifest{GeneratedSecrets: []servermanifest.GeneratedSecret{{Name: "legacy", UseExactName: true, Length: 21}, {Name: "prefixed", Length: 15}}}
-	if _, err := reconcileManifestSecrets(ctx, c, w, m); err != nil {
-		t.Fatal(err)
-	}
-	if err := c.Get(ctx, client.ObjectKeyFromObject(existing), existing); err != nil {
-		t.Fatal(err)
-	}
-	if len(existing.Data["key"]) != 21 || string(existing.Data["other"]) != "preserved" || existing.Annotations["keep"] != "metadata" || !hasOwnerReference(existing, w) {
-		t.Fatal("legacy repair changed unrelated contents or ownership")
-	}
-	if w.Status.GeneratedSecrets["prefixed"].Name != "wandb-prefixed" {
-		t.Fatal("legacy prefixed naming changed")
-	}
-	// Migrating the declaration to the new shape must preserve the generated value.
-	original := existing.DeepCopy()
-	m.GeneratedSecrets = nil
-	m.Secrets = []servermanifest.Secret{{Name: "legacy", UseExactName: true, Generated: &servermanifest.SecretGeneration{Length: 99}}}
-	if _, err := reconcileManifestSecrets(ctx, c, w, m); err != nil {
-		t.Fatal(err)
-	}
-	if err := c.Get(ctx, client.ObjectKeyFromObject(existing), existing); err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(original, existing) {
-		t.Fatal("schema migration regenerated an existing key")
-	}
+
+	_, err := reconcileManifestSecrets(ctx, c, wandb, manifest)
+	require.NoError(t, err)
+
+	secret := &corev1.Secret{}
+	require.NoError(t, c.Get(ctx, client.ObjectKey{Name: "signing", Namespace: wandb.Namespace}, secret))
+	require.Empty(t, secret.Data)
+	require.True(t, hasOwnerReference(secret, wandb), "empty Secret must belong to the installation")
+	require.Equal(t, corev1.SecretTypeOpaque, secret.Type)
+	require.NotContains(t, wandb.Status.GeneratedSecrets, "signing", "empty Secret must not advertise a generated key")
 }
 
-func TestManifestSecretsRejectInvalidOrConflictingDeclarationsBeforeWrites(t *testing.T) {
-	for _, problem := range []string{"missing name", "invalid name", "duplicate logical name", "duplicate resource name", "legacy collision"} {
-		t.Run(problem, func(t *testing.T) {
-			c, w, _ := migrationIdentityFixture(t)
-			m := servermanifest.Manifest{Secrets: []servermanifest.Secret{{Name: "first"}}}
-			switch problem {
-			case "missing name":
-				m.Secrets = append(m.Secrets, servermanifest.Secret{})
-			case "invalid name":
-				m.Secrets = append(m.Secrets, servermanifest.Secret{Name: "invalid/name"})
-			case "duplicate logical name":
-				m.Secrets = append(m.Secrets, servermanifest.Secret{Name: "first", UseExactName: true})
-			case "duplicate resource name":
-				m.Secrets = append(m.Secrets, servermanifest.Secret{Name: "wandb-first", UseExactName: true})
-			case "legacy collision":
-				m.GeneratedSecrets = []servermanifest.GeneratedSecret{{Name: "first"}}
-			}
-			if _, err := reconcileManifestSecrets(context.Background(), c, w, m); err == nil {
-				t.Fatal("invalid declaration accepted")
-			}
-			secrets := &corev1.SecretList{}
-			if err := c.List(context.Background(), secrets); err != nil {
-				t.Fatal(err)
-			}
-			if len(secrets.Items) != 0 {
-				t.Fatal("Secret created before all declarations were validated")
-			}
+func TestManifestSecretsCreatesGeneratedSecret(t *testing.T) {
+	tests := []struct {
+		name             string
+		declaration      servermanifest.Secret
+		wantResourceName string
+		wantLength       int
+	}{
+		{
+			name:             "configured generation uses installation prefix",
+			declaration:      servermanifest.Secret{Name: "session", Generated: &servermanifest.SecretGeneration{Length: 17, CharacterType: "password"}},
+			wantResourceName: "wandb-session",
+			wantLength:       17,
+		},
+		{
+			name:             "empty generation configuration uses default length and exact name",
+			declaration:      servermanifest.Secret{Name: "default", UseExactName: true, Generated: &servermanifest.SecretGeneration{}},
+			wantResourceName: "default",
+			wantLength:       32,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			c, wandb := manifestSecretTestClient(t)
+			manifest := servermanifest.Manifest{Secrets: []servermanifest.Secret{test.declaration}}
+			ctx := context.Background()
+
+			_, err := reconcileManifestSecrets(ctx, c, wandb, manifest)
+			require.NoError(t, err)
+
+			secret := &corev1.Secret{}
+			require.NoError(t, c.Get(ctx, client.ObjectKey{Name: test.wantResourceName, Namespace: wandb.Namespace}, secret))
+			require.Len(t, secret.Data["key"], test.wantLength)
+			selector, exists := wandb.Status.GeneratedSecrets[test.declaration.Name]
+			require.True(t, exists, "generated Secret must advertise its key")
+			require.Equal(t, test.wantResourceName, selector.Name)
+			require.Equal(t, "key", selector.Key)
 		})
 	}
 }
 
-func TestManifestSecretsDetachAndReadoptWithoutRotatingKeys(t *testing.T) {
-	for _, policy := range []apiv2.OnDeletePolicy{apiv2.DetachOnDelete, "", apiv2.PurgeOnDelete} {
-		t.Run(string(policy), func(t *testing.T) {
-			c, w, _ := migrationIdentityFixture(t)
+func TestManifestSecretsGeneratedKeyResolvesAsEnvReference(t *testing.T) {
+	c, wandb := manifestSecretTestClient(t)
+	manifest := servermanifest.Manifest{Secrets: []servermanifest.Secret{
+		{Name: "session", Generated: &servermanifest.SecretGeneration{Length: 17}},
+	}}
+	ctx := context.Background()
+	_, err := reconcileManifestSecrets(ctx, c, wandb, manifest)
+	require.NoError(t, err)
+
+	env, err := resolveEnvvars(ctx, c, wandb, manifest, nil, []servermanifest.EnvVar{
+		{Name: "SESSION", Sources: []servermanifest.EnvSource{{Type: "generatedSecret", Name: "session"}}},
+	})
+	require.NoError(t, err)
+	require.Len(t, env, 1)
+	require.NotNil(t, env[0].ValueFrom)
+	require.NotNil(t, env[0].ValueFrom.SecretKeyRef)
+	require.Equal(t, "wandb-session", env[0].ValueFrom.SecretKeyRef.Name)
+}
+
+func TestManifestSecretsRepeatedReconciliationPreservesDataAndMetadata(t *testing.T) {
+	c, wandb := manifestSecretTestClient(t)
+	manifest := servermanifest.Manifest{Secrets: []servermanifest.Secret{
+		{Name: "signing", UseExactName: true},
+		{Name: "session", Generated: &servermanifest.SecretGeneration{Length: 17}},
+		{Name: "default", UseExactName: true, Generated: &servermanifest.SecretGeneration{}},
+	}}
+	ctx := context.Background()
+	_, err := reconcileManifestSecrets(ctx, c, wandb, manifest)
+	require.NoError(t, err)
+
+	// Simulate a migration filling the precreated Secret before the next reconciliation.
+	signer := &corev1.Secret{}
+	require.NoError(t, c.Get(ctx, client.ObjectKey{Name: "signing", Namespace: wandb.Namespace}, signer))
+	signer.Data = map[string][]byte{"key.pem": []byte("signer material")}
+	require.NoError(t, c.Update(ctx, signer))
+	before := &corev1.SecretList{}
+	require.NoError(t, c.List(ctx, before))
+
+	_, err = reconcileManifestSecrets(ctx, c, wandb, manifest)
+	require.NoError(t, err)
+
+	after := &corev1.SecretList{}
+	require.NoError(t, c.List(ctx, after))
+	require.Equal(t, before.Items, after.Items, "reconciliation must preserve existing Secret data and metadata")
+}
+
+func TestManifestSecretsRepairsMissingLegacyKey(t *testing.T) {
+	c, wandb := manifestSecretTestClient(t)
+	ctx := context.Background()
+	existing := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "legacy", Namespace: wandb.Namespace, Annotations: map[string]string{"keep": "metadata"}},
+		Data:       map[string][]byte{"other": []byte("preserved")},
+	}
+	require.NoError(t, c.Create(ctx, existing))
+	manifest := servermanifest.Manifest{GeneratedSecrets: []servermanifest.GeneratedSecret{{Name: "legacy", UseExactName: true, Length: 21}}}
+
+	_, err := reconcileManifestSecrets(ctx, c, wandb, manifest)
+	require.NoError(t, err)
+	require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(existing), existing))
+	require.Len(t, existing.Data["key"], 21)
+	require.Equal(t, "preserved", string(existing.Data["other"]))
+	require.Equal(t, "metadata", existing.Annotations["keep"])
+	require.True(t, hasOwnerReference(existing, wandb), "repaired Secret must belong to the installation")
+}
+
+func TestManifestSecretsLegacyGenerationUsesInstallationPrefix(t *testing.T) {
+	c, wandb := manifestSecretTestClient(t)
+	manifest := servermanifest.Manifest{GeneratedSecrets: []servermanifest.GeneratedSecret{{Name: "prefixed", Length: 15}}}
+	ctx := context.Background()
+
+	_, err := reconcileManifestSecrets(ctx, c, wandb, manifest)
+	require.NoError(t, err)
+	require.Equal(t, "wandb-prefixed", wandb.Status.GeneratedSecrets["prefixed"].Name)
+}
+
+func TestManifestSecretsSchemaMigrationPreservesExistingKey(t *testing.T) {
+	c, wandb := manifestSecretTestClient(t)
+	ctx := context.Background()
+	manifest := servermanifest.Manifest{GeneratedSecrets: []servermanifest.GeneratedSecret{{Name: "legacy", UseExactName: true, Length: 21}}}
+	_, err := reconcileManifestSecrets(ctx, c, wandb, manifest)
+	require.NoError(t, err)
+	existing := &corev1.Secret{}
+	require.NoError(t, c.Get(ctx, client.ObjectKey{Name: "legacy", Namespace: wandb.Namespace}, existing))
+	original := existing.DeepCopy()
+
+	// Changing both the schema and requested length must not regenerate an existing key.
+	manifest.GeneratedSecrets = nil
+	manifest.Secrets = []servermanifest.Secret{{Name: "legacy", UseExactName: true, Generated: &servermanifest.SecretGeneration{Length: 99}}}
+	_, err = reconcileManifestSecrets(ctx, c, wandb, manifest)
+	require.NoError(t, err)
+	require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(existing), existing))
+	require.Equal(t, original, existing, "schema migration must preserve the key and metadata even when the requested length changes")
+}
+
+func TestManifestSecretsRejectInvalidOrConflictingDeclarationsBeforeWrites(t *testing.T) {
+	tests := []struct {
+		name             string
+		additionalSecret servermanifest.Secret
+		legacySecrets    []servermanifest.GeneratedSecret
+	}{
+		{name: "missing name", additionalSecret: servermanifest.Secret{}},
+		{name: "invalid name", additionalSecret: servermanifest.Secret{Name: "invalid/name"}},
+		{name: "duplicate logical name", additionalSecret: servermanifest.Secret{Name: "first", UseExactName: true}},
+		{name: "duplicate resource name", additionalSecret: servermanifest.Secret{Name: "wandb-first", UseExactName: true}},
+		{name: "legacy collision", additionalSecret: servermanifest.Secret{Name: "second"}, legacySecrets: []servermanifest.GeneratedSecret{{Name: "first"}}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			c, wandb := manifestSecretTestClient(t)
+			// The valid first declaration must not be written before the later conflict is found.
+			manifest := servermanifest.Manifest{
+				Secrets:          []servermanifest.Secret{{Name: "first"}, test.additionalSecret},
+				GeneratedSecrets: test.legacySecrets,
+			}
+			_, err := reconcileManifestSecrets(context.Background(), c, wandb, manifest)
+			require.Error(t, err, "invalid declaration must be rejected")
+			secrets := &corev1.SecretList{}
+			require.NoError(t, c.List(context.Background(), secrets))
+			require.Empty(t, secrets.Items, "all declarations must be validated before creating Secrets")
+		})
+	}
+}
+
+func TestManifestSecretsFinalizationPreservesKeys(t *testing.T) {
+	tests := []struct {
+		name      string
+		policy    apiv2.OnDeletePolicy
+		wantOwned bool
+	}{
+		{name: "detach removes installation ownership", policy: apiv2.DetachOnDelete, wantOwned: false},
+		{name: "unspecified policy defaults to detach", policy: "", wantOwned: false},
+		{name: "purge retains ownership for garbage collection", policy: apiv2.PurgeOnDelete, wantOwned: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			c, wandb := manifestSecretTestClient(t)
 			ctx := context.Background()
-			w.Spec.RetentionPolicy.OnDelete = policy
-			if err := c.Update(ctx, w); err != nil {
-				t.Fatal(err)
-			}
-			m := servermanifest.Manifest{Secrets: []servermanifest.Secret{{Name: "signer", UseExactName: true}, {Name: "session", Generated: &servermanifest.SecretGeneration{Length: 17}}}}
-			if _, err := reconcileManifestSecrets(ctx, c, w, m); err != nil {
-				t.Fatal(err)
-			}
+			wandb.Spec.RetentionPolicy.OnDelete = test.policy
+			require.NoError(t, c.Update(ctx, wandb))
+			manifest := servermanifest.Manifest{Secrets: []servermanifest.Secret{
+				{Name: "signer", UseExactName: true},
+				{Name: "session", Generated: &servermanifest.SecretGeneration{Length: 17}},
+			}}
+			_, err := reconcileManifestSecrets(ctx, c, wandb, manifest)
+			require.NoError(t, err)
 			signer := &corev1.Secret{}
-			if err := c.Get(ctx, client.ObjectKey{Name: "signer", Namespace: w.Namespace}, signer); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, c.Get(ctx, client.ObjectKey{Name: "signer", Namespace: wandb.Namespace}, signer))
 			signer.Data = map[string][]byte{"key.pem": []byte("existing signer key")}
-			if err := c.Update(ctx, signer); err != nil {
-				t.Fatal(err)
-			}
-			// Exercise legacy generated Secrets without the new inventory label too.
+			require.NoError(t, c.Update(ctx, signer))
 			session := &corev1.Secret{}
-			if err := c.Get(ctx, client.ObjectKey{Name: "wandb-session", Namespace: w.Namespace}, session); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, c.Get(ctx, client.ObjectKey{Name: "wandb-session", Namespace: wandb.Namespace}, session))
 			originalSession := string(session.Data["key"])
+			// Older generated Secrets are identified through status rather than the inventory label.
 			delete(session.Labels, manifestSecretLabel)
-			if err := c.Update(ctx, session); err != nil {
-				t.Fatal(err)
-			}
-			for range 2 {
-				if err := finalizeManifestSecrets(ctx, c, w); err != nil {
-					t.Fatal(err)
-				}
-			}
+			require.NoError(t, c.Update(ctx, session))
+
+			require.NoError(t, finalizeManifestSecrets(ctx, c, wandb), "first finalization")
+			require.NoError(t, finalizeManifestSecrets(ctx, c, wandb), "repeated finalization must be safe")
+
 			for _, secret := range []*corev1.Secret{signer, session} {
-				if err := c.Get(ctx, client.ObjectKeyFromObject(secret), secret); err != nil {
-					t.Fatal(err)
-				}
-				if hasOwnerReference(secret, w) != (policy == apiv2.PurgeOnDelete) {
-					t.Fatalf("unexpected ownership under %q: %+v", policy, secret.OwnerReferences)
-				}
+				require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(secret), secret))
+				require.Equal(t, test.wantOwned, hasOwnerReference(secret, wandb), "ownership of %s", secret.Name)
 			}
-			if string(signer.Data["key.pem"]) != "existing signer key" || string(session.Data["key"]) != originalSession {
-				t.Fatal("cleanup changed key material")
+			require.Equal(t, "existing signer key", string(signer.Data["key.pem"]), "finalization must preserve signer data")
+			require.Equal(t, originalSession, string(session.Data["key"]), "finalization must preserve generated keys")
+		})
+	}
+}
+
+func TestManifestSecretsReadoptionPreservesKeys(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		policy apiv2.OnDeletePolicy
+	}{
+		{name: "explicit detach", policy: apiv2.DetachOnDelete},
+		{name: "unspecified policy defaults to detach", policy: ""},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			c, wandb := manifestSecretTestClient(t)
+			ctx := context.Background()
+			wandb.Spec.RetentionPolicy.OnDelete = test.policy
+			require.NoError(t, c.Update(ctx, wandb))
+			manifest := servermanifest.Manifest{Secrets: []servermanifest.Secret{
+				{Name: "signer", UseExactName: true},
+				{Name: "session", Generated: &servermanifest.SecretGeneration{Length: 17}},
+			}}
+			_, err := reconcileManifestSecrets(ctx, c, wandb, manifest)
+			require.NoError(t, err)
+			signer := &corev1.Secret{}
+			require.NoError(t, c.Get(ctx, client.ObjectKey{Name: "signer", Namespace: wandb.Namespace}, signer))
+			signer.Data = map[string][]byte{"key.pem": []byte("existing signer key")}
+			require.NoError(t, c.Update(ctx, signer))
+			session := &corev1.Secret{}
+			require.NoError(t, c.Get(ctx, client.ObjectKey{Name: "wandb-session", Namespace: wandb.Namespace}, session))
+			originalSession := string(session.Data["key"])
+			// Keep legacy generated Secrets, identified by status, in the reinstallation scenario.
+			delete(session.Labels, manifestSecretLabel)
+			require.NoError(t, c.Update(ctx, session))
+			require.NoError(t, finalizeManifestSecrets(ctx, c, wandb))
+			require.NoError(t, c.Delete(ctx, wandb))
+
+			// Reinstall with the same name but a new UID: ownership must move to the new
+			// installation without replacing either the signer data or generated key.
+			replacement := &apiv2.WeightsAndBiases{
+				ObjectMeta: metav1.ObjectMeta{Name: wandb.Name, Namespace: wandb.Namespace, UID: types.UID("replacement")},
+				Spec:       wandb.Spec,
 			}
-			if policy == apiv2.PurgeOnDelete {
-				return
-			}
-			if err := c.Delete(ctx, w); err != nil {
-				t.Fatal(err)
-			}
-			replacement := &apiv2.WeightsAndBiases{ObjectMeta: metav1.ObjectMeta{Name: w.Name, Namespace: w.Namespace, UID: types.UID("replacement")}, Spec: w.Spec}
-			if err := c.Create(ctx, replacement); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := reconcileManifestSecrets(ctx, c, replacement, m); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, c.Create(ctx, replacement))
+			_, err = reconcileManifestSecrets(ctx, c, replacement, manifest)
+			require.NoError(t, err)
 			for _, secret := range []*corev1.Secret{signer, session} {
-				if err := c.Get(ctx, client.ObjectKeyFromObject(secret), secret); err != nil {
-					t.Fatal(err)
-				}
-				if !hasOwnerReference(secret, replacement) || hasOwnerReference(secret, w) {
-					t.Fatal("ownership not transferred to replacement CR")
-				}
+				require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(secret), secret))
+				require.True(t, hasOwnerReference(secret, replacement), "%s must belong to the replacement installation", secret.Name)
+				require.False(t, hasOwnerReference(secret, wandb), "%s must no longer belong to the deleted installation", secret.Name)
 			}
-			if string(signer.Data["key.pem"]) != "existing signer key" || string(session.Data["key"]) != originalSession {
-				t.Fatal("adoption regenerated key material")
-			}
+			require.Equal(t, "existing signer key", string(signer.Data["key.pem"]))
+			require.Equal(t, originalSession, string(session.Data["key"]))
 		})
 	}
 }
 
 func TestManifestSecretDetachPreservesUnrelatedOwnership(t *testing.T) {
-	c, w, _ := migrationIdentityFixture(t)
+	c, wandb := manifestSecretTestClient(t)
 	ctx := context.Background()
-	owner := metav1.OwnerReference{APIVersion: apiv2.GroupVersion.String(), Kind: "WeightsAndBiases", Name: w.Name, UID: w.UID}
+	owner := metav1.OwnerReference{APIVersion: apiv2.GroupVersion.String(), Kind: "WeightsAndBiases", Name: wandb.Name, UID: wandb.UID}
 	other := metav1.OwnerReference{APIVersion: "v1", Kind: "ConfigMap", Name: "other", UID: types.UID("other")}
-	for _, secret := range []*corev1.Secret{
-		{ObjectMeta: metav1.ObjectMeta{Name: "shared", Namespace: w.Namespace, Labels: map[string]string{manifestSecretLabel: "true"}, OwnerReferences: []metav1.OwnerReference{owner, other}}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "unrelated", Namespace: w.Namespace, OwnerReferences: []metav1.OwnerReference{owner}}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "foreign", Namespace: w.Namespace, Labels: map[string]string{manifestSecretLabel: "true"}, OwnerReferences: []metav1.OwnerReference{other}}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "outside", Namespace: "elsewhere", Labels: map[string]string{manifestSecretLabel: "true"}, OwnerReferences: []metav1.OwnerReference{owner}}},
-	} {
-		if err := c.Create(ctx, secret); err != nil {
-			t.Fatal(err)
-		}
+	tests := []struct {
+		name       string
+		secret     *corev1.Secret
+		wantOwners []metav1.OwnerReference
+	}{
+		{
+			name: "shared Secret loses only installation owner",
+			secret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+				Name: "shared", Namespace: wandb.Namespace,
+				Labels:          map[string]string{manifestSecretLabel: "true"},
+				OwnerReferences: []metav1.OwnerReference{owner, other},
+			}},
+			wantOwners: []metav1.OwnerReference{other},
+		},
+		{
+			name: "Secret outside manifest inventory retains installation owner",
+			secret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+				Name: "unrelated", Namespace: wandb.Namespace,
+				OwnerReferences: []metav1.OwnerReference{owner},
+			}},
+			wantOwners: []metav1.OwnerReference{owner},
+		},
+		{
+			name: "foreign Secret retains other owner",
+			secret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+				Name: "foreign", Namespace: wandb.Namespace,
+				Labels:          map[string]string{manifestSecretLabel: "true"},
+				OwnerReferences: []metav1.OwnerReference{other},
+			}},
+			wantOwners: []metav1.OwnerReference{other},
+		},
+		{
+			name: "Secret outside installation namespace is unchanged",
+			secret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+				Name: "outside", Namespace: "elsewhere",
+				Labels:          map[string]string{manifestSecretLabel: "true"},
+				OwnerReferences: []metav1.OwnerReference{owner},
+			}},
+			wantOwners: []metav1.OwnerReference{owner},
+		},
 	}
-	if err := finalizeManifestSecrets(ctx, c, w); err != nil {
-		t.Fatal(err)
+	for _, test := range tests {
+		require.NoError(t, c.Create(ctx, test.secret))
 	}
-	for _, name := range []string{"shared", "unrelated", "foreign", "outside"} {
-		secret := &corev1.Secret{}
-		ns := w.Namespace
-		if name == "outside" {
-			ns = "elsewhere"
-		}
-		if err := c.Get(ctx, client.ObjectKey{Name: name, Namespace: ns}, secret); err != nil {
-			t.Fatal(err)
-		}
-		expected := []metav1.OwnerReference{owner}
-		if name == "shared" || name == "foreign" {
-			expected = []metav1.OwnerReference{other}
-		}
-		if !reflect.DeepEqual(secret.OwnerReferences, expected) {
-			t.Fatalf("%s changed unrelated ownership: %+v", name, secret.OwnerReferences)
-		}
+
+	require.NoError(t, finalizeManifestSecrets(ctx, c, wandb))
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			actual := &corev1.Secret{}
+			require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(test.secret), actual))
+			require.Equal(t, test.wantOwners, actual.OwnerReferences)
+		})
 	}
 }
 
 func TestManifestSecretsRefuseForeignOwnerBeforeChangingData(t *testing.T) {
-	c, w, _ := migrationIdentityFixture(t)
+	c, wandb := manifestSecretTestClient(t)
 	ctx := context.Background()
-	secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "foreign", Namespace: w.Namespace, OwnerReferences: []metav1.OwnerReference{{APIVersion: apiv2.GroupVersion.String(), Kind: "WeightsAndBiases", Name: "elsewhere", UID: types.UID("foreign")}}}}
-	if err := c.Create(ctx, secret); err != nil {
-		t.Fatal(err)
-	}
+	secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+		Name: "foreign", Namespace: wandb.Namespace,
+		OwnerReferences: []metav1.OwnerReference{{
+			APIVersion: apiv2.GroupVersion.String(), Kind: "WeightsAndBiases",
+			Name: "elsewhere", UID: types.UID("foreign"),
+		}},
+	}}
+	require.NoError(t, c.Create(ctx, secret))
 	original := secret.DeepCopy()
-	m := servermanifest.Manifest{Secrets: []servermanifest.Secret{{Name: secret.Name, UseExactName: true, Generated: &servermanifest.SecretGeneration{}}}}
-	if _, err := reconcileManifestSecrets(ctx, c, w, m); err == nil {
-		t.Fatal("adopted foreign-owned Secret")
-	}
-	if err := c.Get(ctx, client.ObjectKeyFromObject(secret), secret); err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(original, secret) {
-		t.Fatal("foreign-owned Secret was modified")
-	}
+	manifest := servermanifest.Manifest{Secrets: []servermanifest.Secret{{Name: secret.Name, UseExactName: true, Generated: &servermanifest.SecretGeneration{}}}}
+	_, err := reconcileManifestSecrets(ctx, c, wandb, manifest)
+	require.Error(t, err, "foreign-owned Secret must not be adopted")
+	require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(secret), secret))
+	require.Equal(t, original, secret, "foreign-owned Secret must not be modified")
 }
 
 func TestManifestSecretDetachFailureKeepsCleanupFinalizer(t *testing.T) {
-	c, w, _ := migrationIdentityFixture(t)
+	c, wandb := manifestSecretTestClient(t)
 	ctx := context.Background()
-	w.Finalizers = []string{CleanupFinalizer}
-	w.Spec.Wandb.ManifestRepository = "file:///unavailable-during-deletion"
-	if err := c.Update(ctx, w); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := reconcileManifestSecrets(ctx, c, w, servermanifest.Manifest{Secrets: []servermanifest.Secret{{Name: "signer", UseExactName: true}}}); err != nil {
-		t.Fatal(err)
-	}
-	if err := c.Delete(ctx, w); err != nil {
-		t.Fatal(err)
-	}
-	if err := c.Get(ctx, client.ObjectKeyFromObject(w), w); err != nil {
-		t.Fatal(err)
-	}
-	failing := interceptor.NewClient(c.(client.WithWatch), interceptor.Funcs{Update: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.UpdateOption) error {
+	wandb.Finalizers = []string{CleanupFinalizer}
+	// Deletion must detach Secrets using persisted state even if the manifest cannot be fetched.
+	wandb.Spec.Wandb.ManifestRepository = "file:///unavailable-during-deletion"
+	require.NoError(t, c.Update(ctx, wandb))
+	_, err := reconcileManifestSecrets(ctx, c, wandb, servermanifest.Manifest{Secrets: []servermanifest.Secret{{Name: "signer", UseExactName: true}}})
+	require.NoError(t, err)
+	require.NoError(t, c.Delete(ctx, wandb))
+	require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(wandb), wandb))
+	failing := interceptor.NewClient(c, interceptor.Funcs{Update: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.UpdateOption) error {
 		if _, ok := obj.(*corev1.Secret); ok {
 			return errors.New("detach write failed")
 		}
 		return c.Update(ctx, obj, opts...)
 	}})
-	if _, err := Reconcile(ctx, failing, record.NewFakeRecorder(10), w, telemetry.TelemetryRuntimeConfig{}); err == nil || !strings.Contains(err.Error(), "detach write failed") {
-		t.Fatalf("expected detach failure before manifest lookup, got %v", err)
-	}
-	if err := c.Get(ctx, client.ObjectKeyFromObject(w), w); err != nil {
-		t.Fatal(err)
-	}
-	if len(w.Finalizers) != 1 || w.Finalizers[0] != CleanupFinalizer {
-		t.Fatal("cleanup finalizer removed before Secret detach succeeded")
-	}
+	_, err = Reconcile(ctx, failing, record.NewFakeRecorder(10), wandb, telemetry.TelemetryRuntimeConfig{})
+	require.ErrorContains(t, err, "detach write failed", "detach must happen before looking up the unavailable manifest")
+	require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(wandb), wandb))
+	require.Equal(t, []string{CleanupFinalizer}, wandb.Finalizers, "cleanup finalizer must remain until Secret detach succeeds")
 }

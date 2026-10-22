@@ -49,7 +49,7 @@ manifest can use both forms for distinct Secrets, but duplicate logical names
 or resulting Kubernetes names are rejected before writes. New `secrets` lists
 are combined across manifest files; the legacy merge behavior is unchanged.
 
-The local `0.86.0-daily.14` manifest uses the unified declaration for its two
+The local `0.86.0` manifest uses the unified declaration for its two
 operator-generated values and its signer-populated Secret. Published manifests
 must require an operator version supporting `secrets` before migrating to it.
 
