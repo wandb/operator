@@ -33,6 +33,8 @@ var Checks = map[string]Check{
 	ManagedClickHouseAPIsCheck: managedAPIsCheck(ManagedClickHouseAPIsCheck, "spec.clickhouse.*.managedClickhouse",
 		managedClickHouseAPIs),
 
+	// Run before apply by callers that walk the whole registry (wsm). Reconcile doesn't gate on them: the webhook
+	// already validates literal proxies, and reconcile loads the manifest itself before anything else.
 	ProxyCheck: typedCheck(ProxyCheck, "spec.global.proxy",
 		TypeStatic, []ResourceReq{ReqReadOnly}, RunProxyCheck),
 	CustomCACertsCheck: typedCheck(CustomCACertsCheck, "spec.global.customCACerts",
