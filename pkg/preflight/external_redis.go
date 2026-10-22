@@ -25,7 +25,7 @@ func RunExternalRedisCheck(ctx context.Context, conn *apiv2.RedisConnection, env
 		"sslCa":    conn.SslCa,
 	})
 	if err != nil {
-		return Result{Check: ExternalRedisCheck, Outcome: OutcomeUnknown, Message: fmt.Sprintf("resolve connection: %v", err)}
+		return resolveFailure(ExternalRedisCheck, err)
 	}
 	host, port := strings.TrimSpace(v["host"]), strings.TrimSpace(v["port"])
 	if host == "" {

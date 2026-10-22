@@ -32,7 +32,7 @@ func RunExternalMysqlCheck(ctx context.Context, conn *apiv2.MysqlConnection, env
 		"sslKey":   conn.SslKey,
 	})
 	if err != nil {
-		return Result{Check: ExternalMysqlCheck, Outcome: OutcomeUnknown, Message: fmt.Sprintf("resolve connection: %v", err)}
+		return resolveFailure(ExternalMysqlCheck, err)
 	}
 	if v["host"] == "" {
 		return Result{Check: ExternalMysqlCheck, Outcome: OutcomeFail, Message: "host is required"}
