@@ -21,7 +21,7 @@ COPY internal/ internal/
 # Cross-compile for the requested image platform using the native build platform.
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o manager cmd/main.go
 
-FROM registry.access.redhat.com/ubi9/ubi-minimal:latest@sha256:c4c285d42941ebb2bd4da878479008e1e4536bb599aad1dbe568f89de9053661
+FROM registry.access.redhat.com/ubi10/ubi-minimal:latest@sha256:c769ab6615ab32d02d5b3d65ff2eae6bc668ba823e77f46b78a4181f54d17a27
 # Include errata published since the base image was built.
 RUN microdnf upgrade --refresh -y && microdnf clean all
 WORKDIR /
