@@ -1,5 +1,5 @@
 # Build the manager binary
-FROM --platform=$BUILDPLATFORM golang:1.27.1@sha256:f44f6e88636cfb311f9ebace870ded69d943f227bb3cb27d32ffd84ea18c43ea AS manager-builder
+FROM --platform=$BUILDPLATFORM golang:1.27.3@sha256:f20d83a83e18dbd2a4714b8ffd4b30b287b6243962dd75608e86abcc63ba4efc AS manager-builder
 
 ARG TARGETOS
 ARG TARGETARCH
@@ -21,7 +21,7 @@ COPY internal/ internal/
 # Cross-compile for the requested image platform using the native build platform.
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o manager cmd/main.go
 
-FROM registry.access.redhat.com/ubi9/ubi-minimal:latest@sha256:7b8e25a1b56ca4d00219198f3b5b51a3e1693a5c4f5369c5e190d7d6cb3f980e
+FROM registry.access.redhat.com/ubi10/ubi-minimal:latest@sha256:c769ab6615ab32d02d5b3d65ff2eae6bc668ba823e77f46b78a4181f54d17a27
 # Include errata published since the base image was built.
 RUN microdnf upgrade --refresh -y && microdnf clean all
 WORKDIR /
