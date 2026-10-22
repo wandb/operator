@@ -3,6 +3,7 @@ package preflight
 import (
 	"context"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/pkg/wandb/manifest"
 	"k8s.io/apimachinery/pkg/api/meta"
 )
 
@@ -58,10 +60,27 @@ type Result struct {
 type Env struct {
 	Resolve ValueResolver
 	Mapper  meta.RESTMapper
+	// OperatorVersion is the operator release the CR will run under; empty skips the manifest's
+	// requiredOperatorVersion comparison.
+	OperatorVersion string
+	// RegistryAuth pulls the server manifest from a private registry; nil pulls anonymously.
+	RegistryAuth *manifest.RegistryAuth
 }
 
 // ValueResolver turns a ValueOrSecret into its value; callers supply Secret access so checks stay client-agnostic.
 type ValueResolver func(ctx context.Context, v apiv2.ValueOrSecret) (string, error)
+
+// ErrSecretUnavailable is returned (wrapped) by a ValueResolver that can't read Secrets at all, e.g. wsm offline.
+// Checks report skipped rather than unknown, since nothing about the value is known to be wrong.
+var ErrSecretUnavailable = errors.New("secret values are not available")
+
+// resolveFailure turns a ValueResolver error into the check's result.
+func resolveFailure(check string, err error) Result {
+	if errors.Is(err, ErrSecretUnavailable) {
+		return Result{Check: check, Outcome: OutcomeSkipped, Message: err.Error()}
+	}
+	return Result{Check: check, Outcome: OutcomeUnknown, Message: fmt.Sprintf("resolve connection: %v", err)}
+}
 
 // CheckFunc receives the CR struct found at the check's CRField, as returned by Check.NewSpec.
 type CheckFunc func(ctx context.Context, spec any, env Env) Result
