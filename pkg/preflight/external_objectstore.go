@@ -41,7 +41,7 @@ var (
 func RunExternalObjectStoreCheck(ctx context.Context, conn *apiv2.ObjectStoreConnection, env Env) Result {
 	provider, err := env.Resolve(ctx, conn.Provider)
 	if err != nil {
-		return Result{Check: ExternalObjectStoreCheck, Outcome: OutcomeUnknown, Message: fmt.Sprintf("resolve provider: %v", err)}
+		return resolveFailure(ExternalObjectStoreCheck, err)
 	}
 	switch apiv2.ObjectStoreProvider(provider) {
 	case apiv2.ObjectStoreProviderS3, "": // AWS S3, SeaweedFS, MinIO: any S3-compatible endpoint
@@ -84,8 +84,7 @@ func checkS3Bucket(ctx context.Context, conn *apiv2.ObjectStoreConnection, env E
 		"forcePathStyle": conn.ForcePathStyle,
 	})
 	if err != nil {
-		return Result{Check: ExternalObjectStoreCheck, Outcome: OutcomeUnknown, Message: fmt.Sprintf("resolve connection: %v",
-			err)}
+		return resolveFailure(ExternalObjectStoreCheck, err)
 	}
 	fail := func(msg string) Result {
 		return Result{Check: ExternalObjectStoreCheck, Outcome: OutcomeFail, Message: msg}
@@ -164,8 +163,7 @@ func checkGCSBucket(ctx context.Context, conn *apiv2.ObjectStoreConnection, env 
 		"path":      conn.Path,
 	})
 	if err != nil {
-		return Result{Check: ExternalObjectStoreCheck, Outcome: OutcomeUnknown, Message: fmt.Sprintf("resolve connection: %v",
-			err)}
+		return resolveFailure(ExternalObjectStoreCheck, err)
 	}
 	fail := func(msg string) Result {
 		return Result{Check: ExternalObjectStoreCheck, Outcome: OutcomeFail, Message: msg}
@@ -247,8 +245,7 @@ func checkAzureContainer(ctx context.Context, conn *apiv2.ObjectStoreConnection,
 		"bucket":    conn.Bucket,
 	})
 	if err != nil {
-		return Result{Check: ExternalObjectStoreCheck, Outcome: OutcomeUnknown, Message: fmt.Sprintf("resolve connection: %v",
-			err)}
+		return resolveFailure(ExternalObjectStoreCheck, err)
 	}
 	fail := func(msg string) Result {
 		return Result{Check: ExternalObjectStoreCheck, Outcome: OutcomeFail, Message: msg}

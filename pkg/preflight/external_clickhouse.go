@@ -34,8 +34,7 @@ func RunExternalClickHouseCheck(ctx context.Context, conn *apiv2.ClickHouseConne
 		"clusterName": conn.ClusterName,
 	})
 	if err != nil {
-		return Result{Check: ExternalClickHouseCheck, Outcome: OutcomeUnknown, Message: fmt.Sprintf("resolve connection: %v",
-			err)}
+		return resolveFailure(ExternalClickHouseCheck, err)
 	}
 	password := v["password"]
 	fail := func(msg string) Result {
