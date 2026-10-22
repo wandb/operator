@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Masterminds/semver/v3"
 	apiv2 "github.com/wandb/operator/api/v2"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -87,13 +88,18 @@ func TestRunProxyCheck_SecretUnavailable(t *testing.T) {
 
 func testCertPEM(t *testing.T, cn string, notBefore, notAfter time.Time) string {
 	t.Helper()
+	return testCertPEMWith(t, cn, notBefore, notAfter, true)
+}
+
+func testCertPEMWith(t *testing.T, cn string, notBefore, notAfter time.Time, isCA bool) string {
+	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		t.Fatal(err)
 	}
 	tmpl := &x509.Certificate{
 		SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: cn},
-		NotBefore: notBefore, NotAfter: notAfter, IsCA: true, BasicConstraintsValid: true,
+		NotBefore: notBefore, NotAfter: notAfter, IsCA: isCA, BasicConstraintsValid: true,
 	}
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
 	if err != nil {
@@ -180,6 +186,86 @@ func TestEffectiveManifestRepository(t *testing.T) {
 	for _, tt := range tests {
 		if got := effectiveManifestRepository(&tt.spec); got != tt.want {
 			t.Errorf("effectiveManifestRepository(%+v) = %q, want %q", tt.spec, got, tt.want)
+		}
+	}
+}
+
+// pem.Decode alone silently skips what follows the last complete block; every BEGIN must decode.
+func TestRunCustomCACertsCheck_StrictBlocks(t *testing.T) {
+	now := time.Now()
+	valid := testCertPEM(t, "corp-root", now.Add(-time.Hour), now.Add(24*time.Hour))
+	leaf := testCertPEMWith(t, "minio.internal", now.Add(-time.Hour), now.Add(24*time.Hour), false)
+
+	tests := []struct {
+		name     string
+		entry    string
+		want     Outcome
+		contains string
+	}{
+		{name: "truncated block after a valid one", entry: valid + "-----BEGIN CERTIFICATE-----\nMIIB\n", want: OutcomeFail, contains: "block 2 is malformed"},
+		{name: "key fragment after a valid one", entry: valid + "-----BEGIN PRIVATE KEY-----\nc2VjcmV0\n", want: OutcomeFail, contains: "block 2 is malformed"},
+		{name: "stray END before the first block", entry: "-----END CERTIFICATE-----\n" + valid, want: OutcomeFail, contains: "END marker without a BEGIN"},
+		{name: "stray END after a valid block", entry: valid + "-----END CERTIFICATE-----\n", want: OutcomeFail, contains: "malformed"},
+		{name: "leaf certificate", entry: leaf, want: OutcomeFail, contains: `"minio.internal") is not a CA`},
+		{name: "unknown label isn't echoed", entry: "-----BEGIN hunter2-password-----\nc2VjcmV0\n-----END hunter2-password-----\n", want: OutcomeFail, contains: "unrecognized block"},
+		{name: "comments between blocks are fine", entry: "# Issuer: Corp Root\n" + valid + "\nsubject=CN=corp-root\n" + valid, want: OutcomePass, contains: "2 certificates"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			certs := []string{tt.entry}
+			got := RunCustomCACertsCheck(context.Background(), &certs, Env{})
+			if got.Outcome != tt.want || !strings.Contains(got.Message, tt.contains) {
+				t.Errorf("got %s %q, want %s containing %q", got.Outcome, got.Message, tt.want, tt.contains)
+			}
+			for _, secret := range []string{"hunter2", "c2VjcmV0"} {
+				if strings.Contains(got.Message, secret) {
+					t.Errorf("message leaks %q: %q", secret, got.Message)
+				}
+			}
+		})
+	}
+}
+
+func TestComparableOperatorVersion(t *testing.T) {
+	tests := []struct {
+		constraint, operator string
+		want                 bool
+	}{
+		{"^2.0.0", "2.0.0-beta.9", true},      // stable constraint: betas of the release count
+		{"^2.0.0", "1.22.0", false},           // unchanged for stable versions
+		{">=2.0.0-rc.5", "2.0.0-rc.1", false}, // prerelease bound: rc.1 precedes rc.5
+		{">=2.0.0-rc.5", "2.0.0-rc.6", true},
+		{">=2.0.0-rc.5", "2.0.0", true},
+		{"1.2 - 1.4", "1.3.0-beta.1", true}, // a hyphen range isn't a prerelease bound
+	}
+	for _, tt := range tests {
+		c, err := semver.NewConstraint(tt.constraint)
+		if err != nil {
+			t.Fatal(err)
+		}
+		v := semver.MustParse(tt.operator)
+		if got := c.Check(comparableOperatorVersion(v, tt.constraint)); got != tt.want {
+			t.Errorf("%s satisfies %q = %v, want %v", tt.operator, tt.constraint, got, tt.want)
+		}
+	}
+}
+
+func TestRunServerManifestCheck_RedactsRepositoryCredentials(t *testing.T) {
+	if got := redactRepository("oci://robot:s3cret@registry.corp/wandb/server-manifest"); got != "oci://registry.corp/wandb/server-manifest" {
+		t.Errorf("redactRepository = %q", got)
+	}
+
+	// Nothing listens on port 1, so the pull fails and the error path formats the repository.
+	spec := &apiv2.WeightsAndBiasesSpec{Wandb: apiv2.WandbAppSpec{
+		ManifestRepository: "oci://robot:s3cret@127.0.0.1:1/wandb/server-manifest", Version: "0.85.1",
+	}}
+	got := RunServerManifestCheck(context.Background(), spec, Env{})
+	if got.Outcome == OutcomePass {
+		t.Fatalf("outcome = pass, want a failure from the unreachable registry")
+	}
+	for _, secret := range []string{"s3cret", "robot"} {
+		if strings.Contains(got.Message, secret) {
+			t.Errorf("message leaks %q: %q", secret, got.Message)
 		}
 	}
 }
