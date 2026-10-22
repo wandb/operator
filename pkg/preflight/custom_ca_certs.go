@@ -35,25 +35,50 @@ func RunCustomCACertsCheck(_ context.Context, certs *[]string, _ Env) Result {
 	return Result{Check: CustomCACertsCheck, Outcome: OutcomePass, Message: msg}
 }
 
-// checkCABundle fails an entry with no currently valid certificate. Expired or not-yet-valid certificates alongside
-// a valid one are only reported, since bundles commonly carry retired cross-signs. Messages never include block
-// contents: a pasted private key must not land in status.
+// knownPEMLabels are standard labels safe to echo. Any other label is user-controlled text that could hold a
+// secret, so it's never copied into the result.
+var knownPEMLabels = map[string]bool{
+	"PRIVATE KEY": true, "RSA PRIVATE KEY": true, "EC PRIVATE KEY": true, "ENCRYPTED PRIVATE KEY": true,
+	"PUBLIC KEY": true, "CERTIFICATE REQUEST": true, "X509 CRL": true, "TRUSTED CERTIFICATE": true,
+}
+
+// checkCABundle fails an entry with a malformed or non-CA block, or with no currently valid CA. Expired or
+// not-yet-valid CAs alongside a valid one are only reported, since bundles commonly carry retired cross-signs.
+// Messages never include block contents: a pasted private key must not land in status.
+//
+// Plain text between blocks is allowed, as OpenSSL, Go and update-ca-certificates all ignore it and real bundles
+// carry comments. Every BEGIN marker must decode into a complete block, though: pem.Decode alone silently skips a
+// truncated block, or a fragment after the last complete one.
 func checkCABundle(data string, now time.Time) (valid int, outOfDate []string, problem string) {
-	rest := []byte(data)
-	found := 0
-	for {
-		var block *pem.Block
-		block, rest = pem.Decode(rest)
-		if block == nil {
-			break
+	leading, _, _ := strings.Cut(data, "-----BEGIN")
+	if strings.Contains(leading, "-----END") {
+		return 0, nil, "has a PEM END marker without a BEGIN"
+	}
+	segments := pemSegments(data)
+	if len(segments) == 0 {
+		return 0, nil, "contains no PEM certificate"
+	}
+	for i, segment := range segments {
+		n := i + 1
+		// Each segment holds exactly one BEGIN marker, so Decode can't skip ahead to a later block.
+		block, rest := pem.Decode([]byte(segment))
+		if block == nil || strings.Contains(string(rest), "-----END") {
+			return 0, nil, fmt.Sprintf("block %d is malformed or incomplete PEM", n)
 		}
-		found++
 		if block.Type != "CERTIFICATE" {
-			return valid, outOfDate, fmt.Sprintf("contains a %q block; only CERTIFICATE blocks belong in a CA bundle", block.Type)
+			label := "an unrecognized"
+			if knownPEMLabels[block.Type] {
+				label = fmt.Sprintf("a %q", block.Type)
+			}
+			return 0, nil, fmt.Sprintf("block %d is %s block; only CERTIFICATE blocks belong in a CA bundle", n, label)
 		}
 		cert, err := x509.ParseCertificate(block.Bytes)
 		if err != nil {
-			return valid, outOfDate, fmt.Sprintf("certificate %d does not parse", found)
+			return 0, nil, fmt.Sprintf("certificate %d does not parse", n)
+		}
+		// Parsing only proves syntax; a leaf certificate parses too but can't issue the certificates being trusted.
+		if !cert.BasicConstraintsValid || !cert.IsCA {
+			return 0, nil, fmt.Sprintf("certificate %d (%q) is not a CA certificate", n, cert.Subject.CommonName)
 		}
 		switch {
 		case now.After(cert.NotAfter):
@@ -64,11 +89,27 @@ func checkCABundle(data string, now time.Time) (valid int, outOfDate []string, p
 			valid++
 		}
 	}
-	switch {
-	case found == 0:
-		return 0, nil, "contains no PEM certificate"
-	case valid == 0:
-		return 0, nil, "has no currently valid certificate: " + strings.Join(outOfDate, ", ")
+	if valid == 0 {
+		return 0, nil, "has no currently valid CA certificate: " + strings.Join(outOfDate, ", ")
 	}
 	return valid, outOfDate, ""
+}
+
+// pemSegments splits data at each BEGIN marker; text before the first marker is dropped.
+func pemSegments(data string) []string {
+	const begin = "-----BEGIN"
+	var segments []string
+	for {
+		start := strings.Index(data, begin)
+		if start < 0 {
+			return segments
+		}
+		data = data[start:]
+		next := strings.Index(data[len(begin):], begin)
+		if next < 0 {
+			return append(segments, data)
+		}
+		segments = append(segments, data[:len(begin)+next])
+		data = data[len(begin)+next:]
+	}
 }

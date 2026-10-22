@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
+	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -29,15 +31,16 @@ func RunServerManifestCheck(ctx context.Context, spec *apiv2.WeightsAndBiasesSpe
 		return fail("spec.wandb.version must be pinned to a published server version")
 	}
 	repo := effectiveManifestRepository(spec)
+	shown := redactRepository(repo)
 
 	ctx, cancel := context.WithTimeout(ctx, serverManifestTimeout)
 	defer cancel()
 	mfst, err := manifest.GetServerManifest(ctx, repo, version, env.RegistryAuth)
 	if err != nil {
-		return serverManifestFailure(repo, version, err)
+		return serverManifestFailure(repo, shown, version, err)
 	}
 
-	found := fmt.Sprintf("manifest %s found in %s", version, repo)
+	found := fmt.Sprintf("manifest %s found in %s", version, shown)
 	if env.OperatorVersion == "" || mfst.RequiredOperatorVersion == "" {
 		return Result{Check: ServerManifestCheck, Outcome: OutcomePass, Message: found}
 	}
@@ -51,14 +54,37 @@ func RunServerManifestCheck(ctx context.Context, spec *apiv2.WeightsAndBiasesSpe
 		return Result{Check: ServerManifestCheck, Outcome: OutcomeUnknown,
 			Message: fmt.Sprintf("operator version %q is not semver", env.OperatorVersion)}
 	}
-	// Prereleases never satisfy a constraint without one in semver, yet manifests pin "^2.0.0" for the 2.0.0 betas.
-	core, _ := operator.SetPrerelease("")
-	if !constraint.Check(&core) {
+	if !constraint.Check(comparableOperatorVersion(operator, mfst.RequiredOperatorVersion)) {
 		return fail(fmt.Sprintf("server %s requires operator %s, but the operator is %s",
 			version, mfst.RequiredOperatorVersion, env.OperatorVersion))
 	}
 	return Result{Check: ServerManifestCheck, Outcome: OutcomePass,
 		Message: fmt.Sprintf("%s; operator %s satisfies %s", found, env.OperatorVersion, mfst.RequiredOperatorVersion)}
+}
+
+// constraintPrerelease spots a prerelease bound such as ">=2.0.0-rc.5": a digit immediately followed by "-".
+// Hyphen ranges ("1.2 - 1.4") have spaces around the dash and don't match.
+var constraintPrerelease = regexp.MustCompile(`\d-[0-9A-Za-z]`)
+
+// comparableOperatorVersion drops the operator's prerelease only for a constraint without prerelease bounds. Under
+// semver a prerelease never satisfies such a constraint, yet manifests pin "^2.0.0" for the 2.0.0 betas. A constraint
+// that names a prerelease means to order prereleases, so the original version is compared.
+func comparableOperatorVersion(operator *semver.Version, constraint string) *semver.Version {
+	if operator.Prerelease() == "" || constraintPrerelease.MatchString(constraint) {
+		return operator
+	}
+	core, _ := operator.SetPrerelease("")
+	return &core
+}
+
+// redactRepository drops userinfo, which a manifestRepository can embed, so results never carry credentials.
+func redactRepository(repo string) string {
+	u, err := url.Parse(repo)
+	if err != nil {
+		return "the configured manifest repository"
+	}
+	u.User = nil
+	return u.String()
 }
 
 // effectiveManifestRepository mirrors the defaulting webhook.
@@ -74,17 +100,30 @@ func effectiveManifestRepository(spec *apiv2.WeightsAndBiasesSpec) string {
 }
 
 // serverManifestFailure separates a version that doesn't exist from a registry that wouldn't let the caller look.
-func serverManifestFailure(repo, version string, err error) Result {
+func serverManifestFailure(repo, shown, version string, err error) Result {
 	var regErr *errcode.ErrorResponse
 	switch {
 	case errors.Is(err, errdef.ErrNotFound), errors.Is(err, fs.ErrNotExist):
 		return Result{Check: ServerManifestCheck, Outcome: OutcomeFail,
-			Message: fmt.Sprintf("server version %s is not published in %s", version, repo)}
+			Message: fmt.Sprintf("server version %s is not published in %s", version, shown)}
 	case errors.As(err, &regErr) && (regErr.StatusCode == http.StatusUnauthorized || regErr.StatusCode == http.StatusForbidden):
 		return Result{Check: ServerManifestCheck, Outcome: OutcomeUnknown,
-			Message: fmt.Sprintf("%s requires registry credentials this check doesn't have", repo)}
+			Message: fmt.Sprintf("%s requires registry credentials this check doesn't have", shown)}
 	default:
 		return Result{Check: ServerManifestCheck, Outcome: OutcomeUnknown,
-			Message: fmt.Sprintf("load manifest %s from %s: %v", version, repo, err)}
+			Message: fmt.Sprintf("load manifest %s from %s: %s", version, shown, redactRepositoryError(err, repo, shown))}
 	}
+}
+
+// redactRepositoryError keeps credentials from a repository URL out of an error that may quote it verbatim.
+func redactRepositoryError(err error, repo, shown string) string {
+	msg := strings.ReplaceAll(err.Error(), repo, shown)
+	msg = strings.ReplaceAll(msg, strings.TrimPrefix(repo, "oci://"), strings.TrimPrefix(shown, "oci://"))
+	if u, perr := url.Parse(repo); perr == nil && u.User != nil {
+		if pw, ok := u.User.Password(); ok {
+			msg = redact(msg, pw)
+		}
+		msg = redact(msg, u.User.Username())
+	}
+	return msg
 }
