@@ -73,9 +73,9 @@ spec:
   imagePullSecrets:
     {{- . | nindent 4 }}
   {{- end }}
-  # Grafana Tempo datasource support requires VictoriaTraces v0.9.4 or newer.
+  # VictoriaTraces UI requires v0.12.0 or newer.
   image:
     repository: {{ include "telemetry.registryPrefix" . }}victoriametrics/victoria-traces
-    tag: v0.9.4
+    tag: v0.12.1
   retentionPeriod: {{ .Values.retentionPeriod | quote }}
 {{- end }}
