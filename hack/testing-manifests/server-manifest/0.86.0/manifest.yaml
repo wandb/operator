@@ -845,10 +845,9 @@ applications:
         source:
           type: emptyDir
           name: nginx-cache
-## TODO: no frontend support yet
-#    securityProfile:
-#      runAsNonRoot: true
-#      readOnlyRootFilesystem: true
+    securityProfile:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
   glue:
     name: glue
     args:
