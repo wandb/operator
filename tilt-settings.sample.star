@@ -50,6 +50,9 @@ SETTINGS = {
     # and exposes local telemetry endpoint resources.
     "observabilityMode": "off",
 
+    # Path Grafana is served on, and the Grafana link's path
+    "grafanaRootUrl": "/console/grafana/",
+
     "logFormat": "pretty",
 
     # Optional composable Tilt infra settings. External infra installs the

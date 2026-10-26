@@ -53,6 +53,7 @@ settings = {
 
     # off, full, forward.
     "observabilityMode": "off",
+    "grafanaRootUrl": "/console/grafana/",
 
     "logFormat": "pretty",  # pretty, text, json
 
@@ -293,7 +294,7 @@ def binary():
     return "CGO_ENABLED=0 GOOS=linux GO111MODULE=on go build -o tilt_bin/manager ./cmd/manager && CGO_ENABLED=0 GOOS=linux GO111MODULE=on go build -o tilt_bin/crd-installer ./cmd/crd-installer"
 
 
-def managed_endpoint_resource(name, anchor_object, deps, local_port, remote_port, link_name, pod_selector, labels, local_host="localhost"):
+def managed_endpoint_resource(name, anchor_object, deps, local_port, remote_port, link_name, pod_selector, labels, local_host="localhost", link_path=""):
     k8s_resource(
         new_name=name,
         objects=[anchor_object],
@@ -301,7 +302,7 @@ def managed_endpoint_resource(name, anchor_object, deps, local_port, remote_port
         extra_pod_selectors=[pod_selector],
         resource_deps=deps,
         port_forwards=[
-            port_forward(local_port, remote_port, name=link_name, host=local_host),
+            port_forward(local_port, remote_port, name=link_name, link_path=link_path, host=local_host),
         ],
         labels=labels,
     )
@@ -374,6 +375,9 @@ def build_operator_values(telemetry_namespace):
             "crds": {
                 "victoriaMetrics": telemetry_enabled,
                 "grafana": grafana_enabled,
+            },
+            "grafana": {
+                "rootUrl": settings.get("grafanaRootUrl"),
             },
             "namespace": telemetry_namespace,
         },
@@ -1066,6 +1070,7 @@ if settings.get("observabilityMode") == "full":
         local_port=3000,
         remote_port=3000,
         link_name="Grafana",
+        link_path=settings.get("grafanaRootUrl"),
         pod_selector={"app": "grafana"},
         labels=[GROUP_TELEMETRY],
     )
@@ -1076,6 +1081,7 @@ if settings.get("observabilityMode") == "full":
         local_port=8428,
         remote_port=8429,
         link_name="VictoriaMetrics UI",
+        link_path="/vmui/",
         pod_selector={
             "app.kubernetes.io/name": "vmsingle",
             "app.kubernetes.io/instance": "victoria-instance",
@@ -1088,7 +1094,8 @@ if settings.get("observabilityMode") == "full":
         deps=["wandb-operator"],
         local_port=9428,
         remote_port=9428,
-        link_name="VictoriaLogs",
+        link_name="VictoriaLogs UI",
+        link_path="/select/vmui/",
         pod_selector={
             "app.kubernetes.io/name": "vlsingle",
             "app.kubernetes.io/instance": "victoria-logs",
@@ -1101,7 +1108,8 @@ if settings.get("observabilityMode") == "full":
         deps=["wandb-operator"],
         local_port=10428,
         remote_port=10428,
-        link_name="VictoriaTraces",
+        link_name="VictoriaTraces UI",
+        link_path="/select/vmui/",
         pod_selector={
             "app.kubernetes.io/name": "vtsingle",
             "app.kubernetes.io/instance": "victoria-traces",
