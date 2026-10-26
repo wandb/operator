@@ -20,6 +20,25 @@ import (
 
 const defaultEtcdStorageSize = "10Gi"
 
+// defaultEtcdResources gives the Bufstream metadata etcd members a scheduler-
+// visible footprint. The server manifest sizes only the brokers, so without
+// this the etcd pods run BestEffort: invisible to bin-packing and the first
+// to be evicted under node pressure. The numbers cover the measured
+// footprint (~35 MB / <0.05 CPU per member at the small envelope) with
+// generous headroom while leaving the broker sizing to the manifest.
+func defaultEtcdResources() corev1.ResourceRequirements {
+	return corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("250m"),
+			corev1.ResourceMemory: resource.MustParse("512Mi"),
+		},
+		Limits: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("1"),
+			corev1.ResourceMemory: resource.MustParse("1Gi"),
+		},
+	}
+}
+
 const (
 	kafkaRunAsUser  int64 = 65532
 	kafkaRunAsGroup int64 = 65532
@@ -345,6 +364,7 @@ func ToEtcdApplication(
 							Name:            "etcd",
 							Image:           EtcdImage(mfst.Kafka.Images[imageKeyEtcd], wandb.Spec.Global.ImageRegistry),
 							Env:             etcdEnv,
+							Resources:       defaultEtcdResources(),
 							SecurityContext: kafkaContainerSecurityContext(),
 							Ports: []corev1.ContainerPort{
 								{Name: "client", ContainerPort: EtcdClientPort},

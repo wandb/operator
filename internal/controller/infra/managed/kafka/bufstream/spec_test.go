@@ -63,6 +63,14 @@ func TestToEtcdApplication(t *testing.T) {
 	requireKafkaPodSecurityContext(t, app.Spec.PodTemplate.Spec.SecurityContext)
 	requireKafkaContainerSecurityContext(t, app.Spec.PodTemplate.Spec.Containers[0].SecurityContext)
 	require.NotNil(t, app.Spec.ServiceTemplate)
+
+	// etcd is not sized by the server manifest; it must still carry requests so
+	// the members are schedulable/bin-packed rather than BestEffort.
+	etcdResources := app.Spec.PodTemplate.Spec.Containers[0].Resources
+	require.Equal(t, "250m", etcdResources.Requests.Cpu().String())
+	require.Equal(t, "512Mi", etcdResources.Requests.Memory().String())
+	require.Equal(t, "1", etcdResources.Limits.Cpu().String())
+	require.Equal(t, "1Gi", etcdResources.Limits.Memory().String())
 }
 
 func TestToEtcdApplicationHA(t *testing.T) {
