@@ -551,6 +551,7 @@ var _ = Describe("WeightsAndBiases Networking", func() {
 			client.WithFieldOwner(k8sClient, WeightsAndBiasesFieldManager),
 			wandb,
 			wandbManifest,
+			telemetry.DefaultTelemetryRuntimeConfig(),
 		)
 
 		// The error is swallowed so the rest of the reconcile still runs...
@@ -684,7 +685,7 @@ func reconcileNetworkingManifest(ctx context.Context, wandb *apiv2.WeightsAndBia
 
 	// Networking lives above Reconcile's infrastructure gate, in its own function,
 	// so it has to be driven separately from the manifest reconcile.
-	_, err = v2.ReconcileNetworkingAndWatchtower(ctx, reconcileClient, wandb, wandbManifest)
+	_, err = v2.ReconcileNetworkingAndWatchtower(ctx, reconcileClient, wandb, wandbManifest, telemetry.DefaultTelemetryRuntimeConfig())
 	Expect(err).NotTo(HaveOccurred())
 
 	_, err = v2.ReconcileWandbManifest(ctx, reconcileClient, wandb, wandbManifest, telemetry.DefaultTelemetryRuntimeConfig())

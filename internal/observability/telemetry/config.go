@@ -24,7 +24,17 @@ const (
 	telemetryLogsReadPort    = 9428
 	telemetryTracesReadName  = "vtsingle-victoria-traces"
 	telemetryTracesReadPort  = 10428
+
+	defaultTelemetryGrafanaPath = "/console/grafana/"
 )
+
+// GrafanaPaths are the paths Grafana may be served on
+var GrafanaPaths = []string{
+	defaultTelemetryGrafanaPath,
+	"/grafana/",
+	"/observability/grafana/",
+	"/telemetry/grafana/",
+}
 
 type TelemetryEndpoints struct {
 	MetricsEndpoint       string
@@ -47,10 +57,11 @@ type TelemetryOTelConfig struct {
 }
 
 type TelemetryRuntimeConfig struct {
-	Enabled   bool
-	Mode      string
-	Namespace string
-	OTel      TelemetryOTelConfig
+	Enabled     bool
+	Mode        string
+	Namespace   string
+	OTel        TelemetryOTelConfig
+	GrafanaPath string
 }
 
 func DefaultTelemetryRuntimeConfig() TelemetryRuntimeConfig {
@@ -62,12 +73,14 @@ func DefaultTelemetryRuntimeConfig() TelemetryRuntimeConfig {
 			Protocol:    "http/protobuf",
 			ServiceName: "wandb-service",
 		},
+		GrafanaPath: defaultTelemetryGrafanaPath,
 	}
 }
 
 func (cfg *TelemetryRuntimeConfig) Normalize() {
 	cfg.Mode = strings.ToLower(strings.TrimSpace(cfg.Mode))
 	cfg.Namespace = strings.TrimSpace(cfg.Namespace)
+	cfg.GrafanaPath = strings.TrimSpace(cfg.GrafanaPath)
 
 	cfg.OTel.SecretName = strings.TrimSpace(cfg.OTel.SecretName)
 	cfg.OTel.Protocol = strings.TrimSpace(cfg.OTel.Protocol)
@@ -110,6 +123,11 @@ func (cfg TelemetryRuntimeConfig) Validate() error {
 		return fmt.Errorf("telemetry OTel secret name must not be empty")
 	}
 	return nil
+}
+
+// GrafanaEnabled reports whether the stack runs Grafana, which only full mode does.
+func (cfg TelemetryRuntimeConfig) GrafanaEnabled() bool {
+	return cfg.Enabled && cfg.Mode == telemetryModeFull
 }
 
 func (cfg TelemetryRuntimeConfig) ResolveEndpoints() TelemetryEndpoints {

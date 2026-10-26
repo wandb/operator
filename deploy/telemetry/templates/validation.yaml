@@ -2,3 +2,6 @@
 {{- if and (eq $mode "forward") (eq (default "" .Values.forwarding.otlp.endpoint) "") -}}
 {{- fail "mode=forward requires forwarding.otlp.endpoint" -}}
 {{- end -}}
+{{- if and (eq $mode "full") (not (has (include "telemetry.grafanaPath" .) (include "telemetry.grafanaPaths" . | fromJsonArray))) -}}
+{{- fail (printf "grafana.rootUrl %q is not a supported Grafana path; see docs/monitoring.md" (toString .Values.grafana.rootUrl)) -}}
+{{- end -}}

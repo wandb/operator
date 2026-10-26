@@ -11,6 +11,8 @@ retentionPeriod: 1d
 grafana:
   # Operator image that carries the bundled Grafana plugins
   pluginImage: ""
+  # Path Grafana is served on, in-cluster and out; supported paths are listed in docs/monitoring.md
+  rootUrl: /console/grafana/
 otlpGateway:
   podSecurityContext:
     runAsNonRoot: true

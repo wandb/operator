@@ -67,7 +67,7 @@ func consolidatedIngressName(wandb *apiv2.WeightsAndBiases) string {
 	return wandb.Name
 }
 
-func reconcileConsolidatedIngress(ctx context.Context, c ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) error {
+func reconcileConsolidatedIngress(ctx context.Context, c ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest, grafanaPath string) error {
 	ingressName := consolidatedIngressName(wandb)
 	hostname := parseHostname(wandb.Spec.Wandb.Hostname)
 
@@ -134,9 +134,7 @@ func reconcileConsolidatedIngress(ctx context.Context, c ctrlClient.Client, wand
 			},
 		})
 	}
-	if watchtowerPath := watchtowerIngressPath(wandb); watchtowerPath != nil {
-		paths = append(paths, *watchtowerPath)
-	}
+	paths = append(paths, watchtowerIngressPaths(wandb, grafanaPath)...)
 	if len(paths) == 0 {
 		return nil
 	}

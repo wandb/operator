@@ -17,4 +17,5 @@ data:
   TELEMETRY_OTEL_PROTOCOL: {{ .Values.telemetry.otel.protocol | quote }}
   TELEMETRY_OTEL_SERVICE_NAME: {{ .Values.telemetry.otel.serviceName | quote }}
   TELEMETRY_OTEL_RESOURCE_ATTRIBUTES: {{ .Values.telemetry.otel.resourceAttributes | quote }}
+  TELEMETRY_GRAFANA_PATH: {{ include "telemetry.grafanaPath" .Subcharts.telemetry | quote }}
 {{- end }}
