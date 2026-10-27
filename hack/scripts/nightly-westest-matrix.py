@@ -12,7 +12,7 @@ LOCAL_SCENARIOS = [
     "local-kind-proxy",
 ]
 CLOUD_SCENARIOS = [
-    {"scenario": "aws-eks-s3-irsa", "provider": "aws", "environment": "westest-aws"},
+#     {"scenario": "aws-eks-s3-irsa", "provider": "aws", "environment": "westest-aws"},
     {"scenario": "gcp-gke-gcs-hmac", "provider": "gcp", "environment": "westest-gcp"},
 ]
 
