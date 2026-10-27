@@ -91,7 +91,7 @@ purge leaves ownership for garbage collection. A replacement CR can adopt
 ownerless retained Secrets without resetting signing material.
 
 Published manifests are generated in `wandb/core/onprem/server-manifest`, outside
-this repository. The local `migration.next` fixture demonstrates the declaration.
+this repository. The local `manifest.next` fixture demonstrates the declaration.
 Upstream publication must require an operator version supporting these fields;
 older operators ignore them and continue using the shared account.
 
