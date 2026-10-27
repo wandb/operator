@@ -11,6 +11,9 @@ on:
 jobs:
   westest-workflow:
     name: WESTest workflow checks
+    # Temporarily paused while AWS nightly scenarios are disabled.
+    # TODO: Remove this guard when AWS scenarios are re-enabled later this week.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
