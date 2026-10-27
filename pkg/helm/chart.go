@@ -16,6 +16,9 @@ import (
 const (
 	secretsStorageDriver = "secrets"
 	maxReleasesToKeep    = 10
+	// Must exceed the longest chart hook activeDeadlineSeconds (ch-migrate: 900s).
+	hookTimeout      = 16 * time.Minute
+	uninstallTimeout = 600 * time.Second
 )
 
 type ActionableChartInterface interface {
@@ -111,12 +114,17 @@ func (c *ActionableChart) Install(
 	chart *chart.Chart,
 	values map[string]interface{},
 ) (release.Releaser, error) {
+	return c.newInstall().Run(chart, values)
+}
+
+func (c *ActionableChart) newInstall() *action.Install {
 	client := action.NewInstall(c.config)
 	client.ReleaseName = c.releaseName
 	client.Namespace = c.namespace
 	client.WaitStrategy = kube.HookOnlyStrategy
 	client.ServerSideApply = false
-	return client.Run(chart, values)
+	client.Timeout = hookTimeout
+	return client
 }
 
 func (c *ActionableChart) History() ([]release.Releaser, error) {
@@ -124,26 +132,40 @@ func (c *ActionableChart) History() ([]release.Releaser, error) {
 }
 
 func (c *ActionableChart) Rollback(version int) error {
+	return c.newRollback().Run(c.releaseName)
+}
+
+func (c *ActionableChart) newRollback() *action.Rollback {
 	client := action.NewRollback(c.config)
 	client.WaitStrategy = kube.HookOnlyStrategy
 	client.ServerSideApply = "false"
-	return client.Run(c.releaseName)
+	client.Timeout = hookTimeout
+	return client
 }
 
 func (c *ActionableChart) Upgrade(chart *chart.Chart, values map[string]interface{}) (release.Releaser, error) {
+	return c.newUpgrade().Run(c.releaseName, chart, values)
+}
+
+func (c *ActionableChart) newUpgrade() *action.Upgrade {
 	client := action.NewUpgrade(c.config)
 	client.Namespace = c.namespace
 	client.MaxHistory = maxReleasesToKeep
 	client.WaitStrategy = kube.HookOnlyStrategy
 	client.ServerSideApply = "false"
-	return client.Run(c.releaseName, chart, values)
+	client.Timeout = hookTimeout
+	return client
 }
 
 func (c *ActionableChart) Uninstall() (*release.UninstallReleaseResponse, error) {
+	return c.newUninstall().Run(c.releaseName)
+}
+
+func (c *ActionableChart) newUninstall() *action.Uninstall {
 	client := action.NewUninstall(c.config)
 	client.WaitStrategy = kube.LegacyStrategy
-	client.Timeout = 600 * time.Second
-	return client.Run(c.releaseName)
+	client.Timeout = uninstallTimeout
+	return client
 }
 
 func (c *ActionableChart) GetRelease(version int) (release.Releaser, error) {
