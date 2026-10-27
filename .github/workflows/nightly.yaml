@@ -50,7 +50,7 @@ concurrency:
 
 env:
   # The action fixes the public WESTest repository; jobs can select only its tag.
-  WESTEST_IMAGE_TAG: "0.5.0"
+  WESTEST_IMAGE_TAG: "0.5.1"
 
 jobs:
   build:
