@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.23.3](https://github.com/wandb/operator/compare/v1.23.2...v1.23.3) (Unreleased)
+
+### Bug fixes
+
+* Give Helm hooks up to 16 minutes on install, upgrade and rollback instead of Helm 4's 30-second default, so slow hooks such as a cold image pull or the ClickHouse migration job no longer fail the release.
+
 ## [1.23.1](https://github.com/wandb/operator/compare/v1.23.0...v1.23.1) (Unreleased)
 
 ### Bug fixes
