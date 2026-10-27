@@ -16,7 +16,7 @@ import (
 const (
 	secretsStorageDriver = "secrets"
 	maxReleasesToKeep    = 10
-	// Must exceed the longest chart hook activeDeadlineSeconds (ch-migrate: 900s).
+	// Must exceed the longest operator-wandb hook activeDeadlineSeconds (ch-migrate: 900s).
 	hookTimeout      = 16 * time.Minute
 	uninstallTimeout = 600 * time.Second
 )
