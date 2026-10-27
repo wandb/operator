@@ -40,6 +40,15 @@ metadata:
     app.kubernetes.io/component: telemetry
     app.kubernetes.io/part-of: wandb
 spec:
+  {{- with include "telemetry.imagePullSecrets" . }}
+  imagePullSecrets:
+    {{- . | nindent 4 }}
+  {{- end }}
+  # Update with the victoria-metrics-operator 0.66.3 chart in deploy/operator/Chart.yaml.
+  image:
+    repository: {{ include "telemetry.registryPrefix" . }}victoriametrics/vmalert
+    tag: v1.147.0
+  configReloaderImage: {{ include "telemetry.configReloaderImage" . | quote }}
   datasource:
     url: {{ printf "http://vmsingle-%s:8428" (include "telemetry.vmsingleName" .) | quote }}
   remoteRead:

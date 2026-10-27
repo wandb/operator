@@ -143,13 +143,17 @@ spec:
         app.kubernetes.io/component: telemetry
         app.kubernetes.io/part-of: wandb
     spec:
+      {{- with include "telemetry.imagePullSecrets" . }}
+      imagePullSecrets:
+        {{- . | nindent 8 }}
+      {{- end }}
       {{- with .Values.otlpGateway.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
         - name: otel-collector
-          image: "otel/opentelemetry-collector-contrib:0.102.1"
+          image: {{ include "telemetry.otelImage" . | quote }}
           imagePullPolicy: IfNotPresent
           {{- with .Values.otlpGateway.securityContext }}
           securityContext:
@@ -290,13 +294,17 @@ spec:
         app.kubernetes.io/part-of: wandb
     spec:
       automountServiceAccountToken: false
+      {{- with include "telemetry.imagePullSecrets" . }}
+      imagePullSecrets:
+        {{- . | nindent 8 }}
+      {{- end }}
       {{- with .Values.logAgent.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
         - name: otel-collector
-          image: "otel/opentelemetry-collector-contrib:0.102.1"
+          image: {{ include "telemetry.otelImage" . | quote }}
           imagePullPolicy: IfNotPresent
           args:
             - --config=/etc/otelcol/collector.yaml

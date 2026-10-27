@@ -8,7 +8,7 @@
 # Release into the repo root, and this build only copies the result.
 
 # Build the manager binary
-FROM golang:1.27.2 AS manager-builder
+FROM golang:1.27.3 AS manager-builder
 
 ARG TARGETOS
 ARG TARGETARCH
@@ -43,6 +43,8 @@ COPY --from=manager-builder /workspace/crd-installer .
 # Released CGO-free and statically linked, so it runs unmodified on this glibc base.
 # Produced by `make download-watchtower`, not by this build.
 COPY watchtower /watchtower
+# Produced by `make download-grafana-plugins`; Grafana's init container copies these out.
+COPY grafana-plugins /opt/wandb/grafana-plugins
 
 RUN mkdir -p /helm/.cache/helm /helm/.config/helm /helm/.local/share/helm && \
     chown -R 65532:65532 /helm

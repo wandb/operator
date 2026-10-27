@@ -8,6 +8,9 @@ forwarding:
     tls:
       insecure: false
 retentionPeriod: 1d
+grafana:
+  # Operator image that carries the bundled Grafana plugins
+  pluginImage: ""
 otlpGateway:
   podSecurityContext:
     runAsNonRoot: true
