@@ -83,10 +83,7 @@ use the declared identity. Allow an existing migration to complete before
 changing its account or permissions.
 
 Removing `permissions` from a retained account declaration removes its managed
-Role and RoleBinding. Secrets are preserved. Removing the declaration or migration,
-or changing its name, does not delete old identity resources: those remain
-CR-owned until CR deletion. Revoke the old account's permissions before removing
-or renaming it if immediate revocation is required.
+Role and RoleBinding. Secrets are preserved. 
 
 Declared ownerless Secrets are adopted by the CR. On CR deletion they follow
 the global retention policy: detach removes this CR's owner reference, while
@@ -94,7 +91,7 @@ purge leaves ownership for garbage collection. A replacement CR can adopt
 ownerless retained Secrets without resetting signing material.
 
 Published manifests are generated in `wandb/core/onprem/server-manifest`, outside
-this repository. The local `0.86.0` fixture demonstrates the declaration.
+this repository. The local `migration.next` fixture demonstrates the declaration.
 Upstream publication must require an operator version supporting these fields;
 older operators ignore them and continue using the shared account.
 
