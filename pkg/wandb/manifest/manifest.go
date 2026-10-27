@@ -35,6 +35,7 @@ import (
 	"oras.land/oras-go/v2/registry/remote/retry"
 
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"sigs.k8s.io/yaml"
 )
 
@@ -44,7 +45,8 @@ import (
 type Manifest struct {
 	RequiredOperatorVersion string          `yaml:"requiredOperatorVersion"`
 	Features                map[string]bool `yaml:"features,omitempty"`
-	// Prefer plural, but accept singular key as found in some manifests.
+	Secrets                 []Secret        `yaml:"secrets,omitempty"`
+	// Legacy manifests use GeneratedSecrets; new manifests use Secrets with Generated.
 	GeneratedSecrets []GeneratedSecret `yaml:"generatedSecrets,omitempty"`
 	// CommonEnvvars defines reusable groups of env vars that can be referenced
 	// by applications via the per-application `commonEnvs` list. This maps a
@@ -63,11 +65,34 @@ type Manifest struct {
 	Migrations map[string]MigrationJob `yaml:"migrations,omitempty"`
 }
 
-// GeneratedSecret represents the configuration for a dynamically generated secret.
+// Secret declares an operator-created Secret. Without Generated, it is created
+// empty and its contents are left entirely to another writer.
+type Secret struct {
+	Name         string            `yaml:"name"`
+	UseExactName bool              `yaml:"useExactName,omitempty"`
+	Generated    *SecretGeneration `yaml:"generated,omitempty"`
+}
+
+type SecretGeneration struct {
+	Length        int    `yaml:"length,omitempty"`
+	CharacterType string `json:"type,omitempty" yaml:"type,omitempty"`
+}
+
+// SecretDeclarations includes legacy declarations without changing their names
+// or generation behavior. Validation is performed before reconciling resources.
+func (m Manifest) SecretDeclarations() []Secret {
+	declarations := slices.Clone(m.Secrets)
+	for _, legacy := range m.GeneratedSecrets {
+		declarations = append(declarations, Secret{Name: legacy.Name, UseExactName: legacy.UseExactName, Generated: &SecretGeneration{Length: legacy.Length, CharacterType: legacy.CharacterType}})
+	}
+	return declarations
+}
+
+// GeneratedSecret is the legacy flat declaration retained for older manifests.
 type GeneratedSecret struct {
 	Name          string `yaml:"name"`
 	Length        int    `yaml:"length"`
-	CharacterType string `yaml:"type"`
+	CharacterType string `json:"type" yaml:"type"`
 	// UseExactName when true, creates the secret with the exact name specified without prefixing it with the CR name.
 	// This is useful for secrets that need to be referenced by external systems with a fixed name.
 	UseExactName bool `yaml:"useExactName,omitempty"`
@@ -289,15 +314,28 @@ type ContainerPort struct {
 // MigrationJob represents a migration invocation with an image and args, used
 // by the top-level "migrations" section (e.g., default, runsdb, usagedb).
 type MigrationJob struct {
-	Image              ImageRef      `yaml:"image"`
-	Args               []string      `yaml:"args,omitempty"`
-	Command            []string      `yaml:"command,omitempty"`
-	CommonEnvs         []string      `yaml:"commonEnvs,omitempty"`
-	CommonVolumeMounts []string      `yaml:"commonVolumeMounts,omitempty"`
-	Env                []EnvVar      `yaml:"env,omitempty"`
-	VolumeMounts       []VolumeMount `yaml:"volumeMounts,omitempty"`
+	// ServiceAccount opts this migration into an operator-managed dedicated identity.
+	ServiceAccount     *MigrationServiceAccount `yaml:"serviceAccount,omitempty"`
+	Image              ImageRef                 `yaml:"image"`
+	Args               []string                 `yaml:"args,omitempty"`
+	Command            []string                 `yaml:"command,omitempty"`
+	CommonEnvs         []string                 `yaml:"commonEnvs,omitempty"`
+	CommonVolumeMounts []string                 `yaml:"commonVolumeMounts,omitempty"`
+	Env                []EnvVar                 `yaml:"env,omitempty"`
+	VolumeMounts       []VolumeMount            `yaml:"volumeMounts,omitempty"`
 	// SecurityProfile supplies migration defaults; CR settings take precedence.
 	SecurityProfile v2.WorkloadSecurityProfile `yaml:"securityProfile,omitempty"`
+}
+
+// MigrationServiceAccount declares a dedicated namespaced identity. Omitting it
+// preserves the shared account; an empty declaration creates an unprivileged one.
+type MigrationServiceAccount struct {
+	// Name overrides the generated <cr-name>-migration-<migration-name> name.
+	Name string `yaml:"name,omitempty"`
+	// AutomountServiceAccountToken defaults to false for dedicated identities.
+	AutomountServiceAccountToken *bool `yaml:"automountServiceAccountToken,omitempty"`
+	// Permissions become a namespaced Role. An omitted apiGroups defaults to core.
+	Permissions []rbacv1.PolicyRule `yaml:"permissions,omitempty"`
 }
 
 // FileSpec defines a single file to project into the application's container.
@@ -504,6 +542,8 @@ func mergeSimple(dst, src *Manifest) {
 			dst.Migrations[k] = v
 		}
 	}
+
+	dst.Secrets = append(dst.Secrets, src.Secrets...)
 
 	// GeneratedSecrets - only from first file
 	if len(dst.GeneratedSecrets) == 0 {
