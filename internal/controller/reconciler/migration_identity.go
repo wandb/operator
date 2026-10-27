@@ -3,6 +3,7 @@ package reconciler
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
@@ -10,6 +11,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/utils/ptr"
@@ -69,12 +71,14 @@ func reconcileMigrationServiceAccounts(ctx context.Context, c client.Client, wan
 	if err := validateMigrationServiceAccounts(wandb, manifest); err != nil {
 		return err
 	}
+	var reconciledNames []string
 	for migration, task := range manifest.Migrations {
 		identity := task.ServiceAccount
 		if identity == nil {
 			continue
 		}
 		name := migrationServiceAccountName(wandb, migration, identity)
+		reconciledNames = append(reconciledNames, name)
 		sa := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: wandb.Namespace}}
 		if err := reconcileMigrationIdentityObject(ctx, c, wandb, sa, func() {
 			sa.AutomountServiceAccountToken = ptr.To(ptr.Deref(identity.AutomountServiceAccountToken, false))
@@ -108,6 +112,28 @@ func reconcileMigrationServiceAccounts(ctx context.Context, c client.Client, wan
 			binding.Subjects = []rbacv1.Subject{{Kind: "ServiceAccount", Name: name, Namespace: wandb.Namespace}}
 		}); err != nil {
 			return err
+		}
+	}
+	return cleanupMigrationServiceAccounts(ctx, c, wandb, reconciledNames)
+}
+
+func cleanupMigrationServiceAccounts(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, reconciledNames []string) error {
+	for _, list := range []client.ObjectList{&corev1.ServiceAccountList{}, &rbacv1.RoleList{}, &rbacv1.RoleBindingList{}} {
+		if err := c.List(ctx, list, client.InNamespace(wandb.Namespace), client.MatchingLabels{"app.kubernetes.io/component": "migration-identity"}); err != nil {
+			return err
+		}
+		objects, err := meta.ExtractList(list)
+		if err != nil {
+			return err
+		}
+		for _, item := range objects {
+			obj := item.(client.Object)
+			if !hasOwnerReference(obj, wandb) || slices.Contains(reconciledNames, obj.GetName()) {
+				continue
+			}
+			if err := c.Delete(ctx, obj); err != nil && !apierrors.IsNotFound(err) {
+				return err
+			}
 		}
 	}
 	return nil

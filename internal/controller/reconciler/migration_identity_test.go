@@ -10,6 +10,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -244,6 +245,75 @@ func TestMigrationIdentityRevokesRemovedPermissions(t *testing.T) {
 	require.NoError(t, c.List(ctx, bindings))
 	require.Empty(t, roles.Items, "removing permissions must remove the Role")
 	require.Empty(t, bindings.Items, "removing permissions must remove the RoleBinding")
+}
+
+func TestMigrationIdentityCleansUpStaleResources(t *testing.T) {
+	for _, change := range []string{"removed migration", "shared account", "renamed account"} {
+		t.Run(change, func(t *testing.T) {
+			c, wandb, manifest := migrationIdentityFixture(t)
+			ctx := context.Background()
+			require.NoError(t, reconcileMigrationServiceAccounts(ctx, c, wandb, manifest))
+			task := manifest.Migrations["internal-signer"]
+			switch change {
+			case "removed migration":
+				delete(manifest.Migrations, "internal-signer")
+			case "shared account":
+				task.ServiceAccount = nil
+				manifest.Migrations["internal-signer"] = task
+			case "renamed account":
+				task.ServiceAccount.Name = "new-signer"
+				manifest.Migrations["internal-signer"] = task
+			}
+
+			require.NoError(t, reconcileMigrationServiceAccounts(ctx, c, wandb, manifest))
+			for _, obj := range []client.Object{&corev1.ServiceAccount{}, &rbacv1.Role{}, &rbacv1.RoleBinding{}} {
+				key := client.ObjectKey{Name: "wandb-migration-internal-signer", Namespace: wandb.Namespace}
+				require.True(t, apierrors.IsNotFound(c.Get(ctx, key, obj)), "stale %T must be removed", obj)
+				if change == "renamed account" {
+					key.Name = "new-signer"
+					require.NoError(t, c.Get(ctx, key, obj), "reconciled %T must be retained", obj)
+				}
+			}
+			require.NoError(t, reconcileMigrationServiceAccounts(ctx, c, wandb, manifest), "cleanup must be idempotent")
+		})
+	}
+}
+
+func TestMigrationIdentityCleanupPreservesOtherResources(t *testing.T) {
+	c, wandb, manifest := migrationIdentityFixture(t)
+	ctx := context.Background()
+	owner := metav1.OwnerReference{APIVersion: apiv2.GroupVersion.String(), Kind: "WeightsAndBiases", Name: wandb.Name, UID: wandb.UID}
+	otherOwner := owner
+	otherOwner.UID = "other-installation"
+	var preserved []client.Object
+	for _, test := range []struct {
+		name      string
+		namespace string
+		component string
+		owners    []metav1.OwnerReference
+	}{
+		{name: "unowned", namespace: wandb.Namespace, component: "migration-identity"},
+		{name: "other-owner", namespace: wandb.Namespace, component: "migration-identity", owners: []metav1.OwnerReference{otherOwner}},
+		{name: "unlabeled", namespace: wandb.Namespace, owners: []metav1.OwnerReference{owner}},
+		{name: "other-component", namespace: wandb.Namespace, component: "server", owners: []metav1.OwnerReference{owner}},
+		{name: "other-namespace", namespace: "other-namespace", component: "migration-identity", owners: []metav1.OwnerReference{owner}},
+	} {
+		for _, obj := range []client.Object{&corev1.ServiceAccount{}, &rbacv1.Role{}, &rbacv1.RoleBinding{}} {
+			obj.SetName(test.name)
+			obj.SetNamespace(test.namespace)
+			obj.SetOwnerReferences(test.owners)
+			if test.component != "" {
+				obj.SetLabels(map[string]string{"app.kubernetes.io/component": test.component})
+			}
+			require.NoError(t, c.Create(ctx, obj))
+			preserved = append(preserved, obj)
+		}
+	}
+
+	require.NoError(t, reconcileMigrationServiceAccounts(ctx, c, wandb, manifest))
+	for _, obj := range preserved {
+		require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(obj), obj), "%T %s must be retained", obj, obj.GetName())
+	}
 }
 
 func TestMigrationIdentityPermissionsDoNotImplyCredentialsOrSecrets(t *testing.T) {
