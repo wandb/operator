@@ -15,13 +15,22 @@ been validated.
 | `local-kind-oidc-pkce` | Any dispatched branch | None |
 | `local-kind-oidc-implicit` | Any dispatched branch | None |
 | `local-kind-proxy` | Any dispatched branch | None |
-| `aws-eks-s3-irsa` | `refs/heads/main` only | `westest-aws` |
 | `gcp-gke-gcs-hmac` | `refs/heads/main` only | `westest-gcp` |
+| `gcp-gke-gcs-byob` | `refs/heads/main` only | `westest-gcp` |
+| `gcp-gke-provider-services` | `refs/heads/main` only | `westest-gcp` |
+| `gcp-gke-gcs-letsencrypt` | `refs/heads/main` only | `westest-gcp` |
+| `gcp-gke-ingress-managed-cert` | `refs/heads/main` only | `westest-gcp` |
+| `gcp-gke-gateway-managed-cert-regional` | `refs/heads/main` only | `westest-gcp` |
+| `gcp-gke-gateway-managed-cert-global` | `refs/heads/main` only | `westest-gcp` |
 
-An empty `scenario` input selects all five local scenarios and, on main, both
+An empty `scenario` input selects all five local scenarios and, on main, all seven GCP
 cloud scenarios. A named scenario selects only that scenario. Unsupported names
 and attempts to select a cloud scenario on another ref fail during setup. There
 is no pull-request trigger for these provisioning tests.
+
+AWS scenarios remain disabled. The legacy `gcp-gke-ingress-in-cluster-services`
+and `gcp-gke-gateway-in-cluster-services` scaffolds are excluded because they do
+not run end-to-end validators; the Gateway scaffold also does not deploy W&B.
 
 Local tests use `ubuntu-latest-8-cores`, with up to three scenarios in parallel.
 Their Kind clusters need the additional CPU. Cloud tests use ordinary
@@ -32,10 +41,10 @@ same ref are serialized, and a new dispatch does not cancel an active run.
 ## Container and chart versions
 
 The action hardcodes the public WESTest image repository. The workflow selects
-only the tag through `WESTEST_IMAGE_TAG`, currently `0.4.0`:
+only the tag through `WESTEST_IMAGE_TAG`, currently `0.5.1`:
 
 ```text
-us-docker.pkg.dev/wandb-production/public/westest/westest:0.4.0
+us-docker.pkg.dev/wandb-production/public/westest/westest:0.5.1
 ```
 
 To test a different WESTest release, change `WESTEST_IMAGE_TAG` in the workflow.
@@ -83,6 +92,9 @@ also independently checks the main branch.
 
 ### AWS
 
+AWS is currently disabled in the scenario matrix. The authentication setup below
+is retained for when AWS scenarios are re-enabled.
+
 `aws-actions/configure-aws-credentials` assumes
 `arn:aws:iam::770934259321:role/WestestGitHubActions` through GitHub OIDC, requesting
 a four-hour session. The AWS trust policy requires the `westest-aws` environment
@@ -122,6 +134,14 @@ throughout provisioning and teardown without passing a short-lived standalone
 access token. Tests target `playground-111` in `us-central1` with
 `WESTEST_CLOUD_OPT_IN=1`.
 
+The managed-certificate Ingress and both managed-certificate Gateway scenarios
+use WESTest's default Cloud DNS zone `westest-gcp` (`westest-gcp.wandb.ml`) in
+`playground-111`. That zone must be publicly delegated. The CI identity needs
+the existing DNS and Certificate Manager permissions, and the provider-services
+scenario also needs Cloud SQL and Memorystore permissions. These are declared in
+[core's WESTest provisioning permissions](https://github.com/wandb/core/blob/master/terraform/terraform-workspaces/modules/westest-ci/provisioning-permissions.md).
+No additional workflow secrets or DNS inputs are required for the default zone.
+
 `WESTEST_LICENSE` is an optional repository/environment secret if a deployment
 requires a license; when present it is mounted as a private file. This workflow
 adds no required repository secret for cleanup recovery.
@@ -138,20 +158,21 @@ adds no required repository secret for cleanup recovery.
    `CI_WORKLOAD_IDENTITY_PROVIDER`, `CI_WORKLOAD_IDENTITY_SERVICE_ACCOUNT`,
    `WESTEST_APP_ID`, and `WESTEST_APP_PRIVATE_KEY`. The App credentials are still
    used by the build to fetch watchtower; test jobs no longer need them.
-4. Merge the workflow, then dispatch one AWS and one GCP scenario on main against
-   a known published chart. Confirm OIDC login, provisioning, validators and
-   teardown. These main-branch runs are the end-to-end authentication check;
+4. Merge the workflow, then dispatch the GCP scenarios on main against a known
+   published chart. Confirm OIDC login, provisioning, validators and teardown,
+   including Cloud SQL/Memorystore and all three managed-certificate paths.
+   These main-branch runs are the end-to-end authentication check;
    local tests cannot mint the same GitHub identity.
 5. Check the cloud accounts for leftover resources, including the known etcd PVC
-   cleanup issue, before enabling the cron or widening the cloud matrix.
+   cleanup issue, before enabling the cron.
 
 For example, substitute a published chart for `$CHART_VERSION`:
 
 ```bash
 gh workflow run nightly.yaml --repo wandb/operator --ref main \
-  -f scenario=aws-eks-s3-irsa -f operator_version="$CHART_VERSION"
-gh workflow run nightly.yaml --repo wandb/operator --ref main \
   -f scenario=gcp-gke-gcs-hmac -f operator_version="$CHART_VERSION"
+gh workflow run nightly.yaml --repo wandb/operator --ref main \
+  -f scenario=gcp-gke-gateway-managed-cert-global -f operator_version="$CHART_VERSION"
 ```
 
 To test a branch locally in Kind through Actions, dispatch that branch with a

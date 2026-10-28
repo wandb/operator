@@ -26,12 +26,22 @@ runner = load("runner", REPO / ".github/actions/westest-run/run.py")
 
 
 class MatrixTests(unittest.TestCase):
-    def test_main_runs_five_local_and_one_per_cloud(self):
+    gcp_scenarios = [
+        "gcp-gke-gcs-hmac",
+        "gcp-gke-gcs-byob",
+        "gcp-gke-provider-services",
+        "gcp-gke-gcs-letsencrypt",
+        "gcp-gke-ingress-managed-cert",
+        "gcp-gke-gateway-managed-cert-regional",
+        "gcp-gke-gateway-managed-cert-global",
+    ]
+
+    def test_main_runs_five_local_and_all_seven_gcp_scenarios(self):
         result = matrix.select_scenarios("refs/heads/main")
         self.assertEqual(len(json.loads(result["local_matrix"])["scenario"]), 5)
         self.assertEqual(json.loads(result["cloud_matrix"])["include"], [
-            {"scenario": "aws-eks-s3-irsa", "provider": "aws", "environment": "westest-aws"},
-            {"scenario": "gcp-gke-gcs-hmac", "provider": "gcp", "environment": "westest-gcp"},
+            {"scenario": scenario, "provider": "gcp", "environment": "westest-gcp"}
+            for scenario in self.gcp_scenarios
         ])
         self.assertEqual(result["has_local"], "true")
         self.assertEqual(result["has_cloud"], "true")
@@ -40,17 +50,29 @@ class MatrixTests(unittest.TestCase):
         for ref in ["refs/heads/feature", "refs/tags/main", "refs/pull/42/merge"]:
             with self.subTest(ref=ref):
                 self.assertEqual(matrix.select_scenarios(ref)["has_cloud"], "false")
-                for scenario in ["aws-eks-s3-irsa", "gcp-gke-gcs-hmac"]:
-                    with self.assertRaisesRegex(ValueError, "only run"):
+                for scenario in self.gcp_scenarios:
+                    with self.subTest(scenario=scenario), self.assertRaisesRegex(ValueError, "only run"):
                         matrix.select_scenarios(ref, scenario)
 
     def test_single_scenarios_skip_the_unused_job(self):
-        result = matrix.select_scenarios("refs/heads/main", "aws-eks-s3-irsa")
-        self.assertEqual(result["has_local"], "false")
-        self.assertEqual(len(json.loads(result["cloud_matrix"])["include"]), 1)
+        for scenario in self.gcp_scenarios:
+            with self.subTest(scenario=scenario):
+                result = matrix.select_scenarios("refs/heads/main", scenario)
+                self.assertEqual(result["has_local"], "false")
+                self.assertEqual(result["has_cloud"], "true")
+                self.assertEqual(json.loads(result["local_matrix"]), {"scenario": []})
+                self.assertEqual(json.loads(result["cloud_matrix"]), {"include": [
+                    {"scenario": scenario, "provider": "gcp", "environment": "westest-gcp"},
+                ]})
         result = matrix.select_scenarios("refs/heads/main", "local-kind-ingress")
         self.assertEqual(result["has_cloud"], "false")
         self.assertEqual(json.loads(result["local_matrix"]), {"scenario": ["local-kind-ingress"]})
+
+    def test_disabled_aws_and_legacy_gcp_scaffolds_are_rejected(self):
+        for scenario in ["aws-eks-s3-irsa", "gcp-gke-ingress-in-cluster-services",
+                         "gcp-gke-gateway-in-cluster-services"]:
+            with self.subTest(scenario=scenario), self.assertRaisesRegex(ValueError, "Unsupported"):
+                matrix.select_scenarios("refs/heads/main", scenario)
 
     def test_unknown_or_injected_scenario_is_rejected(self):
         for scenario in ["local-kind-unknown", 'x"]}\nother=value', "../../etc/passwd"]:

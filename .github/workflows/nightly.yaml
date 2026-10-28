@@ -1,7 +1,7 @@
 name: Nightly WESTest
 
 # End-to-end testing of the operator via wandb/westest. Builds an operator
-# image+chart and runs local Kind scenarios, plus AWS/GCP smoke tests on main.
+# image+chart and runs local Kind scenarios, plus all seven GCP end-to-end scenarios on main.
 #   - schedule                    -> nightly build (2.0.0-nightly-<timestamp>)
 #   - manual (workflow_dispatch)  -> dev build (2.0.0-dev-[<tag>-]<timestamp>),
 #                                    builds the dispatched branch; set `dev_tag`
@@ -25,7 +25,7 @@ on:
           - dev
           - nightly
       scenario:
-        description: "Single supported scenario (blank = 5 local scenarios, plus AWS/GCP on main)."
+        description: "Single supported scenario (blank = 5 local scenarios, plus 7 GCP scenarios on main)."
         type: string
         required: false
         default: ""

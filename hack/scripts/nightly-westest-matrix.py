@@ -12,8 +12,14 @@ LOCAL_SCENARIOS = [
     "local-kind-proxy",
 ]
 CLOUD_SCENARIOS = [
-#     {"scenario": "aws-eks-s3-irsa", "provider": "aws", "environment": "westest-aws"},
+    # AWS scenarios remain disabled. Legacy GCP scaffolds have no end-to-end validators.
     {"scenario": "gcp-gke-gcs-hmac", "provider": "gcp", "environment": "westest-gcp"},
+    {"scenario": "gcp-gke-gcs-byob", "provider": "gcp", "environment": "westest-gcp"},
+    {"scenario": "gcp-gke-provider-services", "provider": "gcp", "environment": "westest-gcp"},
+    {"scenario": "gcp-gke-gcs-letsencrypt", "provider": "gcp", "environment": "westest-gcp"},
+    {"scenario": "gcp-gke-ingress-managed-cert", "provider": "gcp", "environment": "westest-gcp"},
+    {"scenario": "gcp-gke-gateway-managed-cert-regional", "provider": "gcp", "environment": "westest-gcp"},
+    {"scenario": "gcp-gke-gateway-managed-cert-global", "provider": "gcp", "environment": "westest-gcp"},
 ]
 
 
