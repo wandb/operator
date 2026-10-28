@@ -139,7 +139,7 @@ jobs:
     timeout-minutes: ${{ matrix.scenario == 'local-kind-operator-upgrade' && 120 || 90 }}
     strategy:
       fail-fast: false
-      max-parallel: 3
+      max-parallel: 5
       matrix: ${{ fromJSON(needs.setup.outputs.local_matrix) }}
     steps:
       - name: Checkout (for the local westest-run action)

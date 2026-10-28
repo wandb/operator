@@ -40,7 +40,7 @@ AWS scenarios remain disabled. The legacy `gcp-gke-ingress-in-cluster-services`
 and `gcp-gke-gateway-in-cluster-services` scaffolds are excluded because they do
 not run end-to-end validators; the Gateway scaffold also does not deploy W&B.
 
-Local tests use `ubuntu-latest-8-cores`, with up to three scenarios in parallel.
+Local tests use `ubuntu-latest-8-cores`, with up to five scenarios in parallel.
 Their Kind clusters need the additional CPU. Cloud tests use ordinary
 `ubuntu-latest` runners, with up to two scenarios in parallel; Kubernetes runs in
 the cloud account. A failed scenario does not cancel its siblings. Runs on the
