@@ -1,5 +1,6 @@
 """Offline regression tests for nightly selection and the Docker credential boundary."""
 
+import hashlib
 import importlib.util
 import io
 import json
@@ -28,69 +29,82 @@ app_release = load("app_release", REPO / "hack/scripts/nightly-westest-app-versi
 
 class ApplicationReleaseTests(unittest.TestCase):
     @staticmethod
-    def release(tag, **fields):
-        return {"tag_name": tag, "draft": False, "prerelease": False,
-                "published_at": "2026-10-01T00:00:00Z", **fields}
+    def tag_page(tags, **headers):
+        return json.dumps({"tags": tags}).encode(), headers
 
-    def test_selects_highest_stable_server_version_not_publication_order(self):
-        releases = [
-            self.release("server/v0.9.9"),
-            self.release("server/v0.85.1"),
-            self.release("server/v0.86.0-rc.1"),
-            self.release("server/v0.86.0", draft=True),
-            self.release("server/v0.87.0", prerelease=True),
-            self.release("server/v0.88.0", published_at=None),
-            self.release("local/v9.0.0"),
-            self.release("v10.0.0"),
-            self.release("server/prerelease/0.89.0-daily.123"),
-            self.release("server/v0.85.0"),
-        ]
-        self.assertEqual(app_release.select_version(releases), "0.85.1")
-        self.assertEqual(app_release.select_version(releases, "0.85.0"), "0.85.0")
+    def test_selects_highest_stable_server_version_not_tag_order(self):
+        tags = ["0.9.9", "0.85.1", "0.86.0-rc.1", "0.86.0-beta.1", "0.86.0-daily.123",
+                "0.86.0-pre.123", "latest", "buildcache", "v10.0.0", "0.85.0", "00.99.0"]
+        self.assertEqual(app_release.select_version(tags), "0.85.1")
+        self.assertEqual(app_release.select_version(tags, "0.85.0"), "0.85.0")
 
     def test_manual_override_must_be_a_published_stable_release(self):
-        releases = [self.release("server/v0.85.1")]
         for version in ["0.85.2", "0.86.0-rc.1", "0.86.0-beta.1", "0.86.0-daily.1",
                         "0.86.0-pre.1", "latest", "v0.85.1", "0.85.1+build", "00.85.1", "0.85.1\n"]:
             with self.subTest(version=version), self.assertRaisesRegex(ValueError, "stable"):
-                app_release.select_version(releases, version)
-        for fields in [{"draft": True}, {"prerelease": True}, {"published_at": None}]:
-            with self.subTest(fields=fields), self.assertRaisesRegex(ValueError, "published stable"):
-                app_release.select_version([self.release("server/v0.85.1", **fields)], "0.85.1")
+                app_release.select_version(["0.85.1"], version)
 
     def test_no_stable_release_does_not_fall_back_to_a_prerelease(self):
         with self.assertRaisesRegex(ValueError, "No published stable"):
-            app_release.select_version([self.release("server/v0.85.0-rc.1")])
+            app_release.select_version(["0.85.0-rc.1"])
 
-    def test_resolver_returns_exact_release_commit_and_manifest_digest(self):
-        commit, digest = "a" * 40, "sha256:" + "b" * 64
-        releases = "\n".join(json.dumps(self.release(tag)) for tag in ["server/v0.85.1", "server/v0.9.9"])
-        responses = [releases, commit, json.dumps({"digest": digest})]
-        with patch.object(app_release, "command_output", side_effect=responses) as command:
+    def test_resolver_follows_pagination_and_verifies_selected_manifest_digest(self):
+        body = json.dumps({"schemaVersion": 2, "mediaType": app_release.MANIFEST_TYPES[0],
+                           "manifests": []}).encode()
+        digest = "sha256:" + hashlib.sha256(body).hexdigest()
+        next_page = f"{app_release.REGISTRY_API}/tags/list?n=1000&last=0.85.0"
+        responses = [self.tag_page(["0.85.0"], Link=f'<{next_page}>; rel="next"'),
+                     self.tag_page(["0.85.1", "0.9.9", "0.86.0-rc.1"]),
+                     (body, {"Docker-Content-Digest": digest})]
+        with patch.object(app_release, "fetch", side_effect=responses) as fetch:
             self.assertEqual(app_release.resolve(), {
-                "app_version": "0.85.1", "app_core_commit": commit, "app_manifest_digest": digest,
+                "app_version": "0.85.1", "app_manifest_digest": digest,
             })
-        commands = [call.args[0] for call in command.call_args_list]
-        self.assertIn("--paginate", commands[0])
-        self.assertIn("repos/wandb/core/commits/server%2Fv0.85.1", commands[1])
-        self.assertEqual(commands[2][-1], f"{app_release.MANIFEST_REPOSITORY}:0.85.1")
+        self.assertEqual([call.args[0] for call in fetch.call_args_list], [
+            f"{app_release.REGISTRY_API}/tags/list?n=1000", next_page,
+            f"{app_release.REGISTRY_API}/manifests/0.85.1",
+        ])
 
     def test_missing_latest_manifest_fails_without_selecting_an_older_release(self):
-        releases = "\n".join(json.dumps(self.release(tag)) for tag in ["server/v0.85.1", "server/v0.85.0"])
-        responses = [releases,
-                     "a" * 40, subprocess.CalledProcessError(1, ["docker"])]
-        with patch.object(app_release, "command_output", side_effect=responses) as command:
-            with self.assertRaisesRegex(RuntimeError, "0.85.1 is unavailable"):
+        responses = [self.tag_page(["0.85.1", "0.85.0"]), RuntimeError("manifest unavailable")]
+        with patch.object(app_release, "fetch", side_effect=responses) as fetch:
+            with self.assertRaisesRegex(RuntimeError, "manifest unavailable"):
                 app_release.resolve()
-            self.assertEqual(command.call_count, 3)
+            self.assertEqual(fetch.call_count, 2)
 
-    def test_invalid_release_metadata_is_rejected(self):
-        for commit, digest in [("master", "sha256:" + "b" * 64), ("a" * 40, "latest")]:
-            responses = [json.dumps(self.release("server/v0.85.1")), commit, json.dumps({"digest": digest})]
-            with self.subTest(commit=commit, digest=digest):
-                with patch.object(app_release, "command_output", side_effect=responses):
+    def test_invalid_manifest_and_missing_or_mismatched_digest_are_rejected(self):
+        valid = {"schemaVersion": 2, "mediaType": app_release.MANIFEST_TYPES[0], "manifests": []}
+        for manifest, digest in [({}, ""), (valid, ""), (valid, "sha256:" + "b" * 64)]:
+            responses = [self.tag_page(["0.85.1"]),
+                         (json.dumps(manifest).encode(), {"Docker-Content-Digest": digest})]
+            with self.subTest(manifest=manifest, digest=digest):
+                with patch.object(app_release, "fetch", side_effect=responses):
                     with self.assertRaises(ValueError):
                         app_release.resolve()
+
+    def test_invalid_listing_and_pagination_fail_instead_of_selecting_from_partial_results(self):
+        for page in [self.tag_page(None), self.tag_page([None]),
+                     self.tag_page(["0.85.1"], Link="malformed"),
+                     self.tag_page(["0.85.1"], Link='<https://example.com/tags>; rel="next"'),
+                     self.tag_page(["0.85.1"], Link='<?n=1000>; rel="next"')]:
+            with self.subTest(page=page), patch.object(app_release, "fetch", return_value=page) as fetch:
+                with self.assertRaisesRegex(ValueError, "Invalid server manifest tag"):
+                    app_release.resolve()
+                self.assertEqual(fetch.call_count, 1)
+
+    def test_fetch_sends_no_authorization(self):
+        response = io.BytesIO(b'{"tags": []}')
+        response.headers = {}
+        with patch.dict(os.environ, {"GH_TOKEN": "must-not-send", "GITHUB_TOKEN": "must-not-send"}):
+            with patch.object(app_release, "urlopen", return_value=response) as request:
+                self.assertEqual(app_release.fetch(f"{app_release.REGISTRY_API}/tags/list"),
+                                 (b'{"tags": []}', {}))
+        self.assertIsNone(request.call_args.args[0].get_header("Authorization"))
+
+    def test_registry_request_failure_is_reported(self):
+        with patch.object(app_release, "urlopen", side_effect=app_release.URLError("unavailable")):
+            with self.assertRaisesRegex(RuntimeError, "Could not read public server manifest metadata"):
+                app_release.fetch(f"{app_release.REGISTRY_API}/tags/list")
 
 
 class MatrixTests(unittest.TestCase):
@@ -176,7 +190,7 @@ class RunnerTests(unittest.TestCase):
             "GITHUB_REF": "refs/heads/main", "GITHUB_RUN_ID": "123", "GITHUB_RUN_ATTEMPT": "1",
             "SCENARIO": "local-kind-ingress", "PROVIDER": "local",
             "OPERATOR_VERSION": "2.0.0-dev-test-20261016-120000", "WESTEST_IMAGE_TAG": "0.4.0",
-            "APP_VERSION": "0.85.1", "APP_CORE_COMMIT": "a" * 40,
+            "APP_VERSION": "0.85.1",
             "APP_MANIFEST_DIGEST": "sha256:" + "b" * 64,
             "AWS_ACCESS_KEY_ID": "test-id", "AWS_SECRET_ACCESS_KEY": "test-secret",
             "AWS_SESSION_TOKEN": "test-session-token",
@@ -297,7 +311,6 @@ class RunnerTests(unittest.TestCase):
                 summary = json.loads((self.root / f"westest-{scenario}/summary.json").read_text())
                 self.assertEqual(summary["exit_code"], 124)
                 self.assertEqual(summary["app_version"], self.env["APP_VERSION"])
-                self.assertEqual(summary["app_core_commit"], self.env["APP_CORE_COMMIT"])
                 self.assertEqual(summary["app_manifest_digest"], self.env["APP_MANIFEST_DIGEST"])
                 self.assertIn("result=failed", (self.root / "output").read_text())
 
@@ -332,13 +345,12 @@ class RunnerTests(unittest.TestCase):
                 self.assertEqual(summary["exit_code"], exit_code)
                 self.assertIn(f"Operator upgrade: {from_version} -> {to_version}", step_summary.read_text())
                 self.assertIn(f"Application: {self.env['APP_VERSION']}", step_summary.read_text())
-                self.assertIn(self.env["APP_CORE_COMMIT"], step_summary.read_text())
                 self.assertIn(self.env["APP_MANIFEST_DIGEST"], step_summary.read_text())
 
     def test_runner_rejects_prerelease_apps_and_missing_release_metadata_before_docker(self):
         for key, value in [("APP_VERSION", ""), ("APP_VERSION", "0.86.0-rc.1"),
                            ("APP_VERSION", "0.86.0-beta.1"), ("APP_VERSION", "0.86.0-daily.1"),
-                           ("APP_CORE_COMMIT", ""), ("APP_MANIFEST_DIGEST", "")]:
+                           ("APP_MANIFEST_DIGEST", "")]:
             with self.subTest(key=key, value=value):
                 env = dict(self.env, **{key: value})
                 with patch.object(runner.subprocess, "run") as command:

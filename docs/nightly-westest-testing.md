@@ -112,24 +112,25 @@ The reusable [nightly build](../.github/workflows/nightly-build.yaml) is unchang
 
 ## Application versions
 
-Operator tests use already released application versions. Setup reads Core's
-published GitHub releases and chooses the highest semantic version matching
-`server/vX.Y.Z`, excluding drafts and prereleases. RC, beta, daily, and other
+Operator tests use already released application versions. Setup anonymously lists
+tags in `us-docker.pkg.dev/wandb-production/public/wandb/server-manifest` and chooses
+the highest semantic version matching exactly `X.Y.Z`. RC, beta, daily, and other
 prerelease application builds are not eligible; their validation belongs in Core.
 The optional `app_version` dispatch input selects an exact `X.Y.Z` for reproduction,
-but that version must also have a published, non-prerelease Core release.
+but that version must also have a published stable server manifest.
 
-Before any scenario starts, setup resolves the release tag to its Core commit and
-checks the public `us-docker.pkg.dev/wandb-production/public/wandb/server-manifest`
-artifact for that version. Core creates the GitHub release before publishing the
-manifest, so a missing manifest fails setup with no fallback to an older version.
-Retry after publication completes. API or registry failures also fail setup.
+Core publishes the stable manifest after its release job succeeds, so the public
+manifest is the publication signal. A release becomes eligible when its stable
+manifest tag appears. Setup reads the selected manifest and verifies its SHA-256
+digest against the registry response before any scenario starts. Registry errors,
+missing selected manifests, and digest mismatches fail setup without falling back
+to another version.
 
 The resulting version is resolved once and passed as `--param appVersion=<version>`
 to both `westest config` and `westest run` for every local and cloud scenario.
 The operator-upgrade scenario applies that same version to both phases, holding
 the application constant while the operator changes. The setup summary and each
-scenario's public summary record the application version, Core commit, and manifest
+scenario's public summary record the application version and manifest
 digest resolved at setup. A fresh workflow run resolves the latest release again;
 use `app_version` to reproduce an earlier run's selected version:
 
@@ -140,11 +141,9 @@ gh workflow run nightly.yaml --repo wandb/operator --ref main \
   -f app_version=0.85.1
 ```
 
-Setup uses `WESTEST_APP_ID` and `WESTEST_APP_PRIVATE_KEY` to mint a token scoped
-to `wandb/core` with `contents: read`. The App must be installed on Core with that
-permission. These secrets are required even when `operator_version` skips the
-build or `app_version` selects an explicit release. The token stays in setup;
-scenario jobs receive only the resolved version and provenance metadata.
+Application selection requires no GitHub token, registry credentials, or Core
+repository access. It uses the public Registry V2 API directly. The manifest digest
+provides the recorded artifact identity; setup does not look up the Core commit.
 
 ## Cloud authentication
 
@@ -217,11 +216,10 @@ adds no required repository secret for cleanup recovery.
 2. Have an operator repository administrator configure `westest-aws` and
    `westest-gcp`, restrict deployments to main, and add any desired reviewers.
    Merely naming an environment in YAML does not configure these protections.
-3. Confirm `ubuntu-latest-8-cores` is available. All runs require `WESTEST_APP_ID`
-   and `WESTEST_APP_PRIVATE_KEY` with read access to Core releases as described
-   above. Build mode also needs `CI_WORKLOAD_IDENTITY_PROVIDER`,
-   `CI_WORKLOAD_IDENTITY_SERVICE_ACCOUNT`, and the App's existing watchtower access.
-   Scenario jobs do not receive the App credentials.
+3. Confirm `ubuntu-latest-8-cores` is available. For build mode, retain
+   `CI_WORKLOAD_IDENTITY_PROVIDER`, `CI_WORKLOAD_IDENTITY_SERVICE_ACCOUNT`,
+   `WESTEST_APP_ID`, and `WESTEST_APP_PRIVATE_KEY`. The App credentials are used
+   by the build to fetch watchtower; setup and scenario jobs do not need them.
 4. Merge the workflow, then dispatch the GCP scenarios on main against a known
    published chart. Confirm OIDC login, provisioning, validators and teardown,
    including Cloud SQL/Memorystore and all three managed-certificate paths.
@@ -264,7 +262,7 @@ cleanup.
 
 The Actions log contains the live WESTest output. Each scenario uploads only an
 allowlisted `summary.json`: scenario, provider, image, chart version, application
-version, Core commit, resolved server manifest digest, container name, exit code,
+version, resolved server manifest digest, container name, exit code,
 duration when available, and the number of cleanup checkpoints
 remaining. Upgrade summaries also record the starting chart version alongside
 the destination chart version. The job summary flags remaining checkpoints. The

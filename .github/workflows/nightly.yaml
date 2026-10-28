@@ -45,7 +45,7 @@ on:
         required: false
         default: ""
       app_version:
-        description: "Published stable Core server version (X.Y.Z). Blank selects the latest stable release; prereleases are rejected."
+        description: "Published stable application version (X.Y.Z). Blank selects the latest stable server manifest; prereleases are rejected."
         type: string
         required: false
         default: ""
@@ -93,7 +93,6 @@ jobs:
       has_cloud: ${{ steps.matrix.outputs.has_cloud }}
       chart_version: ${{ steps.version.outputs.chart_version }}
       app_version: ${{ steps.app-version.outputs.app_version }}
-      app_core_commit: ${{ steps.app-version.outputs.app_core_commit }}
       app_manifest_digest: ${{ steps.app-version.outputs.app_manifest_digest }}
     steps:
       - name: Checkout
@@ -121,19 +120,9 @@ jobs:
         env:
           SCENARIO: ${{ inputs.scenario }}
         run: python3 hack/scripts/nightly-westest-matrix.py
-      - name: Mint a read-only token for Core releases
-        id: core-token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-        with:
-          app-id: ${{ secrets.WESTEST_APP_ID }}
-          private-key: ${{ secrets.WESTEST_APP_PRIVATE_KEY }}
-          owner: wandb
-          repositories: core
-          permission-contents: read
       - name: Resolve published stable application version
         id: app-version
         env:
-          GH_TOKEN: ${{ steps.core-token.outputs.token }}
           APP_VERSION: ${{ inputs.app_version }}
         run: python3 hack/scripts/nightly-westest-app-version.py
 
@@ -163,7 +152,6 @@ jobs:
           operator-version: ${{ needs.setup.outputs.chart_version }}
           upgrade-from-version: ${{ inputs.upgrade_from_version || env.OPERATOR_UPGRADE_FROM_VERSION }}
           app-version: ${{ needs.setup.outputs.app_version }}
-          app-core-commit: ${{ needs.setup.outputs.app_core_commit }}
           app-manifest-digest: ${{ needs.setup.outputs.app_manifest_digest }}
 
   cloud-test:
@@ -209,7 +197,6 @@ jobs:
           operator-version: ${{ needs.setup.outputs.chart_version }}
           license: ${{ secrets.WESTEST_LICENSE }}
           app-version: ${{ needs.setup.outputs.app_version }}
-          app-core-commit: ${{ needs.setup.outputs.app_core_commit }}
           app-manifest-digest: ${{ needs.setup.outputs.app_manifest_digest }}
 
   report:
