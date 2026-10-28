@@ -17,6 +17,15 @@ inputs:
   upgrade-from-version:
     description: Starting chart version, required only for local-kind-operator-upgrade.
     default: ""
+  app-version:
+    description: Published stable Core server version resolved once by workflow setup.
+    required: true
+  app-core-commit:
+    description: Core release commit SHA resolved by workflow setup.
+    required: true
+  app-manifest-digest:
+    description: Public server manifest digest resolved by workflow setup.
+    required: true
   license:
     description: Optional W&B license file contents.
     default: ""
@@ -42,6 +51,9 @@ runs:
         WESTEST_IMAGE_TAG: ${{ inputs.image-tag }}
         OPERATOR_VERSION: ${{ inputs.operator-version }}
         OPERATOR_UPGRADE_FROM_VERSION: ${{ inputs.upgrade-from-version }}
+        APP_VERSION: ${{ inputs.app-version }}
+        APP_CORE_COMMIT: ${{ inputs.app-core-commit }}
+        APP_MANIFEST_DIGEST: ${{ inputs.app-manifest-digest }}
         WESTEST_LICENSE: ${{ inputs.license }}
       run: python3 "$ACTION_PATH/run.py"
 

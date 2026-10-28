@@ -84,6 +84,12 @@ def run(env):
     version = env["OPERATOR_VERSION"]
     if not re.fullmatch(r"[a-zA-Z0-9.+-]+", version):
         raise ValueError("Invalid operator chart version")
+    app_version = env.get("APP_VERSION", "")
+    if not re.fullmatch(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", app_version):
+        raise ValueError("Application version must be a published stable X.Y.Z release")
+    app_commit, app_digest = env.get("APP_CORE_COMMIT", ""), env.get("APP_MANIFEST_DIGEST", "")
+    if not re.fullmatch(r"[0-9a-f]{40}", app_commit) or not re.fullmatch(r"sha256:[0-9a-f]{64}", app_digest):
+        raise ValueError("Missing or invalid application release metadata from workflow setup")
     upgrade = scenario == "local-kind-operator-upgrade"
     params = ["--param", f"operatorVersion={version}"]
     if upgrade:
@@ -94,6 +100,8 @@ def run(env):
             raise ValueError("Operator upgrade starting and destination chart versions must differ")
         params = ["--param", f"fromOperatorVersion={from_version}",
                   "--param", f"toOperatorVersion={version}"]
+    # The upgrade scenario maps appVersion to both phases, holding the app fixed.
+    params += ["--param", f"appVersion={app_version}"]
     image = image_for_tag(env["WESTEST_IMAGE_TAG"])
     root = Path(env["RUNNER_TEMP"]) / f"westest-{scenario}"
     (root / "work").mkdir(parents=True, exist_ok=True)
@@ -101,7 +109,9 @@ def run(env):
     with open(env["GITHUB_OUTPUT"], "a") as output:
         output.write(f"work-root={root}\nartifact-dir={root / 'public'}\n")
     summary = {"scenario": scenario, "provider": provider, "image": image,
-               "operator_version": version, "container": name, "exit_code": 1}
+               "operator_version": version, "app_version": app_version,
+               "app_core_commit": app_commit, "app_manifest_digest": app_digest,
+               "container": name, "exit_code": 1}
     if upgrade:
         summary["operator_from_version"] = from_version
     # Write before starting so an always() step can also stop an interrupted run.
@@ -154,6 +164,9 @@ def collect(root):
     with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as output:
         output.write(f"### {summary['scenario']}\n\n"
                      f"Operator: {summary['operator_version']}\n\n"
+                     f"Application: {summary['app_version']}\n\n"
+                     f"Core commit: `{summary['app_core_commit']}`\n\n"
+                     f"Server manifest digest: `{summary['app_manifest_digest']}`\n\n"
                      f"Exit code: {summary['exit_code']}\n\n"
                      f"Cleanup checkpoints remaining: {summary['cleanup_checkpoint_count']}\n\n")
         if summary.get("operator_from_version"):

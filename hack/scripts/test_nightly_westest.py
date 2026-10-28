@@ -23,6 +23,74 @@ def load(name, path):
 
 matrix = load("matrix", REPO / "hack/scripts/nightly-westest-matrix.py")
 runner = load("runner", REPO / ".github/actions/westest-run/run.py")
+app_release = load("app_release", REPO / "hack/scripts/nightly-westest-app-version.py")
+
+
+class ApplicationReleaseTests(unittest.TestCase):
+    @staticmethod
+    def release(tag, **fields):
+        return {"tag_name": tag, "draft": False, "prerelease": False,
+                "published_at": "2026-10-01T00:00:00Z", **fields}
+
+    def test_selects_highest_stable_server_version_not_publication_order(self):
+        releases = [
+            self.release("server/v0.9.9"),
+            self.release("server/v0.85.1"),
+            self.release("server/v0.86.0-rc.1"),
+            self.release("server/v0.86.0", draft=True),
+            self.release("server/v0.87.0", prerelease=True),
+            self.release("server/v0.88.0", published_at=None),
+            self.release("local/v9.0.0"),
+            self.release("v10.0.0"),
+            self.release("server/prerelease/0.89.0-daily.123"),
+            self.release("server/v0.85.0"),
+        ]
+        self.assertEqual(app_release.select_version(releases), "0.85.1")
+        self.assertEqual(app_release.select_version(releases, "0.85.0"), "0.85.0")
+
+    def test_manual_override_must_be_a_published_stable_release(self):
+        releases = [self.release("server/v0.85.1")]
+        for version in ["0.85.2", "0.86.0-rc.1", "0.86.0-beta.1", "0.86.0-daily.1",
+                        "0.86.0-pre.1", "latest", "v0.85.1", "0.85.1+build", "00.85.1", "0.85.1\n"]:
+            with self.subTest(version=version), self.assertRaisesRegex(ValueError, "stable"):
+                app_release.select_version(releases, version)
+        for fields in [{"draft": True}, {"prerelease": True}, {"published_at": None}]:
+            with self.subTest(fields=fields), self.assertRaisesRegex(ValueError, "published stable"):
+                app_release.select_version([self.release("server/v0.85.1", **fields)], "0.85.1")
+
+    def test_no_stable_release_does_not_fall_back_to_a_prerelease(self):
+        with self.assertRaisesRegex(ValueError, "No published stable"):
+            app_release.select_version([self.release("server/v0.85.0-rc.1")])
+
+    def test_resolver_returns_exact_release_commit_and_manifest_digest(self):
+        commit, digest = "a" * 40, "sha256:" + "b" * 64
+        releases = "\n".join(json.dumps(self.release(tag)) for tag in ["server/v0.85.1", "server/v0.9.9"])
+        responses = [releases, commit, json.dumps({"digest": digest})]
+        with patch.object(app_release, "command_output", side_effect=responses) as command:
+            self.assertEqual(app_release.resolve(), {
+                "app_version": "0.85.1", "app_core_commit": commit, "app_manifest_digest": digest,
+            })
+        commands = [call.args[0] for call in command.call_args_list]
+        self.assertIn("--paginate", commands[0])
+        self.assertIn("repos/wandb/core/commits/server%2Fv0.85.1", commands[1])
+        self.assertEqual(commands[2][-1], f"{app_release.MANIFEST_REPOSITORY}:0.85.1")
+
+    def test_missing_latest_manifest_fails_without_selecting_an_older_release(self):
+        releases = "\n".join(json.dumps(self.release(tag)) for tag in ["server/v0.85.1", "server/v0.85.0"])
+        responses = [releases,
+                     "a" * 40, subprocess.CalledProcessError(1, ["docker"])]
+        with patch.object(app_release, "command_output", side_effect=responses) as command:
+            with self.assertRaisesRegex(RuntimeError, "0.85.1 is unavailable"):
+                app_release.resolve()
+            self.assertEqual(command.call_count, 3)
+
+    def test_invalid_release_metadata_is_rejected(self):
+        for commit, digest in [("master", "sha256:" + "b" * 64), ("a" * 40, "latest")]:
+            responses = [json.dumps(self.release("server/v0.85.1")), commit, json.dumps({"digest": digest})]
+            with self.subTest(commit=commit, digest=digest):
+                with patch.object(app_release, "command_output", side_effect=responses):
+                    with self.assertRaises(ValueError):
+                        app_release.resolve()
 
 
 class MatrixTests(unittest.TestCase):
@@ -108,6 +176,8 @@ class RunnerTests(unittest.TestCase):
             "GITHUB_REF": "refs/heads/main", "GITHUB_RUN_ID": "123", "GITHUB_RUN_ATTEMPT": "1",
             "SCENARIO": "local-kind-ingress", "PROVIDER": "local",
             "OPERATOR_VERSION": "2.0.0-dev-test-20261016-120000", "WESTEST_IMAGE_TAG": "0.4.0",
+            "APP_VERSION": "0.85.1", "APP_CORE_COMMIT": "a" * 40,
+            "APP_MANIFEST_DIGEST": "sha256:" + "b" * 64,
             "AWS_ACCESS_KEY_ID": "test-id", "AWS_SECRET_ACCESS_KEY": "test-secret",
             "AWS_SESSION_TOKEN": "test-session-token",
         }
@@ -221,10 +291,14 @@ class RunnerTests(unittest.TestCase):
                 config = next(args for args in calls if "config" in args)
                 run = next(args for args in calls if args[0] == "timeout")
                 for args in [config, run]:
-                    self.assertEqual(args[-2:], ["--param", f"operatorVersion={self.env['OPERATOR_VERSION']}"])
+                    self.assertEqual(args[-4:], ["--param", f"operatorVersion={self.env['OPERATOR_VERSION']}",
+                                                 "--param", f"appVersion={self.env['APP_VERSION']}"])
                 self.assertEqual(run[:4], ["timeout", "--signal=INT", f"--kill-after={grace}", duration])
                 summary = json.loads((self.root / f"westest-{scenario}/summary.json").read_text())
                 self.assertEqual(summary["exit_code"], 124)
+                self.assertEqual(summary["app_version"], self.env["APP_VERSION"])
+                self.assertEqual(summary["app_core_commit"], self.env["APP_CORE_COMMIT"])
+                self.assertEqual(summary["app_manifest_digest"], self.env["APP_MANIFEST_DIGEST"])
                 self.assertIn("result=failed", (self.root / "output").read_text())
 
     def test_operator_upgrade_passes_both_versions_and_reports_them(self):
@@ -242,8 +316,9 @@ class RunnerTests(unittest.TestCase):
                 config = next(args for args in calls if "config" in args)
                 run = next(args for args in calls if args[0] == "timeout")
                 for args in [config, run]:
-                    self.assertEqual(args[-4:], ["--param", f"fromOperatorVersion={from_version}",
-                                                 "--param", f"toOperatorVersion={to_version}"])
+                    self.assertEqual(args[-6:], ["--param", f"fromOperatorVersion={from_version}",
+                                                 "--param", f"toOperatorVersion={to_version}",
+                                                 "--param", f"appVersion={self.env['APP_VERSION']}"])
                     self.assertNotIn(f"operatorVersion={to_version}", args)
                 self.assertEqual(run[:4], ["timeout", "--signal=INT", "--kill-after=11m", "90m"])
                 root = self.root / f"westest-{scenario}"
@@ -256,6 +331,21 @@ class RunnerTests(unittest.TestCase):
                 self.assertEqual(summary["operator_version"], to_version)
                 self.assertEqual(summary["exit_code"], exit_code)
                 self.assertIn(f"Operator upgrade: {from_version} -> {to_version}", step_summary.read_text())
+                self.assertIn(f"Application: {self.env['APP_VERSION']}", step_summary.read_text())
+                self.assertIn(self.env["APP_CORE_COMMIT"], step_summary.read_text())
+                self.assertIn(self.env["APP_MANIFEST_DIGEST"], step_summary.read_text())
+
+    def test_runner_rejects_prerelease_apps_and_missing_release_metadata_before_docker(self):
+        for key, value in [("APP_VERSION", ""), ("APP_VERSION", "0.86.0-rc.1"),
+                           ("APP_VERSION", "0.86.0-beta.1"), ("APP_VERSION", "0.86.0-daily.1"),
+                           ("APP_CORE_COMMIT", ""), ("APP_MANIFEST_DIGEST", "")]:
+            with self.subTest(key=key, value=value):
+                env = dict(self.env, **{key: value})
+                with patch.object(runner.subprocess, "run") as command:
+                    with self.assertRaisesRegex(ValueError, "[Aa]pplication"):
+                        runner.run(env)
+                    command.assert_not_called()
+                self.assertFalse((self.root / "westest-local-kind-ingress").exists())
 
     def test_operator_upgrade_rejects_missing_invalid_or_identical_baseline_before_docker(self):
         self.env["SCENARIO"] = "local-kind-operator-upgrade"
