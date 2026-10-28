@@ -15,6 +15,9 @@ been validated.
 | `local-kind-oidc-pkce` | Any dispatched branch | None |
 | `local-kind-oidc-implicit` | Any dispatched branch | None |
 | `local-kind-proxy` | Any dispatched branch | None |
+| `local-kind-external` | Any dispatched branch | None |
+| `local-kind-proxy-auth` | Any dispatched branch | None |
+| `local-kind-proxy-tls` | Any dispatched branch | None |
 | `gcp-gke-gcs-hmac` | `refs/heads/main` only | `westest-gcp` |
 | `gcp-gke-gcs-byob` | `refs/heads/main` only | `westest-gcp` |
 | `gcp-gke-provider-services` | `refs/heads/main` only | `westest-gcp` |
@@ -23,10 +26,14 @@ been validated.
 | `gcp-gke-gateway-managed-cert-regional` | `refs/heads/main` only | `westest-gcp` |
 | `gcp-gke-gateway-managed-cert-global` | `refs/heads/main` only | `westest-gcp` |
 
-An empty `scenario` input selects all five local scenarios and, on main, all seven GCP
+An empty `scenario` input selects all eight local scenarios and, on main, all seven GCP
 cloud scenarios. A named scenario selects only that scenario. Unsupported names
 and attempts to select a cloud scenario on another ref fail during setup. There
 is no pull-request trigger for these provisioning tests.
+
+The local matrix covers external datastores, authenticated proxy egress, and
+TLS-intercepting proxy CA trust alongside the baseline routing and OIDC checks.
+`local-kind-app-test-data` is not yet enabled for nightly use.
 
 AWS scenarios remain disabled. The legacy `gcp-gke-ingress-in-cluster-services`
 and `gcp-gke-gateway-in-cluster-services` scaffolds are excluded because they do
