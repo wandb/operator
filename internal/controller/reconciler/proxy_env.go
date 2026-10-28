@@ -17,6 +17,7 @@ import (
 // .svc.cluster.local suffix already covers the whole in-cluster HTTP mesh.
 var proxyNoProxyStatic = []string{
 	"localhost", "127.0.0.1", "::1",
+	"169.254.169.254",
 	".svc", ".svc.cluster.local", ".cluster.local",
 	"kubernetes.default.svc",
 }
