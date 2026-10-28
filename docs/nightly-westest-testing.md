@@ -3,8 +3,36 @@
 [The nightly workflow](../.github/workflows/nightly.yaml) builds an operator image
 and chart, then tests that chart with the published WESTest container. Manual runs
 can instead select an existing chart version and skip the build. The daily 07:00
-UTC schedule remains commented out until the first cloud runs and cleanup have
-been validated.
+UTC schedule starts builds and tests only when the operator commit has changed.
+
+## Schedule and change detection
+
+Each scheduled run starts with a small `ubuntu-latest` job that compares its
+operator commit with the most recent earlier scheduled run on main whose
+`Check nightly changes` job completed successfully. The first scheduled run with
+no usable history runs the suite. Any different operator commit counts, including
+workflow, chart, dependency, and documentation changes; there is no time window
+that could miss commits after a delayed or missed schedule.
+
+When the commit is unchanged, the build, application-version lookup, scenario
+jobs, and report job are skipped. Only the change-check runner is used, and its
+summary explains the skip. A skipped night carries the same comparison commit
+forward, so repeated idle nights continue to skip. A new stable application
+release alone does not trigger tests; the next eligible run resolves the latest
+stable version as usual.
+
+A completed change check counts even if the subsequent build or tests fail or
+are cancelled. Unchanged code is not retried automatically each night. Use a
+manual dispatch to retry: manual runs always bypass the change check and never
+advance the scheduled comparison, since they may select just one scenario or an
+older chart. A failed or cancelled change-check job does not advance it either.
+
+History is read through this repository's `GITHUB_TOKEN` with `actions: read`;
+no new secrets, Core access, or writable state are required. API failures or
+unusable truncated history fail the check before paid work starts. Runs on the
+same ref remain serialized without cancelling active tests. If GitHub history
+is deleted or expires, the next scheduled check with no usable history runs once
+to establish a new comparison.
 
 ## Scenarios and branch selection
 
@@ -226,7 +254,7 @@ adds no required repository secret for cleanup recovery.
    These main-branch runs are the end-to-end authentication check;
    local tests cannot mint the same GitHub identity.
 5. Check the cloud accounts for leftover resources, including the known etcd PVC
-   cleanup issue, before enabling the cron.
+   cleanup issue, before merging schedule changes or leaving runs unattended.
 
 For example, substitute a published chart for `$CHART_VERSION`:
 
@@ -279,10 +307,11 @@ remaining resources; do not assume the absence of a checkpoint proves cleanup
 completed after a forced interruption.
 
 Follow-up work includes a secure recovery mechanism for failed teardown and the
-etcd PVC cleanup issue observed during local AWS/GCP validation. Keep the cron
-disabled until cleanup behavior is acceptable for unattended runs.
+etcd PVC cleanup issue observed during local AWS/GCP validation. The commit check
+limits repeated runs; it does not replace validation of cloud cleanup or recover
+resources left by an interrupted run.
 
-Offline wrapper and matrix checks run in the regular PR test workflow:
+Run the offline change-check, application-selection, wrapper, and matrix checks:
 
 ```bash
 python3 -B -m unittest discover -s hack/scripts -p test_nightly_westest.py
