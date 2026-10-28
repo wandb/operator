@@ -18,6 +18,7 @@ been validated.
 | `local-kind-external` | Any dispatched branch | None |
 | `local-kind-proxy-auth` | Any dispatched branch | None |
 | `local-kind-proxy-tls` | Any dispatched branch | None |
+| `local-kind-operator-upgrade` | Any dispatched branch | None |
 | `gcp-gke-gcs-hmac` | `refs/heads/main` only | `westest-gcp` |
 | `gcp-gke-gcs-byob` | `refs/heads/main` only | `westest-gcp` |
 | `gcp-gke-provider-services` | `refs/heads/main` only | `westest-gcp` |
@@ -26,7 +27,7 @@ been validated.
 | `gcp-gke-gateway-managed-cert-regional` | `refs/heads/main` only | `westest-gcp` |
 | `gcp-gke-gateway-managed-cert-global` | `refs/heads/main` only | `westest-gcp` |
 
-An empty `scenario` input selects all eight local scenarios and, on main, all seven GCP
+An empty `scenario` input selects all nine local scenarios and, on main, all seven GCP
 cloud scenarios. A named scenario selects only that scenario. Unsupported names
 and attempts to select a cloud scenario on another ref fail during setup. There
 is no pull-request trigger for these provisioning tests.
@@ -75,10 +76,29 @@ ports. The image entrypoint configures scenario hostnames in its own `/etc/hosts
 Cloud tests mount their credentials but do not mount the Docker socket or use
 host networking.
 
-Both `westest config` and `westest run` receive
-`--param operatorVersion=<chart version>`. This overrides scenario phase defaults;
+For ordinary scenarios, both `westest config` and `westest run` receive
+`--param operatorVersion=<chart version>`. The operator-upgrade scenario instead
+receives `--param fromOperatorVersion=<baseline>` and
+`--param toOperatorVersion=<chart version>`, so only its second phase installs
+the chart under test. These parameters override scenario phase defaults;
 setting only `WESTEST_OPERATOR_CHART_VERSION` would leave scenario-pinned chart
 versions in effect.
+
+The upgrade baseline is pinned by `OPERATOR_UPGRADE_FROM_VERSION` in the workflow,
+currently `2.0.0-beta.8`. Manual runs can override it with `upgrade_from_version`.
+The destination always uses the resolved `chart_version`: either the new build
+or the supplied `operator_version`. Identical starting and destination versions
+are rejected before starting Docker. The application version remains fixed across
+both phases. Advance the baseline through a reviewed change, eventually selecting
+a supported stable v2 release; it is not resolved from a moving latest tag.
+
+For example, to test a published beta-to-beta upgrade:
+
+```bash
+gh workflow run nightly.yaml --repo wandb/operator --ref main \
+  -f scenario=local-kind-operator-upgrade \
+  -f upgrade_from_version=2.0.0-beta.8 -f operator_version=2.0.0-beta.9
+```
 
 The reusable [nightly build](../.github/workflows/nightly-build.yaml) is unchanged:
 
@@ -193,10 +213,13 @@ gh workflow run nightly.yaml --repo wandb/operator --ref my-branch \
 ## Timeouts, results and cleanup follow-ups
 
 Local runs have a 60-minute execution budget, followed by up to 11 minutes for
-WESTest's 10-minute cancellation cleanup. Cloud runs have a 75-minute execution
-budget and 46 minutes for WESTest's 45-minute cancellation cleanup. The wrapper
+WESTest's 10-minute cancellation cleanup. The operator-upgrade scenario gets
+90 minutes for its two deployment phases, with the same 11-minute cleanup grace.
+Cloud runs have a 75-minute execution budget and 46 minutes for WESTest's
+45-minute cancellation cleanup. The wrapper
 sends SIGINT first, and preserves the timeout's nonzero exit status. Job limits
-are 90 and 180 minutes respectively, leaving time for setup and finalization.
+are 90 minutes for ordinary local scenarios, 120 minutes for the operator upgrade,
+and 180 minutes for cloud scenarios, leaving time for setup and finalization.
 Normal success and failure use WESTest's automatic teardown. The always-run
 summary step also stops a container whose Docker client was interrupted, allowing
 its normal teardown window. Force cancellation or runner loss can still interrupt
@@ -205,9 +228,10 @@ cleanup.
 The Actions log contains the live WESTest output. Each scenario uploads only an
 allowlisted `summary.json`: scenario, provider, image, chart version, container
 name, exit code, duration when available, and the number of cleanup checkpoints
-remaining. The job summary flags remaining checkpoints. The report job includes
-both local and cloud outcomes; `WESTEST_SLACK_WEBHOOK` remains optional for failure
-notifications.
+remaining. Upgrade summaries also record the starting chart version alongside
+the destination chart version. The job summary flags remaining checkpoints. The
+report job includes both local and cloud outcomes; `WESTEST_SLACK_WEBHOOK` remains
+optional for failure notifications.
 
 **Failed cloud cleanup recovery is deferred.** Raw Terraform state, WESTest
 checkpoints, kubeconfigs, credential files and run logs are not uploaded from

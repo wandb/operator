@@ -35,6 +35,7 @@ class MatrixTests(unittest.TestCase):
         "local-kind-external",
         "local-kind-proxy-auth",
         "local-kind-proxy-tls",
+        "local-kind-operator-upgrade",
     ]
     gcp_scenarios = [
         "gcp-gke-gcs-hmac",
@@ -46,7 +47,7 @@ class MatrixTests(unittest.TestCase):
         "gcp-gke-gateway-managed-cert-global",
     ]
 
-    def test_main_runs_eight_local_and_all_seven_gcp_scenarios(self):
+    def test_main_runs_nine_local_and_all_seven_gcp_scenarios(self):
         result = matrix.select_scenarios("refs/heads/main")
         self.assertEqual(json.loads(result["local_matrix"]), {"scenario": self.local_scenarios})
         self.assertEqual(json.loads(result["cloud_matrix"])["include"], [
@@ -205,6 +206,9 @@ class RunnerTests(unittest.TestCase):
             command.assert_not_called()
 
     def test_chart_override_reaches_config_and_run_and_failure_propagates(self):
+        # The workflow supplies the upgrade baseline to all local jobs. Ordinary
+        # scenarios must still receive only their existing operatorVersion param.
+        self.env["OPERATOR_UPGRADE_FROM_VERSION"] = "2.0.0-beta.8"
         for provider, scenario, duration, grace in [
             ("local", "local-kind-ingress", "60m", "11m"),
             ("aws", "aws-eks-s3-irsa", "75m", "46m"),
@@ -222,6 +226,50 @@ class RunnerTests(unittest.TestCase):
                 summary = json.loads((self.root / f"westest-{scenario}/summary.json").read_text())
                 self.assertEqual(summary["exit_code"], 124)
                 self.assertIn("result=failed", (self.root / "output").read_text())
+
+    def test_operator_upgrade_passes_both_versions_and_reports_them(self):
+        scenario = "local-kind-operator-upgrade"
+        self.env.update(SCENARIO=scenario, GITHUB_REF="refs/heads/feature")
+        for from_version, to_version, exit_code in [
+            ("2.0.0-beta.8", self.env["OPERATOR_VERSION"], 0),
+            ("2.0.0-beta.7", "2.0.0-beta.9", 124),
+        ]:
+            with self.subTest(from_version=from_version, to_version=to_version):
+                self.env.update(OPERATOR_UPGRADE_FROM_VERSION=from_version, OPERATOR_VERSION=to_version)
+                with patch.object(runner.subprocess, "run", return_value=subprocess.CompletedProcess([], exit_code)) as command:
+                    self.assertEqual(runner.run(self.env), exit_code)
+                calls = [call.args[0] for call in command.call_args_list]
+                config = next(args for args in calls if "config" in args)
+                run = next(args for args in calls if args[0] == "timeout")
+                for args in [config, run]:
+                    self.assertEqual(args[-4:], ["--param", f"fromOperatorVersion={from_version}",
+                                                 "--param", f"toOperatorVersion={to_version}"])
+                    self.assertNotIn(f"operatorVersion={to_version}", args)
+                self.assertEqual(run[:4], ["timeout", "--signal=INT", "--kill-after=11m", "90m"])
+                root = self.root / f"westest-{scenario}"
+                step_summary = self.root / "step-summary"
+                with patch.dict(os.environ, {"GITHUB_STEP_SUMMARY": str(step_summary)}):
+                    with patch.object(runner.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)):
+                        runner.collect(root)
+                summary = json.loads((root / "public/summary.json").read_text())
+                self.assertEqual(summary["operator_from_version"], from_version)
+                self.assertEqual(summary["operator_version"], to_version)
+                self.assertEqual(summary["exit_code"], exit_code)
+                self.assertIn(f"Operator upgrade: {from_version} -> {to_version}", step_summary.read_text())
+
+    def test_operator_upgrade_rejects_missing_invalid_or_identical_baseline_before_docker(self):
+        self.env["SCENARIO"] = "local-kind-operator-upgrade"
+        for baseline in [None, "", "2.0.0-beta.8\n", "../chart", self.env["OPERATOR_VERSION"]]:
+            with self.subTest(baseline=baseline):
+                if baseline is None:
+                    self.env.pop("OPERATOR_UPGRADE_FROM_VERSION", None)
+                else:
+                    self.env["OPERATOR_UPGRADE_FROM_VERSION"] = baseline
+                with patch.object(runner.subprocess, "run") as command:
+                    with self.assertRaisesRegex(ValueError, "[Oo]perator upgrade"):
+                        runner.run(self.env)
+                    command.assert_not_called()
+                self.assertFalse((self.root / "westest-local-kind-operator-upgrade").exists())
 
     def test_preflight_failure_still_records_failed_summary(self):
         with patch.object(runner.subprocess, "run", side_effect=subprocess.CalledProcessError(1, ["docker"])):

@@ -12,8 +12,11 @@ inputs:
     description: WESTest image tag (e.g. 0.4.0). The registry and repository are fixed by the action.
     required: true
   operator-version:
-    description: Published operator chart version to pass to every scenario phase.
+    description: Published operator chart version under test; the destination for operator upgrades.
     required: true
+  upgrade-from-version:
+    description: Starting chart version, required only for local-kind-operator-upgrade.
+    default: ""
   license:
     description: Optional W&B license file contents.
     default: ""
@@ -38,6 +41,7 @@ runs:
         PROVIDER: ${{ inputs.provider }}
         WESTEST_IMAGE_TAG: ${{ inputs.image-tag }}
         OPERATOR_VERSION: ${{ inputs.operator-version }}
+        OPERATOR_UPGRADE_FROM_VERSION: ${{ inputs.upgrade-from-version }}
         WESTEST_LICENSE: ${{ inputs.license }}
       run: python3 "$ACTION_PATH/run.py"
 

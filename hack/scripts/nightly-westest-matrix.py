@@ -13,6 +13,7 @@ LOCAL_SCENARIOS = [
     "local-kind-external",
     "local-kind-proxy-auth",
     "local-kind-proxy-tls",
+    "local-kind-operator-upgrade",
 ]
 CLOUD_SCENARIOS = [
     # AWS scenarios remain disabled. Legacy GCP scaffolds have no end-to-end validators.
