@@ -27,7 +27,9 @@ manual dispatch to retry: manual runs always bypass the change check and never
 advance the scheduled comparison, since they may select just one scenario or an
 older chart. A failed or cancelled change-check job does not advance it either.
 
-History is read through this repository's `GITHUB_TOKEN` with `actions: read`;
+The change check requires the GitHub CLI (`gh`) on the runner and reports a
+missing dependency before attempting any history lookup. History is read through
+this repository's `GITHUB_TOKEN` with `actions: read`;
 no new secrets, Core access, or writable state are required. API failures or
 unusable truncated history fail the check before paid work starts. Runs on the
 same ref remain serialized without cancelling active tests. If GitHub history

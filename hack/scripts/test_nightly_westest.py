@@ -45,7 +45,7 @@ class NightlyChangesTests(unittest.TestCase):
         return {"jobs": [{"name": changes.GATE_JOB_NAME, "conclusion": conclusion}]}
 
     def test_manual_dispatch_always_runs_without_history_access(self):
-        with patch.object(changes, "api") as api:
+        with patch.object(changes, "api") as api, patch.object(changes.shutil, "which", return_value=None):
             result = changes.decide({"GITHUB_EVENT_NAME": "workflow_dispatch"})
         self.assertEqual(result["should_run"], "true")
         api.assert_not_called()
@@ -117,9 +117,22 @@ class NightlyChangesTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             output, summary = Path(root) / "output", Path(root) / "summary"
             env = dict(self.env, GITHUB_OUTPUT=str(output), GITHUB_STEP_SUMMARY=str(summary))
-            with patch.object(changes.subprocess, "run", side_effect=subprocess.CalledProcessError(1, ["gh"])):
+            with patch.object(changes.shutil, "which", return_value="/usr/bin/gh"), \
+                    patch.object(changes.subprocess, "run", side_effect=subprocess.CalledProcessError(1, ["gh"])):
                 with self.assertRaisesRegex(RuntimeError, "refusing to start paid work"):
                     changes.main(env)
+            self.assertFalse(output.exists())
+            self.assertFalse(summary.exists())
+
+    def test_missing_github_cli_writes_no_run_permission_or_starts_subprocess(self):
+        with tempfile.TemporaryDirectory() as root:
+            output, summary = Path(root) / "output", Path(root) / "summary"
+            env = dict(self.env, GITHUB_OUTPUT=str(output), GITHUB_STEP_SUMMARY=str(summary))
+            with patch.object(changes.shutil, "which", return_value=None), \
+                    patch.object(changes.subprocess, "run") as command:
+                with self.assertRaisesRegex(RuntimeError, r"GitHub CLI \(gh\) is required"):
+                    changes.main(env)
+                command.assert_not_called()
             self.assertFalse(output.exists())
             self.assertFalse(summary.exists())
 

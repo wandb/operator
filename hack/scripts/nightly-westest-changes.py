@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 from urllib.parse import urlencode
 
@@ -13,6 +14,8 @@ GATE_JOB_NAME = "Check nightly changes"
 
 
 def api(endpoint):
+    if not shutil.which("gh"):
+        raise RuntimeError("GitHub CLI (gh) is required to read nightly history; refusing to start paid work")
     try:
         result = subprocess.run(["gh", "api", endpoint], check=True, capture_output=True,
                                 text=True, timeout=60)
