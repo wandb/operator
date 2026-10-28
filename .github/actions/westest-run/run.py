@@ -84,6 +84,24 @@ def run(env):
     version = env["OPERATOR_VERSION"]
     if not re.fullmatch(r"[a-zA-Z0-9.+-]+", version):
         raise ValueError("Invalid operator chart version")
+    app_version = env.get("APP_VERSION", "")
+    if not re.fullmatch(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", app_version):
+        raise ValueError("Application version must be a published stable X.Y.Z release")
+    app_digest = env.get("APP_MANIFEST_DIGEST", "")
+    if not re.fullmatch(r"sha256:[0-9a-f]{64}", app_digest):
+        raise ValueError("Missing or invalid application release metadata from workflow setup")
+    upgrade = scenario == "local-kind-operator-upgrade"
+    params = ["--param", f"operatorVersion={version}"]
+    if upgrade:
+        from_version = env.get("OPERATOR_UPGRADE_FROM_VERSION", "")
+        if not re.fullmatch(r"[a-zA-Z0-9.+-]+", from_version):
+            raise ValueError("Invalid or missing operator upgrade starting chart version")
+        if from_version == version:
+            raise ValueError("Operator upgrade starting and destination chart versions must differ")
+        params = ["--param", f"fromOperatorVersion={from_version}",
+                  "--param", f"toOperatorVersion={version}"]
+    # The upgrade scenario maps appVersion to both phases, holding the app fixed.
+    params += ["--param", f"appVersion={app_version}"]
     image = image_for_tag(env["WESTEST_IMAGE_TAG"])
     root = Path(env["RUNNER_TEMP"]) / f"westest-{scenario}"
     (root / "work").mkdir(parents=True, exist_ok=True)
@@ -91,7 +109,11 @@ def run(env):
     with open(env["GITHUB_OUTPUT"], "a") as output:
         output.write(f"work-root={root}\nartifact-dir={root / 'public'}\n")
     summary = {"scenario": scenario, "provider": provider, "image": image,
-               "operator_version": version, "container": name, "exit_code": 1}
+               "operator_version": version, "app_version": app_version,
+               "app_manifest_digest": app_digest,
+               "container": name, "exit_code": 1}
+    if upgrade:
+        summary["operator_from_version"] = from_version
     # Write before starting so an always() step can also stop an interrupted run.
     (root / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     start = time.monotonic()
@@ -104,11 +126,12 @@ def run(env):
         args = docker_args(root, provider, env)
         subprocess.run(["docker", "pull", image], check=True)
         subprocess.run(args + [image, "version"], check=True)
-        params = ["--param", f"operatorVersion={version}"]
         subprocess.run(args + [image, "config", scenario] + params, check=True)
         # SIGINT cancels the test while WESTest tears down on a fresh context.
         # Leave its full cleanup allowance (10m local / 45m cloud) before SIGKILL.
         duration, grace = ("60m", "11m") if provider == "local" else ("75m", "46m")
+        if upgrade:
+            duration = "90m"
         result = subprocess.run(
             ["timeout", "--signal=INT", f"--kill-after={grace}", duration]
             + args + ["--name", name, image, "run", scenario, "--plain"] + params
@@ -141,8 +164,12 @@ def collect(root):
     with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as output:
         output.write(f"### {summary['scenario']}\n\n"
                      f"Operator: {summary['operator_version']}\n\n"
+                     f"Application: {summary['app_version']}\n\n"
+                     f"Server manifest digest: `{summary['app_manifest_digest']}`\n\n"
                      f"Exit code: {summary['exit_code']}\n\n"
                      f"Cleanup checkpoints remaining: {summary['cleanup_checkpoint_count']}\n\n")
+        if summary.get("operator_from_version"):
+            output.write(f"Operator upgrade: {summary['operator_from_version']} -> {summary['operator_version']}\n\n")
         if summary["cleanup_checkpoint_count"]:
             output.write("Cleanup needs investigation in the cloud account. Recovery bundles are a follow-up; "
                          "runner-local state is lost when the runner is deleted.\n")
