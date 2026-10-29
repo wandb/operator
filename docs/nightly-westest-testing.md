@@ -24,10 +24,8 @@ been validated.
 | `gcp-gke-provider-services` | `refs/heads/main` only | `westest-gcp` |
 | `gcp-gke-gcs-letsencrypt` | `refs/heads/main` only | `westest-gcp` |
 | `gcp-gke-ingress-managed-cert` | `refs/heads/main` only | `westest-gcp` |
-| `gcp-gke-gateway-managed-cert-regional` | `refs/heads/main` only | `westest-gcp` |
-| `gcp-gke-gateway-managed-cert-global` | `refs/heads/main` only | `westest-gcp` |
 
-An empty `scenario` input selects all nine local scenarios and, on main, all seven GCP
+An empty `scenario` input selects all nine local scenarios and, on main, all five GCP
 cloud scenarios. A named scenario selects only that scenario. Unsupported names
 and attempts to select a cloud scenario on another ref fail during setup. There
 is no pull-request trigger for these provisioning tests.
@@ -35,6 +33,12 @@ is no pull-request trigger for these provisioning tests.
 The local matrix covers external datastores, authenticated proxy egress, and
 TLS-intercepting proxy CA trust alongside the baseline routing and OIDC checks.
 `local-kind-app-test-data` is not yet enabled for nightly use.
+
+`gcp-gke-gateway-managed-cert-regional` and `gcp-gke-gateway-managed-cert-global`
+are temporarily disabled, including explicit dispatches, until Core's WESTest CI
+permissions allow the ExternalDNS project-level `roles/dns.reader` grant. Re-enable
+both after that permission change is merged and applied. The managed-certificate
+Ingress scenario remains enabled.
 
 AWS scenarios remain disabled. The legacy `gcp-gke-ingress-in-cluster-services`
 and `gcp-gke-gateway-in-cluster-services` scaffolds are excluded because they do
@@ -193,10 +197,10 @@ Docker action copies it to a private, read-only mount and sets both
 `GOOGLE_APPLICATION_CREDENTIALS` and `CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE` to
 the container path. This supports Terraform, gcloud and GKE authentication
 throughout provisioning and teardown without passing a short-lived standalone
-access token. Tests target `playground-111` in `us-central1` with
+access token. Tests target `playground-111` in `us-west1` with
 `WESTEST_CLOUD_OPT_IN=1`.
 
-The managed-certificate Ingress and both managed-certificate Gateway scenarios
+The managed-certificate Ingress and the temporarily disabled Gateway scenarios
 use WESTest's default Cloud DNS zone `westest-gcp` (`westest-gcp.wandb.ml`) in
 `playground-111`. That zone must be publicly delegated. The CI identity needs
 the existing DNS and Certificate Manager permissions, and the provider-services
@@ -222,7 +226,8 @@ adds no required repository secret for cleanup recovery.
    by the build to fetch watchtower; setup and scenario jobs do not need them.
 4. Merge the workflow, then dispatch the GCP scenarios on main against a known
    published chart. Confirm OIDC login, provisioning, validators and teardown,
-   including Cloud SQL/Memorystore and all three managed-certificate paths.
+   including Cloud SQL/Memorystore and the managed-certificate Ingress path.
+   Validate both Gateway paths after their permissions are applied and they are re-enabled.
    These main-branch runs are the end-to-end authentication check;
    local tests cannot mint the same GitHub identity.
 5. Check the cloud accounts for leftover resources, including the known etcd PVC
@@ -234,7 +239,7 @@ For example, substitute a published chart for `$CHART_VERSION`:
 gh workflow run nightly.yaml --repo wandb/operator --ref main \
   -f scenario=gcp-gke-gcs-hmac -f operator_version="$CHART_VERSION"
 gh workflow run nightly.yaml --repo wandb/operator --ref main \
-  -f scenario=gcp-gke-gateway-managed-cert-global -f operator_version="$CHART_VERSION"
+  -f scenario=gcp-gke-ingress-managed-cert -f operator_version="$CHART_VERSION"
 ```
 
 To test a branch locally in Kind through Actions, dispatch that branch with a

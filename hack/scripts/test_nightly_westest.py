@@ -125,11 +125,9 @@ class MatrixTests(unittest.TestCase):
         "gcp-gke-provider-services",
         "gcp-gke-gcs-letsencrypt",
         "gcp-gke-ingress-managed-cert",
-        "gcp-gke-gateway-managed-cert-regional",
-        "gcp-gke-gateway-managed-cert-global",
     ]
 
-    def test_main_runs_nine_local_and_all_seven_gcp_scenarios(self):
+    def test_main_runs_nine_local_and_five_gcp_scenarios(self):
         result = matrix.select_scenarios("refs/heads/main")
         self.assertEqual(json.loads(result["local_matrix"]), {"scenario": self.local_scenarios})
         self.assertEqual(json.loads(result["cloud_matrix"])["include"], [
@@ -170,7 +168,8 @@ class MatrixTests(unittest.TestCase):
 
     def test_disabled_scenarios_are_rejected(self):
         for scenario in ["local-kind-app-test-data", "aws-eks-s3-irsa", "gcp-gke-ingress-in-cluster-services",
-                         "gcp-gke-gateway-in-cluster-services"]:
+                         "gcp-gke-gateway-in-cluster-services", "gcp-gke-gateway-managed-cert-regional",
+                         "gcp-gke-gateway-managed-cert-global"]:
             with self.subTest(scenario=scenario), self.assertRaisesRegex(ValueError, "Unsupported"):
                 matrix.select_scenarios("refs/heads/main", scenario)
 
@@ -279,6 +278,7 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(target.stat().st_mode & 0o777, 0o600)
         self.assertIn("GOOGLE_APPLICATION_CREDENTIALS=/credentials/google.json", args)
         self.assertIn("CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE=/credentials/google.json", args)
+        self.assertIn("WESTEST_GCP_REGION=us-west1", args)
         self.assertNotIn("test-token", " ".join(args))
         self.assertNotIn("docker.sock", " ".join(args))
 

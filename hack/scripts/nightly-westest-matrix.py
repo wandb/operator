@@ -17,13 +17,12 @@ LOCAL_SCENARIOS = [
 ]
 CLOUD_SCENARIOS = [
     # AWS scenarios remain disabled. Legacy GCP scaffolds have no end-to-end validators.
+    # Managed-cert gateways are disabled until Core's ExternalDNS IAM grant is applied.
     {"scenario": "gcp-gke-gcs-hmac", "provider": "gcp", "environment": "westest-gcp"},
     {"scenario": "gcp-gke-gcs-byob", "provider": "gcp", "environment": "westest-gcp"},
     {"scenario": "gcp-gke-provider-services", "provider": "gcp", "environment": "westest-gcp"},
     {"scenario": "gcp-gke-gcs-letsencrypt", "provider": "gcp", "environment": "westest-gcp"},
     {"scenario": "gcp-gke-ingress-managed-cert", "provider": "gcp", "environment": "westest-gcp"},
-    {"scenario": "gcp-gke-gateway-managed-cert-regional", "provider": "gcp", "environment": "westest-gcp"},
-    {"scenario": "gcp-gke-gateway-managed-cert-global", "provider": "gcp", "environment": "westest-gcp"},
 ]
 
 
