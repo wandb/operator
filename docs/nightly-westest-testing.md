@@ -32,7 +32,7 @@ cloud scenarios. A named scenario selects only that scenario. Unsupported names
 and attempts to select a cloud scenario on another ref fail during setup. There
 is no pull-request trigger for these provisioning tests.
 
-The separate [PR WESTest workflow](pr-westest-testing.md) runs eight local
+The separate [PR WESTest workflow](pr-westest-testing.md) runs seven local
 Kind scenarios against the PR's operator checkout without publishing an operator
 image or chart.
 

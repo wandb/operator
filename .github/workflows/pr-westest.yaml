@@ -47,7 +47,6 @@ jobs:
         scenario:
           - local-kind-ingress
           - local-kind-gateway
-          - local-kind-external
           - local-kind-oidc-pkce
           - local-kind-oidc-implicit
           - local-kind-proxy

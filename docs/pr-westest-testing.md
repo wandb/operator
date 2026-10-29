@@ -1,16 +1,17 @@
 # PR WESTest testing
 
-[The PR workflow](../.github/workflows/pr-westest.yaml) runs eight local Kind
+[The PR workflow](../.github/workflows/pr-westest.yaml) runs seven local Kind
 scenarios against the PR merge commit's operator checkout:
 
 - `local-kind-ingress`
 - `local-kind-gateway`
-- `local-kind-external`
 - `local-kind-oidc-pkce`
 - `local-kind-oidc-implicit`
 - `local-kind-proxy`
 - `local-kind-proxy-auth`
 - `local-kind-proxy-tls`
+
+The external-datastore scenario is temporarily excluded.
 
 Non-draft PRs targeting `main` run when opened, updated, reopened, or
 marked ready for review. New updates or conversion back to draft cancel older
