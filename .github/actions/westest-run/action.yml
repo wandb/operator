@@ -1,9 +1,9 @@
 name: Run WESTest scenario
-description: Run the published WESTest container with temporary cloud credentials and a public-safe summary.
+description: Run WESTest against a published operator chart or a local checkout, with a public-safe summary.
 
 inputs:
   scenario:
-    description: Supported nightly scenario name.
+    description: Supported WESTest scenario name.
     required: true
   provider:
     description: local, aws, or gcp.
@@ -12,8 +12,11 @@ inputs:
     description: WESTest image tag (e.g. 0.4.0). The registry and repository are fixed by the action.
     required: true
   operator-version:
-    description: Published operator chart version under test; the destination for operator upgrades.
-    required: true
+    description: Published operator chart version under test; the destination for operator upgrades. Mutually exclusive with operator-repo.
+    default: ""
+  operator-repo:
+    description: Local operator checkout to build and load into Kind. Mutually exclusive with operator-version; local scenarios only.
+    default: ""
   upgrade-from-version:
     description: Starting chart version, required only for local-kind-operator-upgrade.
     default: ""
@@ -47,6 +50,7 @@ runs:
         PROVIDER: ${{ inputs.provider }}
         WESTEST_IMAGE_TAG: ${{ inputs.image-tag }}
         OPERATOR_VERSION: ${{ inputs.operator-version }}
+        OPERATOR_REPO: ${{ inputs.operator-repo }}
         OPERATOR_UPGRADE_FROM_VERSION: ${{ inputs.upgrade-from-version }}
         APP_VERSION: ${{ inputs.app-version }}
         APP_MANIFEST_DIGEST: ${{ inputs.app-manifest-digest }}

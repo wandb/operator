@@ -1,0 +1,85 @@
+name: PR WESTest
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-westest-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  setup:
+    name: Resolve application version
+    # The local Dockerfile requires Watchtower from its private GitHub release.
+    # Fork and Dependabot runs do not have the App secrets needed to download it.
+    if: >-
+      ${{ !github.event.pull_request.draft &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          github.actor != 'dependabot[bot]' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      app_version: ${{ steps.app-version.outputs.app_version }}
+      app_manifest_digest: ${{ steps.app-version.outputs.app_manifest_digest }}
+    steps:
+      - name: Checkout PR merge commit
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - name: Resolve published stable application version
+        id: app-version
+        run: python3 hack/scripts/nightly-westest-app-version.py
+
+  local-test:
+    name: ${{ matrix.scenario }}
+    needs: setup
+    runs-on: ubuntu-latest-8-cores
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix:
+        scenario:
+          - local-kind-ingress
+          - local-kind-gateway
+          - local-kind-oidc-pkce
+          - local-kind-oidc-implicit
+          - local-kind-proxy
+          - local-kind-proxy-auth
+          - local-kind-proxy-tls
+    steps:
+      - name: Checkout PR merge commit
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Mint a token to read wandb/watchtower releases
+        id: watchtower-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.WESTEST_APP_ID }}
+          private-key: ${{ secrets.WESTEST_APP_PRIVATE_KEY }}
+          owner: wandb
+          repositories: watchtower
+
+      - name: Download the Watchtower binary
+        env:
+          GH_TOKEN: ${{ steps.watchtower-token.outputs.token }}
+        run: make download-watchtower WATCHTOWER_ARCH=amd64
+
+      - name: Download Grafana plugins
+        run: make download-grafana-plugins
+
+      - name: Build and test the local operator checkout
+        uses: ./.github/actions/westest-run
+        with:
+          scenario: ${{ matrix.scenario }}
+          image-tag: "0.5.2"
+          operator-repo: ${{ github.workspace }}
+          app-version: ${{ needs.setup.outputs.app_version }}
+          app-manifest-digest: ${{ needs.setup.outputs.app_manifest_digest }}

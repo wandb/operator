@@ -27,13 +27,16 @@ def write_private(path, content):
     path.chmod(0o600)
 
 
-def docker_args(root, provider, env):
+def docker_args(root, provider, env, operator_repo=None):
     args = ["docker", "run", "--rm", "--init", "--mount",
             f"type=bind,src={root / 'work'},dst=/work",
             "--env", "WESTEST_ARTIFACT_ROOT=/work/artifacts"]
     if provider == "local":
         args += ["--network", "host", "--mount",
                  "type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock"]
+        if operator_repo is not None:
+            args += ["--mount", f"type=bind,src={operator_repo},dst=/src/operator,readonly",
+                     "--env", "WESTEST_OPERATOR_BUILD_LOCAL=true"]
     elif provider == "aws":
         credentials = "[Sandbox]\n" + "".join(
             f"{key} = {env[name]}\n" for key, name in [
@@ -81,8 +84,21 @@ def run(env):
         raise ValueError("Scenario does not match provider")
     if provider != "local" and env["GITHUB_REF"] != "refs/heads/main":
         raise ValueError("Cloud scenarios can only run from refs/heads/main")
-    version = env["OPERATOR_VERSION"]
-    if not re.fullmatch(r"[a-zA-Z0-9.+-]+", version):
+    version = env.get("OPERATOR_VERSION", "")
+    repo = env.get("OPERATOR_REPO", "")
+    if bool(version) == bool(repo):
+        raise ValueError("Supply exactly one of operator-version or operator-repo")
+    operator_repo = None
+    if repo:
+        if provider != "local":
+            raise ValueError("Local operator checkouts can only run with local scenarios")
+        operator_repo = Path(repo).resolve()
+        if "," in str(operator_repo):
+            raise ValueError("Operator checkout path cannot contain commas (Docker mount syntax)")
+        for required in ["Dockerfile", "deploy/operator/Chart.yaml"]:
+            if not (operator_repo / required).is_file():
+                raise ValueError(f"Operator checkout is missing {required}")
+    elif not re.fullmatch(r"[a-zA-Z0-9.+-]+", version):
         raise ValueError("Invalid operator chart version")
     app_version = env.get("APP_VERSION", "")
     if not re.fullmatch(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", app_version):
@@ -91,7 +107,10 @@ def run(env):
     if not re.fullmatch(r"sha256:[0-9a-f]{64}", app_digest):
         raise ValueError("Missing or invalid application release metadata from workflow setup")
     upgrade = scenario == "local-kind-operator-upgrade"
-    params = ["--param", f"operatorVersion={version}"]
+    if upgrade and operator_repo is not None:
+        raise ValueError("Operator upgrade scenarios require published chart versions")
+    params = (["--operator-repo", "/src/operator"] if operator_repo is not None
+              else ["--param", f"operatorVersion={version}"])
     if upgrade:
         from_version = env.get("OPERATOR_UPGRADE_FROM_VERSION", "")
         if not re.fullmatch(r"[a-zA-Z0-9.+-]+", from_version):
@@ -112,6 +131,8 @@ def run(env):
                "operator_version": version, "app_version": app_version,
                "app_manifest_digest": app_digest,
                "container": name, "exit_code": 1}
+    if operator_repo is not None:
+        summary.update(operator_source="checkout", operator_revision=env.get("GITHUB_SHA", ""))
     if upgrade:
         summary["operator_from_version"] = from_version
     # Write before starting so an always() step can also stop an interrupted run.
@@ -123,7 +144,7 @@ def run(env):
             print("::error::Required runner tools not found on PATH: " + ", ".join(missing)
                   + ". Install Docker CLI and GNU coreutils before running WESTest.", file=sys.stderr)
             return 1
-        args = docker_args(root, provider, env)
+        args = docker_args(root, provider, env, operator_repo)
         subprocess.run(["docker", "pull", image], check=True)
         subprocess.run(args + [image, "version"], check=True)
         subprocess.run(args + [image, "config", scenario] + params, check=True)
@@ -161,9 +182,11 @@ def collect(root):
     # No recursive artifact copy: state, checkpoints, kubeconfigs, logs and
     # run.env can contain credentials in this public repository.
     (public / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
+    operator = ("checkout " + summary["operator_revision"] if summary.get("operator_source") == "checkout"
+                else summary["operator_version"])
     with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as output:
         output.write(f"### {summary['scenario']}\n\n"
-                     f"Operator: {summary['operator_version']}\n\n"
+                     f"Operator: {operator}\n\n"
                      f"Application: {summary['app_version']}\n\n"
                      f"Server manifest digest: `{summary['app_manifest_digest']}`\n\n"
                      f"Exit code: {summary['exit_code']}\n\n"
