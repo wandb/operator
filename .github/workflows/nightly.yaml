@@ -1,7 +1,7 @@
 name: Nightly WESTest
 
 # End-to-end testing of the operator via wandb/westest. Builds an operator
-# image+chart and runs local Kind scenarios, plus all seven GCP end-to-end scenarios on main.
+# image+chart and runs local Kind scenarios, plus five GCP end-to-end scenarios on main.
 #   - schedule                    -> nightly build (2.0.0-nightly-<timestamp>)
 #   - manual (workflow_dispatch)  -> dev build (2.0.0-dev-[<tag>-]<timestamp>),
 #                                    builds the dispatched branch; set `dev_tag`

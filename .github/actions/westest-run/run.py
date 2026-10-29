@@ -60,7 +60,7 @@ def docker_args(root, provider, env):
                  "--env", "GOOGLE_APPLICATION_CREDENTIALS=/credentials/google.json",
                  "--env", "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE=/credentials/google.json",
                  "--env", "WESTEST_GCP_PROJECT_ID=playground-111",
-                 "--env", "WESTEST_GCP_REGION=us-central1"]
+                 "--env", "WESTEST_GCP_REGION=us-west1"]
     else:
         raise ValueError(f"Unsupported provider: {provider!r}")
     if provider != "local":
