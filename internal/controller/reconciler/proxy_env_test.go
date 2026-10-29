@@ -23,7 +23,7 @@ func TestComputeNoProxyBaselineAndExtras(t *testing.T) {
 	got := computeNoProxy([]string{"internal.example.com", "127.0.0.1"})
 	parts := strings.Split(got, ",")
 	for _, want := range []string{
-		"localhost", "127.0.0.1", "::1", ".svc", ".svc.cluster.local",
+		"localhost", "127.0.0.1", "::1", "169.254.169.254", ".svc", ".svc.cluster.local",
 		".cluster.local", "kubernetes.default.svc", "10.96.0.1", "internal.example.com",
 	} {
 		found := false
@@ -80,9 +80,13 @@ func TestProxyEnvVarsLiteral(t *testing.T) {
 	if v, _ := envByName(vars, "HTTP_PROXY"); v.Value != "http://proxy:3128" {
 		t.Errorf("HTTP_PROXY = %q", v.Value)
 	}
-	np, _ := envByName(vars, "NO_PROXY")
-	if !strings.Contains(np.Value, "wandb.localhost") || !strings.Contains(np.Value, "10.96.0.1") || !strings.Contains(np.Value, ".svc.cluster.local") {
-		t.Errorf("NO_PROXY missing computed baseline/extras: %q", np.Value)
+	for _, name := range []string{"NO_PROXY", "no_proxy"} {
+		np, _ := envByName(vars, name)
+		for _, want := range []string{"wandb.localhost", "10.96.0.1", ".svc.cluster.local", "169.254.169.254"} {
+			if !strings.Contains(np.Value, want) {
+				t.Errorf("%s missing %q: %q", name, want, np.Value)
+			}
+		}
 	}
 }
 
