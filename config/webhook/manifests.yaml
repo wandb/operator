@@ -76,8 +76,30 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
-      path: /validate-apps-wandb-com-v2-weightsandbiases
+      path: /validate-wandb-retention-delete
   failurePolicy: Fail
+  matchPolicy: Exact
+  name: vretention-delete.kb.io
+  rules:
+  - apiGroups:
+    - apps.wandb.com
+    apiVersions:
+    - v1
+    - v2
+    operations:
+    - DELETE
+    resources:
+    - weightsandbiases
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-apps-wandb-com-v2-weightsandbiases-retention
+  failurePolicy: Fail
+  matchPolicy: Equivalent
   name: vweightsandbiases-v2.kb.io
   rules:
   - apiGroups:

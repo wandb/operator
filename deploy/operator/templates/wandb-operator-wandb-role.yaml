@@ -4,6 +4,23 @@ kind: ClusterRole
 metadata:
   name: {{ .Release.Name }}-wandb
 rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list, watch, update, patch, delete]
+  - apiGroups: [policy]
+    resources: [poddisruptionbudgets]
+    verbs: [get, list, watch, update, patch, delete]
+  - apiGroups:
+      - minio.min.io
+    resources:
+      - tenants
+    verbs:
+      - get
+      - list
+      - watch
+      - update
+      - patch
+      - delete
   # Pod CPU/memory usage from metrics-server, surfaced by Watchtower's Metrics tab.
   # The operator must hold this to delegate it to the Watchtower ClusterRole.
   - apiGroups:

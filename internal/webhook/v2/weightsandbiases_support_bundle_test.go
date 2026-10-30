@@ -26,7 +26,7 @@ var _ = Describe("WeightsAndBiases supportBundle schema", func() {
 		ctx := context.Background()
 		wandb := newWandb("support-bundle-defaults")
 		Expect(k8sClient.Create(ctx, wandb)).To(Succeed())
-		DeferCleanup(k8sClient.Delete, ctx, wandb)
+		// The suite API server owns cleanup; deletion requires a reconciled retention inventory.
 
 		stored := &appsv2.WeightsAndBiases{}
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(wandb), stored)).To(Succeed())
@@ -52,7 +52,7 @@ var _ = Describe("WeightsAndBiases supportBundle schema", func() {
 		wandb := newWandb("support-bundle-explicit-off")
 		wandb.Spec.SupportBundle.Enabled = ptr.To(false)
 		Expect(k8sClient.Create(ctx, wandb)).To(Succeed())
-		DeferCleanup(k8sClient.Delete, ctx, wandb)
+		// The suite API server owns cleanup; deletion requires a reconciled retention inventory.
 
 		stored := &appsv2.WeightsAndBiases{}
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(wandb), stored)).To(Succeed())
@@ -69,7 +69,7 @@ var _ = Describe("WeightsAndBiases supportBundle schema", func() {
 		obj := &unstructured.Unstructured{Object: raw}
 		obj.SetGroupVersionKind(appsv2.GroupVersion.WithKind("WeightsAndBiases"))
 		Expect(k8sClient.Create(ctx, obj)).To(Succeed())
-		DeferCleanup(k8sClient.Delete, ctx, wandb)
+		// The suite API server owns cleanup; deletion requires a reconciled retention inventory.
 
 		stored := &appsv2.WeightsAndBiases{}
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(wandb), stored)).To(Succeed())

@@ -28,6 +28,7 @@ import (
 	"github.com/wandb/operator/internal/controller/infra/managed/mysql/moco"
 	"github.com/wandb/operator/internal/controller/infra/managed/objectstore/seaweedfs"
 	"github.com/wandb/operator/internal/controller/infra/managed/redis/opstree"
+	"github.com/wandb/operator/internal/controller/retention"
 	"github.com/wandb/operator/internal/logx"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -38,6 +39,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
@@ -46,8 +48,10 @@ import (
 
 // SetupWeightsAndBiasesWebhookWithManager registers the webhook for WeightsAndBiases in the manager.
 func SetupWeightsAndBiasesWebhookWithManager(mgr ctrl.Manager) error {
+	mgr.GetWebhookServer().Register("/validate-wandb-retention-delete", &admission.Webhook{Handler: retention.DeleteHandler(mgr.GetAPIReader())})
 	return ctrl.NewWebhookManagedBy(mgr).For(&appsv2.WeightsAndBiases{}).
-		WithValidator(&WeightsAndBiasesCustomValidator{}).
+		WithValidator(&WeightsAndBiasesCustomValidator{Reader: mgr.GetAPIReader()}).
+		WithValidatorCustomPath("/validate-apps-wandb-com-v2-weightsandbiases-retention").
 		WithDefaulter(&WeightsAndBiasesCustomDefaulter{}).
 		Complete()
 }
@@ -150,9 +154,10 @@ func (d *WeightsAndBiasesCustomDefaulter) Default(ctx context.Context, obj runti
 	return nil
 }
 
-// TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
 // NOTE: If you want to customise the 'path', use the flags '--defaulting-path' or '--validation-path'.
-// +kubebuilder:webhook:path=/validate-apps-wandb-com-v2-weightsandbiases,mutating=false,failurePolicy=fail,sideEffects=None,groups=apps.wandb.com,resources=weightsandbiases,verbs=create;update,versions=v2,name=vweightsandbiases-v2.kb.io,admissionReviewVersions=v1
+// A new path makes old webhook replicas fail closed during a rolling upgrade.
+// +kubebuilder:webhook:path=/validate-apps-wandb-com-v2-weightsandbiases-retention,mutating=false,failurePolicy=fail,matchPolicy=Equivalent,sideEffects=None,groups=apps.wandb.com,resources=weightsandbiases,verbs=create;update,versions=v2,name=vweightsandbiases-v2.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/validate-wandb-retention-delete,mutating=false,failurePolicy=fail,matchPolicy=Exact,sideEffects=None,groups=apps.wandb.com,resources=weightsandbiases,verbs=delete,versions=v1;v2,name=vretention-delete.kb.io,admissionReviewVersions=v1
 
 // WeightsAndBiasesCustomValidator struct is responsible for validating the WeightsAndBiases resource
 // when it is created, updated, or deleted.
@@ -160,7 +165,7 @@ func (d *WeightsAndBiasesCustomDefaulter) Default(ctx context.Context, obj runti
 // NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
 // as this struct is used only for temporary operations and does not need to be deeply copied.
 type WeightsAndBiasesCustomValidator struct {
-	// TODO(user): Add more fields as needed for validation
+	Reader client.Reader
 }
 
 var _ webhook.CustomValidator = &WeightsAndBiasesCustomValidator{}
@@ -189,6 +194,9 @@ func (v *WeightsAndBiasesCustomValidator) ValidateUpdate(ctx context.Context, ol
 		return nil, fmt.Errorf("expected a WeightsAndBiases object for the oldObj but got %T", oldObj)
 	}
 	log.Info("Validation for WeightsAndBiases upon update", "name", newWandb.GetName())
+	if !oldWandb.DeletionTimestamp.IsZero() && retention.Fingerprint(newWandb) != retention.Fingerprint(oldWandb) {
+		return nil, fmt.Errorf("spec and Argo CD association cannot change after deletion begins")
+	}
 
 	var specWarnings, changeWarnings admission.Warnings
 	var err error
@@ -211,8 +219,9 @@ func (v *WeightsAndBiasesCustomValidator) ValidateDelete(ctx context.Context, ob
 	}
 	log.Info("Validation for WeightsAndBiases upon deletion", "name", weightsandbiases.GetName())
 
-	// TODO(user): fill in your validation logic upon object deletion.
-
+	if err := retention.ValidateDelete(ctx, v.Reader, weightsandbiases); err != nil {
+		return nil, apierrors.NewForbidden(schema.GroupResource{Group: appsv2.GroupVersion.Group, Resource: "weightsandbiases"}, weightsandbiases.Name, err)
+	}
 	return nil, nil
 }
 
@@ -359,6 +368,17 @@ func applyManagedServiceAccountDefaults(serviceAccount *appsv2.ManagedServiceAcc
 func validateSpec(_ context.Context, newWandb, oldWandb *appsv2.WeightsAndBiases) (admission.Warnings, error) {
 	var allErrors field.ErrorList
 	var warnings admission.Warnings
+	if err := retention.ValidatePolicies(newWandb); err != nil {
+		var oldErr error
+		if oldWandb != nil {
+			oldErr = retention.ValidatePolicies(oldWandb)
+		}
+		if oldErr != nil && oldErr.Error() == err.Error() {
+			warnings = append(warnings, "existing retention conflict blocks deletion: "+err.Error())
+		} else {
+			allErrors = append(allErrors, field.Invalid(field.NewPath("spec", "retentionPolicy"), newWandb.Spec.RetentionPolicy, err.Error()))
+		}
+	}
 
 	allErrors = append(allErrors, validateWandbSpec(newWandb)...)
 	allErrors = append(allErrors, validateMySQLSpec(newWandb)...)

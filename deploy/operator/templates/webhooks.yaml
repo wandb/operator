@@ -75,14 +75,30 @@ webhooks:
         resources:
           - applications
     sideEffects: None
+  - admissionReviewVersions: [v1]
+    clientConfig:
+      service:
+        name: {{ include "wandb-operator.serviceName" . }}
+        namespace: {{ .Release.Namespace }}
+        path: /validate-wandb-retention-delete
+    failurePolicy: Fail
+    matchPolicy: Exact
+    name: vretention-delete.kb.io
+    rules:
+      - apiGroups: [apps.wandb.com]
+        apiVersions: [v1, v2]
+        operations: [DELETE]
+        resources: [weightsandbiases]
+    sideEffects: None
   - admissionReviewVersions:
       - v1
     clientConfig:
       service:
         name: {{ include "wandb-operator.serviceName" . }}
         namespace: {{ .Release.Namespace }}
-        path: /validate-apps-wandb-com-v2-weightsandbiases
+        path: /validate-apps-wandb-com-v2-weightsandbiases-retention
     failurePolicy: Fail
+    matchPolicy: Equivalent
     name: vweightsandbiases-v2.kb.io
     rules:
       - apiGroups:

@@ -1,10 +1,9 @@
 # Resource retention when deleting a WeightsAndBiases CR
 
-Status: target contract and source inventory for the retention reimplementation.
-This document completes the design work in implementation item 1; it does not
-describe guarantees provided by the current controller. Admission enforcement,
-ownership migration, and lifecycle changes remain to be implemented together
-with the tests below.
+Status: implementation and test contract on the retention-lifecycle branch.
+Inventory, ownership migration, durable finalization, Argo metadata, and DELETE
+admission are implemented. Real-cluster acceptance remains a release gate;
+passing unit/envtest checks alone does not establish garbage-collector behavior.
 
 Inventory audited against operator revision `892b4bff`.
 
@@ -357,6 +356,15 @@ References: [Kubernetes foreground deletion](https://kubernetes.io/docs/concepts
 [envtest limitations](https://book.kubebuilder.io/reference/envtest).
 
 ## Implementation sequence
+
+The DELETE guard matches both served versions exactly and reads canonical v2
+state without converting the incoming spec. Its new endpoint fails closed on
+older replicas during rolling upgrades. Conversion preserves the canonical spec
+when a native v2 installation is deleted through v1. Install the new webhook
+configuration before migration; do not delete installations during an upgrade
+until the guard is deployed and `RetentionReady=True` for their generation.
+Do not roll back to an ownership-adding operator after migration without a
+separate rollback procedure and blocked deletion window.
 
 1. **This document:** establish the contract, direct-resource inventory,
    dependency rules, and test acceptance criteria. Vendor-created inventory

@@ -2,6 +2,8 @@ package retention
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 
 	apiv2 "github.com/wandb/operator/api/v2"
 )
@@ -52,7 +54,8 @@ func ValidatePolicies(w *apiv2.WeightsAndBiases) error {
 		}
 		return nil
 	}
-	for key, spec := range w.Spec.ClickHouse {
+	for _, key := range slices.Sorted(maps.Keys(w.Spec.ClickHouse)) {
+		spec := w.Spec.ClickHouse[key]
 		if s := spec.ManagedClickHouse; s != nil {
 			if err := check("clickhouse", key, "clickhouse", s.ManagedInfraSpec); err != nil {
 				return err
