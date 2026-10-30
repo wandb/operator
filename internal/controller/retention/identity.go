@@ -37,7 +37,14 @@ type Resource struct {
 	Stage    int  `json:"stage"`
 	Supplied bool `json:"supplied,omitempty"`
 	// OptionalAPI is used only for inventory from removed legacy CRDs.
-	OptionalAPI bool `json:"optionalAPI,omitempty"`
+	OptionalAPI    bool            `json:"optionalAPI,omitempty"`
+	ClaimTemplates []ClaimTemplate `json:"claimTemplates,omitempty"`
+}
+
+// Keep claim provenance after foreground deletion removes the StatefulSet.
+type ClaimTemplate struct {
+	Name   string            `json:"name"`
+	Labels map[string]string `json:"labels"`
 }
 
 func (r Resource) GVK() schema.GroupVersionKind {

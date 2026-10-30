@@ -30,51 +30,17 @@ var manifestsRepository = fmt.Sprintf("file://%s", manifestsDir)
 
 var _ = Describe("WeightsAndBiases Controller V2", func() {
 	const (
-		WandbName      = "test-wandb-v2"
-		WandbNamespace = "default"
-		timeout        = time.Second * 10
-		interval       = time.Millisecond * 250
+		WandbName = "test-wandb-v2"
+		timeout   = time.Second * 10
+		interval  = time.Millisecond * 250
 	)
 
-	AfterEach(func() {
-		// Cleanup
-		wandb := &apiv2.WeightsAndBiases{ObjectMeta: metav1.ObjectMeta{Name: WandbName, Namespace: WandbNamespace}}
-		wandbLookupKey := types.NamespacedName{Name: wandb.Name, Namespace: wandb.Namespace}
-		dbSecret := &v1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      WandbName + "-db-password",
-				Namespace: WandbNamespace,
-			},
-		}
-		job := &batchv1.Job{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      WandbName + "-mysql-init",
-				Namespace: WandbNamespace,
-			},
-		}
-		// Applications are not owned by the WeightsAndBiases CR via OwnerReference
-		// in the envtest setup, so garbage collection doesn't cascade. Without
-		// this explicit pass, Applications from earlier It blocks leak into the
-		// next test's namespace and break assertions that count them.
-		appList := &apiv2.ApplicationList{}
-		if err := k8sClient.List(ctx, appList, client.InNamespace(WandbNamespace)); err == nil {
-			for i := range appList.Items {
-				app := &appList.Items[i]
-				if len(app.Finalizers) > 0 {
-					app.SetFinalizers(nil)
-					_ = k8sClient.Update(ctx, app)
-				}
-				_ = k8sClient.Delete(ctx, app, client.PropagationPolicy(metav1.DeletePropagationBackground))
-			}
-		}
-		Expect(k8sClient.Delete(ctx, job, client.PropagationPolicy(metav1.DeletePropagationBackground))).Should(SatisfyAny(Succeed(), MatchError(ContainSubstring("not found"))))
-		Expect(k8sClient.Delete(ctx, dbSecret)).Should(SatisfyAny(Succeed(), MatchError(ContainSubstring("not found"))))
-		Expect(k8sClient.Delete(ctx, wandb)).Should(SatisfyAny(Succeed(), MatchError(ContainSubstring("not found"))))
-		err := k8sClient.Get(ctx, wandbLookupKey, wandb)
-		if !errors.IsNotFound(err) {
-			wandb.SetFinalizers([]string{})
-			Expect(k8sClient.Update(ctx, wandb)).Should(Succeed())
-		}
+	var WandbNamespace string
+	BeforeEach(func() {
+		// Retained infrastructure deliberately outlives the CR; isolate every spec.
+		ns := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{GenerateName: "wandb-reconcile-"}}
+		Expect(k8sClient.Create(ctx, ns)).To(Succeed())
+		WandbNamespace = ns.Name
 	})
 
 	Context("When reconciling a v2 WeightsAndBiases object", func() {

@@ -92,56 +92,6 @@ func clickHouseInferStatus(
 	return consolidateResults(results), firstErr
 }
 
-func runClickHouseRetentionFinalizer(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, key string, spec apiv2.ClickHouseSpec) error {
-	switch wandb.GetRetentionPolicy(clickHouseInstanceInfraSpec(spec)).OnDelete {
-	case apiv2.PurgeOnDelete:
-		return clickHousePurgeFinalizer(ctx, c, wandb, key, spec)
-	case apiv2.DetachOnDelete:
-		return clickHouseDetachFinalizer(ctx, c, wandb, key, spec)
-	}
-	return nil
-}
-
-func clickHouseInstanceInfraSpec(spec apiv2.ClickHouseSpec) apiv2.ManagedInfraSpec {
-	if spec.ManagedClickHouse != nil {
-		return spec.ManagedClickHouse.ManagedInfraSpec
-	}
-	return apiv2.ManagedInfraSpec{}
-}
-
-func clickHousePurgeFinalizer(
-	ctx context.Context,
-	client client.Client,
-	wandb *apiv2.WeightsAndBiases,
-	key string,
-	spec apiv2.ClickHouseSpec,
-) error {
-	if managed := spec.ManagedClickHouse; managed != nil {
-		specNamespacedName := managedClickHouseSpecNamespacedName(managed)
-		onDeleteRule := altinity.ToClickHouseOnDeleteRule(wandb, wandb.GetRetentionPolicy(managed.ManagedInfraSpec))
-		return altinity.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
-	}
-	if spec.ExternalClickHouse != nil {
-		return externalch.DeleteConnectionSecret(ctx, client, wandb, key)
-	}
-	return nil
-}
-
-func clickHouseDetachFinalizer(
-	ctx context.Context,
-	client client.Client,
-	wandb *apiv2.WeightsAndBiases,
-	_ string,
-	spec apiv2.ClickHouseSpec,
-) error {
-	managed := spec.ManagedClickHouse
-	if managed == nil {
-		return nil
-	}
-	specNamespacedName := managedClickHouseSpecNamespacedName(managed)
-	return altinity.DetachFinalizer(ctx, client, specNamespacedName, wandb)
-}
-
 // managed
 
 func managedClickHouseWriteState(

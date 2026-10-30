@@ -60,32 +60,6 @@ func kafkaInferStatus(
 	return ctrl.Result{}, nil
 }
 
-func kafkaPurgeFinalizer(
-	ctx context.Context,
-	client client.Client,
-	wandb *apiv2.WeightsAndBiases,
-) error {
-	if spec := wandb.Spec.Kafka.ManagedKafka; spec != nil {
-		specNamespacedName := managedKafkaSpecNamespacedName(spec)
-		onDeleteRule := bufstream.ToKafkaOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
-		return bufstream.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
-	}
-	return nil
-}
-
-func kafkaDetachFinalizer(
-	ctx context.Context,
-	client client.Client,
-	wandb *apiv2.WeightsAndBiases,
-) error {
-	spec := wandb.Spec.Kafka.ManagedKafka
-	if spec == nil {
-		return nil
-	}
-	specNamespacedName := managedKafkaSpecNamespacedName(spec)
-	return bufstream.DetachFinalizer(ctx, client, specNamespacedName, wandb)
-}
-
 // managed
 
 func managedKafkaWriteState(

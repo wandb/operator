@@ -7,12 +7,14 @@ import (
 
 	"github.com/stretchr/testify/require"
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/retention"
 	"github.com/wandb/operator/internal/observability/telemetry"
 	servermanifest "github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -25,7 +27,7 @@ func manifestSecretTestClient(t *testing.T) (client.WithWatch, *apiv2.WeightsAnd
 	t.Helper()
 	scheme := runtime.NewScheme()
 	require.NoError(t, apiv2.AddToScheme(scheme))
-	require.NoError(t, corev1.AddToScheme(scheme))
+	require.NoError(t, clientgoscheme.AddToScheme(scheme))
 	wandb := &apiv2.WeightsAndBiases{
 		ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "test", UID: types.UID("install-1")},
 	}
@@ -399,6 +401,9 @@ func TestManifestSecretDetachFailureKeepsCleanupFinalizer(t *testing.T) {
 	require.NoError(t, c.Update(ctx, wandb))
 	_, err := reconcileManifestSecrets(ctx, c, wandb, servermanifest.Manifest{Secrets: []servermanifest.Secret{{Name: "signer", UseExactName: true}}})
 	require.NoError(t, err)
+	lifecycle, err := retention.Open(ctx, c, c, wandb)
+	require.NoError(t, err)
+	require.NoError(t, lifecycle.Reconcile(ctx))
 	require.NoError(t, c.Delete(ctx, wandb))
 	require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(wandb), wandb))
 	failing := interceptor.NewClient(c, interceptor.Funcs{Update: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.UpdateOption) error {

@@ -94,56 +94,6 @@ func mysqlInferStatus(
 
 // runMysqlRetentionFinalizer applies the configured retention policy for a
 // single MySQL instance during deletion.
-func runMysqlRetentionFinalizer(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, key string, spec apiv2.MySQLSpec) error {
-	switch wandb.GetRetentionPolicy(mysqlInstanceInfraSpec(spec)).OnDelete {
-	case apiv2.PurgeOnDelete:
-		return mysqlPurgeFinalizer(ctx, c, wandb, key, spec)
-	case apiv2.DetachOnDelete:
-		return mysqlDetachFinalizer(ctx, c, wandb, key, spec)
-	}
-	return nil
-}
-
-func mysqlInstanceInfraSpec(spec apiv2.MySQLSpec) apiv2.ManagedInfraSpec {
-	if spec.ManagedMysql != nil {
-		return spec.ManagedMysql.ManagedInfraSpec
-	}
-	return apiv2.ManagedInfraSpec{}
-}
-
-func mysqlPurgeFinalizer(
-	ctx context.Context,
-	client client.Client,
-	wandb *apiv2.WeightsAndBiases,
-	key string,
-	spec apiv2.MySQLSpec,
-) error {
-	if managed := spec.ManagedMysql; managed != nil {
-		specNamespacedName := managedMysqlSpecNamespacedName(managed)
-		onDeleteRule := moco.ToMysqlOnDeleteRule(wandb, wandb.GetRetentionPolicy(managed.ManagedInfraSpec))
-		return moco.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
-	}
-	if spec.ExternalMysql != nil {
-		return externalmysql.DeleteConnectionSecret(ctx, client, wandb, key)
-	}
-	return nil
-}
-
-func mysqlDetachFinalizer(
-	ctx context.Context,
-	client client.Client,
-	wandb *apiv2.WeightsAndBiases,
-	_ string,
-	spec apiv2.MySQLSpec,
-) error {
-	managed := spec.ManagedMysql
-	if managed == nil {
-		return nil
-	}
-	specNamespacedName := managedMysqlSpecNamespacedName(managed)
-	return moco.DetachFinalizer(ctx, client, specNamespacedName, wandb)
-}
-
 // managed
 
 func managedMysqlWriteState(

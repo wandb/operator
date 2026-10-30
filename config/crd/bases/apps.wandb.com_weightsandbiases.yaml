@@ -1318,8 +1318,6 @@ spec:
                               - detach
                               - purge
                               type: string
-                          required:
-                          - onDelete
                           type: object
                         serviceAccount:
                           properties:
@@ -1958,8 +1956,6 @@ spec:
                             - detach
                             - purge
                             type: string
-                        required:
-                        - onDelete
                         type: object
                       serviceAccount:
                         properties:
@@ -2772,8 +2768,6 @@ spec:
                               - detach
                               - purge
                               type: string
-                          required:
-                          - onDelete
                           type: object
                         storageSize:
                           type: string
@@ -3720,8 +3714,6 @@ spec:
                               - detach
                               - purge
                               type: string
-                          required:
-                          - onDelete
                           type: object
                         storageSize:
                           type: string
@@ -4411,8 +4403,6 @@ spec:
                               - detach
                               - purge
                               type: string
-                          required:
-                          - onDelete
                           type: object
                         sentinel:
                           properties:
@@ -4500,8 +4490,6 @@ spec:
                     - detach
                     - purge
                     type: string
-                required:
-                - onDelete
                 type: object
               size:
                 enum:

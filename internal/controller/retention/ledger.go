@@ -176,7 +176,7 @@ func (s *Session) trusted(obj client.Object, r Resource) bool {
 		if r.UID == obj.GetUID() {
 			return true
 		}
-		if s.Ledger.Deleting || r.Stage == 0 || r.Stage == 3 {
+		if r.Stage == 0 || r.Stage == 3 {
 			return false
 		}
 		for _, parent := range s.Ledger.Resources {
@@ -222,6 +222,9 @@ func (s *Session) reconcileObject(ctx context.Context, r Resource, obj client.Ob
 		return fmt.Errorf("resource %s is already terminating; retention cannot be guaranteed", r.Key())
 	}
 	r.UID = obj.GetUID()
+	if u, ok := obj.(*unstructured.Unstructured); ok && r.Kind == "StatefulSet" {
+		r.ClaimTemplates = claimTemplates(u)
+	}
 	s.Ledger.Resources[r.Key()] = r
 	// Record identity before changing ownership, so a retry cannot mistake an
 	// already-detached resource for an unrecognized object.

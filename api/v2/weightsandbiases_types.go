@@ -106,7 +106,7 @@ const (
 type RetentionPolicy struct {
 	// +kubebuilder:default="detach"
 	// +kubebuilder:validation:Enum=detach;purge
-	OnDelete OnDeletePolicy `json:"onDelete" default:"detach"`
+	OnDelete OnDeletePolicy `json:"onDelete,omitempty" default:"detach"`
 }
 
 // WeightsAndBiasesSpec defines the desired state of WeightsAndBiases.

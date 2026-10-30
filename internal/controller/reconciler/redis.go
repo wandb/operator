@@ -86,56 +86,6 @@ func redisInferStatus(
 	return consolidateResults(results), firstErr
 }
 
-func runRedisRetentionFinalizer(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, key string, spec apiv2.RedisSpec) error {
-	switch wandb.GetRetentionPolicy(redisInstanceInfraSpec(spec)).OnDelete {
-	case apiv2.PurgeOnDelete:
-		return redisPurgeFinalizer(ctx, c, wandb, key, spec)
-	case apiv2.DetachOnDelete:
-		return redisDetachFinalizer(ctx, c, wandb, key, spec)
-	}
-	return nil
-}
-
-func redisInstanceInfraSpec(spec apiv2.RedisSpec) apiv2.ManagedInfraSpec {
-	if spec.ManagedRedis != nil {
-		return spec.ManagedRedis.ManagedInfraSpec
-	}
-	return apiv2.ManagedInfraSpec{}
-}
-
-func redisPurgeFinalizer(
-	ctx context.Context,
-	client client.Client,
-	wandb *apiv2.WeightsAndBiases,
-	key string,
-	spec apiv2.RedisSpec,
-) error {
-	if managed := spec.ManagedRedis; managed != nil {
-		specNamespacedName := managedRedisSpecNamespacedName(managed)
-		onDeleteRule := opstree.ToRedisOnDeleteRule(wandb, wandb.GetRetentionPolicy(managed.ManagedInfraSpec))
-		return opstree.PurgeFinalizer(ctx, client, specNamespacedName, onDeleteRule)
-	}
-	if spec.ExternalRedis != nil {
-		return externalredis.DeleteConnectionSecret(ctx, client, wandb, key)
-	}
-	return nil
-}
-
-func redisDetachFinalizer(
-	ctx context.Context,
-	client client.Client,
-	wandb *apiv2.WeightsAndBiases,
-	_ string,
-	spec apiv2.RedisSpec,
-) error {
-	managed := spec.ManagedRedis
-	if managed == nil {
-		return nil
-	}
-	specNamespacedName := managedRedisSpecNamespacedName(managed)
-	return opstree.DetachFinalizer(ctx, client, specNamespacedName, wandb)
-}
-
 // managed
 
 func managedRedisWriteState(

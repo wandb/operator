@@ -56,25 +56,6 @@ const CleanupFinalizer = retention.Finalizer
 var defaultRequeueMinutes = 1
 var defaultRequeueDuration = time.Duration(defaultRequeueMinutes) * time.Minute
 
-type finalizerFunc func(context.Context, ctrlClient.Client, *apiv2.WeightsAndBiases) error
-
-func runRetentionFinalizer(
-	ctx context.Context,
-	client ctrlClient.Client,
-	wandb *apiv2.WeightsAndBiases,
-	infraSpec apiv2.ManagedInfraSpec,
-	purgeFn finalizerFunc,
-	detachFn finalizerFunc,
-) error {
-	switch wandb.GetRetentionPolicy(infraSpec).OnDelete {
-	case apiv2.PurgeOnDelete:
-		return purgeFn(ctx, client, wandb)
-	case apiv2.DetachOnDelete:
-		return detachFn(ctx, client, wandb)
-	}
-	return nil
-}
-
 // Reconcile for V2 of WandB as the assumed object
 func Reconcile(
 	ctx context.Context,

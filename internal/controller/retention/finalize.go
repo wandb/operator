@@ -35,10 +35,18 @@ func (s *Session) Finalize(ctx context.Context) (bool, error) {
 		if err := s.discover(ctx); err != nil {
 			return false, err
 		}
+		if err := s.CheckReady(ctx); err != nil {
+			return false, err
+		}
 		s.Ledger.Deleting = true
 		if err := s.save(ctx); err != nil {
 			return false, err
 		}
+	}
+	// Vendor controllers can finish in-flight reconciles after deletion starts.
+	// Persist late children/claims before attempting the next deletion stage.
+	if err := s.discover(ctx); err != nil {
+		return false, err
 	}
 	resources := s.sortedResources()
 	for _, r := range resources {
@@ -71,7 +79,7 @@ func (s *Session) Finalize(ctx context.Context) (bool, error) {
 		if r.Policy == apiv2.DetachOnDelete && r.Stage == 1 && !obj.GetDeletionTimestamp().IsZero() {
 			continue
 		}
-		if r.UID == "" || r.UID != obj.GetUID() || !associated(obj, s.parent, r) {
+		if r.UID == "" || r.UID != obj.GetUID() || (!associated(obj, s.parent, r) && obj.GetDeletionTimestamp().IsZero()) {
 			return false, fmt.Errorf("refusing deletion of unverified or replaced resource %s", r.Key())
 		}
 		if r.Policy == apiv2.DetachOnDelete {

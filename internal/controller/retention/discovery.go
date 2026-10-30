@@ -99,7 +99,12 @@ func (s *Session) discover(ctx context.Context) error {
 		}
 		for _, obj := range objects {
 			candidate := Resource{APIVersion: obj.GetAPIVersion(), Kind: obj.GetKind(), Namespace: obj.GetNamespace(), Name: obj.GetName()}
-			if _, ok := s.Ledger.Resources[candidate.Key()]; ok {
+			if existing, ok := s.Ledger.Resources[candidate.Key()]; ok {
+				if existing.UID != obj.GetUID() && (existing.Stage == 1 || existing.Stage == 2) && obj.GetDeletionTimestamp().IsZero() {
+					if err := s.reconcileObject(ctx, existing, obj); err != nil {
+						return err
+					}
+				}
 				continue
 			}
 			var parent Resource
@@ -145,6 +150,13 @@ func (s *Session) discover(ctx context.Context) error {
 				}
 			}
 			s.Ledger.Resources[candidate.Key()] = candidate
+			if s.Ledger.Deleting && string(candidate.Policy) == "purge" && !obj.GetDeletionTimestamp().IsZero() {
+				if err := s.save(ctx); err != nil {
+					return err
+				}
+				changed = true
+				continue
+			}
 			if err := s.reconcileObject(ctx, candidate, obj); err != nil {
 				return err
 			}
@@ -169,6 +181,12 @@ func (s *Session) claimParent(claim *unstructured.Unstructured, objects []*unstr
 	if len(claim.GetOwnerReferences()) != 0 {
 		return Resource{}, false
 	}
+	workloads := map[string]Resource{}
+	for _, r := range s.Ledger.Resources {
+		if r.Kind == "StatefulSet" && r.UID != "" && !r.Supplied && r.Namespace == claim.GetNamespace() {
+			workloads[r.Name] = r
+		}
+	}
 	for _, obj := range objects {
 		if obj.GetKind() != "StatefulSet" || obj.GetNamespace() != claim.GetNamespace() {
 			continue
@@ -177,14 +195,13 @@ func (s *Session) claimParent(claim *unstructured.Unstructured, objects []*unstr
 		if !ok {
 			continue
 		}
-		templates, _, _ := unstructured.NestedSlice(obj.Object, "spec", "volumeClaimTemplates")
-		for _, entry := range templates {
-			template, ok := entry.(map[string]any)
-			if !ok {
-				continue
-			}
-			name, _, _ := unstructured.NestedString(template, "metadata", "name")
-			ordinal, ok := strings.CutPrefix(claim.GetName(), name+"-"+obj.GetName()+"-")
+		parent.ClaimTemplates = claimTemplates(obj)
+		workloads[obj.GetName()] = parent
+	}
+	for workloadName, parent := range workloads {
+		for _, template := range parent.ClaimTemplates {
+			name := template.Name
+			ordinal, ok := strings.CutPrefix(claim.GetName(), name+"-"+workloadName+"-")
 			if !ok || name == "" {
 				continue
 			}
@@ -192,7 +209,7 @@ func (s *Session) claimParent(claim *unstructured.Unstructured, objects []*unstr
 			if err != nil || n < 0 || strconv.Itoa(n) != ordinal {
 				continue
 			}
-			labels, _, _ := unstructured.NestedStringMap(template, "metadata", "labels")
+			labels := template.Labels
 			if len(labels) == 0 {
 				continue
 			}
@@ -209,4 +226,26 @@ func (s *Session) claimParent(claim *unstructured.Unstructured, objects []*unstr
 		}
 	}
 	return Resource{}, false
+}
+
+func claimTemplates(sts *unstructured.Unstructured) []ClaimTemplate {
+	entries, _, _ := unstructured.NestedSlice(sts.Object, "spec", "volumeClaimTemplates")
+	selector, _, _ := unstructured.NestedStringMap(sts.Object, "spec", "selector", "matchLabels")
+	var result []ClaimTemplate
+	for _, entry := range entries {
+		template, ok := entry.(map[string]any)
+		if !ok {
+			continue
+		}
+		name, _, _ := unstructured.NestedString(template, "metadata", "name")
+		labels, _, _ := unstructured.NestedStringMap(template, "metadata", "labels")
+		if labels == nil {
+			labels = map[string]string{}
+		}
+		// Kubernetes stamps the StatefulSet selector onto each generated claim,
+		// even when a vendor supplies an otherwise unlabeled claim template.
+		maps.Copy(labels, selector)
+		result = append(result, ClaimTemplate{Name: name, Labels: labels})
+	}
+	return result
 }

@@ -103,7 +103,7 @@ func TestPurgeNeverDeletesReplacementUID(t *testing.T) {
 	actual.UID = "replacement"
 	require.NoError(t, c.Create(ctx, actual))
 	done, err := s.Finalize(ctx)
-	require.ErrorContains(t, err, "replaced")
+	require.ErrorContains(t, err, "unverified")
 	require.False(t, done)
 	require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(actual), actual))
 	require.True(t, actual.DeletionTimestamp.IsZero())
@@ -257,4 +257,42 @@ func TestClaimDiscoveryDoesNotCrossInstanceOrNameBoundary(t *testing.T) {
 			require.Equal(t, tc.want, found)
 		})
 	}
+}
+
+func TestClaimProvenanceSurvivesWorkloadDeletion(t *testing.T) {
+	ctx := context.Background()
+	w, c, secret := lifecycleFixture(t, apiv2.PurgeOnDelete)
+	s, err := Open(ctx, c, c, w)
+	require.NoError(t, err)
+	require.NoError(t, s.Reconcile(ctx))
+	sts := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: "cache", Namespace: w.Namespace, UID: "workload", OwnerReferences: []metav1.OwnerReference{{APIVersion: "v1", Kind: "Secret", Name: secret.Name, UID: secret.UID}}}, Spec: appsv1.StatefulSetSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "cache"}}, VolumeClaimTemplates: []corev1.PersistentVolumeClaim{{ObjectMeta: metav1.ObjectMeta{Name: "data"}}}}}
+	require.NoError(t, c.Create(ctx, sts))
+	require.NoError(t, s.Reconcile(ctx))
+	require.NoError(t, c.Delete(ctx, sts))
+	// A late PVC from an in-flight vendor reconcile has no owner reference.
+	claim := &corev1.PersistentVolumeClaim{ObjectMeta: metav1.ObjectMeta{Name: "data-cache-3", Namespace: w.Namespace, UID: "claim", Labels: map[string]string{"app": "cache"}}}
+	require.NoError(t, c.Create(ctx, claim))
+	s, err = Open(ctx, c, c, w)
+	require.NoError(t, err)
+	require.NoError(t, s.discover(ctx))
+	r := s.Ledger.Resources[(Resource{APIVersion: "v1", Kind: "PersistentVolumeClaim", Namespace: w.Namespace, Name: claim.Name}).Key()]
+	require.Equal(t, claim.UID, r.UID)
+	require.Equal(t, "mysql", r.Component)
+	require.Equal(t, apiv2.PurgeOnDelete, r.Policy)
+}
+
+func TestFinalizeDiscoversLateChildrenBeforeCompleting(t *testing.T) {
+	ctx := context.Background()
+	w, c, secret := lifecycleFixture(t, apiv2.DetachOnDelete)
+	s, err := Open(ctx, c, c, w)
+	require.NoError(t, err)
+	require.NoError(t, s.Reconcile(ctx))
+	bad := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "late", Namespace: w.Namespace, UID: "late", OwnerReferences: []metav1.OwnerReference{{APIVersion: "v1", Kind: "Secret", Name: secret.Name, UID: secret.UID}, {APIVersion: "apps.wandb.com/v2", Kind: "WeightsAndBiases", Name: w.Name, UID: w.UID}}}}
+	require.NoError(t, c.Create(ctx, bad))
+	done, err := s.Finalize(ctx)
+	require.NoError(t, err)
+	require.True(t, done)
+	require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(bad), bad))
+	require.False(t, ownedBy(bad, w.UID))
+	require.True(t, ownedBy(bad, secret.UID))
 }
