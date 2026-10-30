@@ -13,6 +13,7 @@ import (
 	"github.com/wandb/operator/pkg/wandb/manifest"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -61,6 +62,13 @@ var _ = Describe("Redis vendor specs", func() {
 			Name:         redisSentinelRunVolumeName,
 			VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
 		}))
+		// Sentinels are not sized by the server manifest; they still need
+		// requests so the quorum is schedulable rather than BestEffort.
+		Expect(sentinel.Spec.KubernetesConfig.Resources).NotTo(BeNil())
+		Expect(sentinel.Spec.KubernetesConfig.Resources.Requests.Cpu().String()).To(Equal("100m"))
+		Expect(sentinel.Spec.KubernetesConfig.Resources.Requests.Memory().String()).To(Equal("128Mi"))
+		Expect(sentinel.Spec.KubernetesConfig.Resources.Limits.Cpu().String()).To(Equal("250m"))
+		Expect(sentinel.Spec.KubernetesConfig.Resources.Limits.Memory().String()).To(Equal("256Mi"))
 
 		replication, err := ToRedisReplicationVendorSpec(context.Background(), wandb, wandb.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis, redisScheme(), manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
@@ -71,6 +79,23 @@ var _ = Describe("Redis vendor specs", func() {
 		Expect(replication.Spec.InitContainer.Enabled).To(HaveValue(BeFalse()))
 		expectRedisDefaultContainerSecurityContext(replication.Spec.InitContainer.SecurityContext)
 		expectRedisWritableTmpMount(replication.Spec.Storage.VolumeMount.MountPath)
+	})
+
+	It("lets an explicit CR sentinel resource block replace the default", func() {
+		wandb := redisWandb(true)
+		spec := wandb.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis
+		spec.Sentinel.Config.Resources = corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("300m"),
+				corev1.ResourceMemory: resource.MustParse("300Mi"),
+			},
+		}
+
+		sentinel, err := ToRedisSentinelVendorSpec(context.Background(), wandb, spec, redisScheme(), manifest.Manifest{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(sentinel.Spec.KubernetesConfig.Resources.Requests.Cpu().String()).To(Equal("300m"))
+		Expect(sentinel.Spec.KubernetesConfig.Resources.Requests.Memory().String()).To(Equal("300Mi"))
+		Expect(sentinel.Spec.KubernetesConfig.Resources.Limits).To(BeEmpty())
 	})
 
 	It("omits fixed Redis IDs in OpenShift mode", func() {

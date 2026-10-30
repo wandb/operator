@@ -64,6 +64,25 @@ func DefaultRedisExporterImage(img manifest.ImageRef, globalImageRegistry string
 	return defaultRedisExporterImage
 }
 
+// defaultSentinelResources gives the sentinel quorum a scheduler-visible
+// footprint. The server manifest sizes only the Redis data pods (and
+// ApplyInfraSizing never populates spec.sentinel.config.resources), so without
+// this sentinels run BestEffort: invisible to bin-packing and the first to be
+// evicted under node pressure. Sized well above the measured ~6 MB / <0.02 CPU
+// per sentinel at the small envelope; an explicit CR value still replaces it.
+func defaultSentinelResources() *corev1.ResourceRequirements {
+	return &corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("100m"),
+			corev1.ResourceMemory: resource.MustParse("128Mi"),
+		},
+		Limits: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("250m"),
+			corev1.ResourceMemory: resource.MustParse("256Mi"),
+		},
+	}
+}
+
 const (
 	redisRunAsUser  int64 = 1000
 	redisRunAsGroup int64 = 1000
@@ -310,7 +329,7 @@ func ToRedisSentinelVendorSpec(
 				Image:            RedisSentinelImage(mfst.Redis["default"].Images["sentinel"], wandb.Spec.Global.ImageRegistry),
 				ImagePullPolicy:  corev1.PullIfNotPresent,
 				ImagePullSecrets: pullSecretsPtr(wandb),
-				Resources:        &corev1.ResourceRequirements{},
+				Resources:        defaultSentinelResources(),
 			},
 			PodSecurityContext: redisPodSecurityContext(),
 			SecurityContext:    redisContainerSecurityContext(),
