@@ -76,14 +76,14 @@ func TestExternalMysqlCheckTags(t *testing.T) {
 }
 
 func TestCheckRejectsWrongSpecType(t *testing.T) {
-	result := Checks[ExternalMysqlCheck].Run(context.Background(), &apiv2.RedisConnection{}, literalResolver)
+	result := Checks[ExternalMysqlCheck].Run(context.Background(), &apiv2.RedisConnection{}, Env{Resolve: literalResolver})
 	if result.Outcome != OutcomeUnknown {
 		t.Fatalf("Outcome = %q, want %q", result.Outcome, OutcomeUnknown)
 	}
 }
 
 func TestRunExternalMysqlCheck_MissingHost(t *testing.T) {
-	result := RunExternalMysqlCheck(context.Background(), &apiv2.MysqlConnection{}, literalResolver)
+	result := RunExternalMysqlCheck(context.Background(), &apiv2.MysqlConnection{}, Env{Resolve: literalResolver})
 	if result.Outcome != OutcomeFail {
 		t.Fatalf("Outcome = %q, want %q", result.Outcome, OutcomeFail)
 	}
@@ -91,7 +91,7 @@ func TestRunExternalMysqlCheck_MissingHost(t *testing.T) {
 
 func TestRunExternalMysqlCheck_MissingPort(t *testing.T) {
 	conn := &apiv2.MysqlConnection{Host: apiv2.ValueOrSecret{Value: "db.example.com"}}
-	result := RunExternalMysqlCheck(context.Background(), conn, literalResolver)
+	result := RunExternalMysqlCheck(context.Background(), conn, Env{Resolve: literalResolver})
 	if result.Outcome != OutcomeFail {
 		t.Fatalf("Outcome = %q, want %q", result.Outcome, OutcomeFail)
 	}
@@ -101,7 +101,7 @@ func TestRunExternalMysqlCheck_ResolveError(t *testing.T) {
 	failing := func(context.Context, apiv2.ValueOrSecret) (string, error) {
 		return "", errors.New("secret not found")
 	}
-	result := RunExternalMysqlCheck(context.Background(), &apiv2.MysqlConnection{}, failing)
+	result := RunExternalMysqlCheck(context.Background(), &apiv2.MysqlConnection{}, Env{Resolve: failing})
 	if result.Outcome != OutcomeUnknown {
 		t.Fatalf("Outcome = %q, want %q", result.Outcome, OutcomeUnknown)
 	}
@@ -122,7 +122,7 @@ func TestRunExternalMysqlCheck_Unreachable(t *testing.T) {
 		Username: apiv2.ValueOrSecret{Value: "wandb"},
 		Password: apiv2.ValueOrSecret{Value: "secret"},
 	}
-	result := Checks[ExternalMysqlCheck].Run(context.Background(), conn, literalResolver)
+	result := Checks[ExternalMysqlCheck].Run(context.Background(), conn, Env{Resolve: literalResolver})
 	if result.Outcome != OutcomeFail {
 		t.Fatalf("Outcome = %q, want %q", result.Outcome, OutcomeFail)
 	}
@@ -161,7 +161,7 @@ func TestRunExternalMysqlCheck_InvalidCA(t *testing.T) {
 		Port:  apiv2.ValueOrSecret{Value: "3306"},
 		SslCa: apiv2.ValueOrSecret{Value: "not-pem"},
 	}
-	result := RunExternalMysqlCheck(context.Background(), conn, literalResolver)
+	result := RunExternalMysqlCheck(context.Background(), conn, Env{Resolve: literalResolver})
 	if result.Outcome != OutcomeFail {
 		t.Fatalf("Outcome = %q, want %q", result.Outcome, OutcomeFail)
 	}
