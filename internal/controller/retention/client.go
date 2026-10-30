@@ -95,7 +95,9 @@ func (s *Session) Delete(ctx context.Context, obj client.Object, opts ...client.
 	if ok {
 		return nil
 	}
-	return s.Client.Delete(ctx, obj, opts...)
+	// Legacy vendor readers can attempt selector-based cleanup when a root is
+	// absent. An object outside this inventory has no verified deletion authority.
+	return fmt.Errorf("refusing infrastructure deletion outside the retention inventory: %s/%s", obj.GetNamespace(), obj.GetName())
 }
 
 // Inventory resources are patched only by the lifecycle using an observed

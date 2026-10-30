@@ -182,6 +182,19 @@ func TestScopedClientNeverAddsWandbOwnership(t *testing.T) {
 	require.Empty(t, actual.OwnerReferences)
 }
 
+func TestScopedClientRejectsLegacyCleanupOfUninventoriedResources(t *testing.T) {
+	ctx := context.Background()
+	w, c, _ := lifecycleFixture(t, apiv2.PurgeOnDelete)
+	supplied := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "customer-credentials", Namespace: w.Namespace, UID: "customer", Labels: common.BuildWandbLabels(w, "mysql")}}
+	require.NoError(t, c.Create(ctx, supplied))
+	s, err := Open(ctx, c, c, w)
+	require.NoError(t, err)
+	require.NoError(t, s.Reconcile(ctx))
+	require.ErrorContains(t, s.Delete(ctx, supplied), "outside the retention inventory")
+	require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(supplied), supplied))
+	require.Equal(t, types.UID("customer"), supplied.UID)
+}
+
 func TestRemovedInstanceRemainsInDeletionInventory(t *testing.T) {
 	ctx := context.Background()
 	w, c, secret := lifecycleFixture(t, apiv2.PurgeOnDelete)
