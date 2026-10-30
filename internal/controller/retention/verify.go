@@ -32,6 +32,9 @@ func (s *Session) verifyOwnerPath(ctx context.Context, obj client.Object, retain
 		owner.SetKind(ref.Kind)
 		if err := s.reader.Get(ctx, client.ObjectKey{Namespace: obj.GetNamespace(), Name: ref.Name}, owner); err != nil {
 			if apierrors.IsNotFound(err) {
+				if retained {
+					return fmt.Errorf("retained object %s/%s has a missing owner %s/%s", obj.GetNamespace(), obj.GetName(), ref.Kind, ref.Name)
+				}
 				continue
 			}
 			return err

@@ -99,22 +99,27 @@ func (s *Session) discover(ctx context.Context) error {
 		}
 		for _, obj := range objects {
 			candidate := Resource{APIVersion: obj.GetAPIVersion(), Kind: obj.GetKind(), Namespace: obj.GetNamespace(), Name: obj.GetName()}
+			var parent Resource
+			found := false
+			for _, ref := range obj.GetOwnerReferences() {
+				if p, ok := owners[ref.UID]; ok {
+					if found && InstanceID(parent.Component, parent.Instance) != InstanceID(p.Component, p.Instance) {
+						return fmt.Errorf("descendant %s is shared by multiple infrastructure instances", candidate.Key())
+					}
+					parent = p
+					found = true
+				}
+			}
 			if existing, ok := s.Ledger.Resources[candidate.Key()]; ok {
+				if found && !existing.Supplied && InstanceID(existing.Component, existing.Instance) != InstanceID(parent.Component, parent.Instance) {
+					return fmt.Errorf("descendant %s has an owner in another infrastructure instance", candidate.Key())
+				}
 				if existing.UID != obj.GetUID() && (existing.Stage == 1 || existing.Stage == 2) && obj.GetDeletionTimestamp().IsZero() {
 					if err := s.reconcileObject(ctx, existing, obj); err != nil {
 						return err
 					}
 				}
 				continue
-			}
-			var parent Resource
-			found := false
-			for _, ref := range obj.GetOwnerReferences() {
-				if p, ok := owners[ref.UID]; ok {
-					parent = p
-					found = true
-					break
-				}
 			}
 			if !found && obj.GetKind() == "PersistentVolumeClaim" {
 				parent, found = s.claimParent(obj, objects, owners)

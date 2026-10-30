@@ -30,6 +30,7 @@ type Ledger struct {
 	Deleting         bool                `json:"deleting,omitempty"`
 	Resources        map[string]Resource `json:"resources"`
 	Dependencies     map[string][]string `json:"dependencies,omitempty"`
+	Clients          map[string]Resource `json:"clients,omitempty"`
 }
 
 // Session serializes retention writes with this installation's reconcile loop.
@@ -170,7 +171,17 @@ func (s *Session) objectResource(obj client.Object) (Resource, bool, error) {
 
 func (s *Session) trusted(obj client.Object, r Resource) bool {
 	if r.UID != "" {
-		if foreign := obj.GetLabels()[UIDLabel]; foreign != "" && !associated(obj, s.parent, r) {
+		labels := obj.GetLabels()
+		if foreign := labels[UIDLabel]; foreign != "" && foreign != string(s.parent.UID) {
+			return false
+		}
+		if component := labels[ComponentLabel]; component != "" && component != r.Component {
+			return false
+		}
+		if instance := labels[InstanceLabel]; instance != "" && instance != instanceLabel(r.Instance) {
+			return false
+		}
+		if instance := obj.GetAnnotations()[InstanceAnnotation]; instance != "" && instance != r.Instance {
 			return false
 		}
 		if r.UID == obj.GetUID() {
@@ -280,6 +291,9 @@ func (s *Session) Reconcile(ctx context.Context) error {
 		}
 	}
 	if err := s.validateDependencies(); err != nil {
+		return err
+	}
+	if err := s.captureClients(ctx); err != nil {
 		return err
 	}
 	s.Ledger.ReadyFingerprint = s.fingerprint

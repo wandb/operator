@@ -38,13 +38,33 @@ func (s *Session) canAdopt(ctx context.Context, obj client.Object, r Resource) (
 		return false, fmt.Errorf("cannot readopt from an installation that still exists")
 	}
 	previous, ok := donor.Resources[r.Key()]
-	if !ok || previous.UID != obj.GetUID() || previous.Policy != apiv2.DetachOnDelete || previous.Supplied || previous.Component != r.Component || previous.Instance != r.Instance {
+	if ok && (previous.Policy != apiv2.DetachOnDelete || previous.Supplied || previous.Component != r.Component || previous.Instance != r.Instance) {
 		return false, nil
 	}
 	owner := s.parent.DeepCopy()
 	owner.UID = uid
-	if !associated(obj, owner, previous) || ownedBy(obj, uid) {
+	if ownedBy(obj, uid) || (obj.GetLabels()[UIDLabel] != "" && obj.GetLabels()[UIDLabel] != string(uid)) {
 		return false, nil
 	}
-	return true, nil
+	exact := ok && previous.UID == obj.GetUID() && previous.Policy == apiv2.DetachOnDelete && !previous.Supplied && previous.Component == r.Component && previous.Instance == r.Instance
+	if exact && associated(obj, owner, previous) {
+		return true, nil
+	}
+	// Vendor-managed metadata may be reset, and Pods can restart while detached.
+	// Require a parent already verified by this adopter before accepting either.
+	for _, parent := range s.Ledger.Resources {
+		if parent.Key() == r.Key() || parent.UID == "" || parent.Supplied || parent.Component != r.Component || parent.Instance != r.Instance {
+			continue
+		}
+		if ownedBy(obj, parent.UID) && (exact || r.Stage == 1 || r.Stage == 2) {
+			return true, nil
+		}
+		if exact && r.Stage == 3 && parent.Stage == 0 {
+			oldParent, known := donor.Resources[parent.Key()]
+			if known && oldParent.UID == parent.UID && oldParent.Policy == apiv2.DetachOnDelete {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }

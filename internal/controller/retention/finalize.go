@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	apiv2 "github.com/wandb/operator/api/v2"
+	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -30,6 +31,9 @@ func purgeOrder(r Resource) int {
 func (s *Session) Finalize(ctx context.Context) (bool, error) {
 	if !s.Ledger.Deleting {
 		if err := s.CheckReady(ctx); err != nil {
+			return false, err
+		}
+		if err := s.captureClients(ctx); err != nil {
 			return false, err
 		}
 		if err := s.discover(ctx); err != nil {
@@ -79,7 +83,7 @@ func (s *Session) Finalize(ctx context.Context) (bool, error) {
 		if r.Policy == apiv2.DetachOnDelete && r.Stage == 1 && !obj.GetDeletionTimestamp().IsZero() {
 			continue
 		}
-		if r.UID == "" || r.UID != obj.GetUID() || (!associated(obj, s.parent, r) && obj.GetDeletionTimestamp().IsZero()) {
+		if r.UID == "" || r.UID != obj.GetUID() || !s.trusted(obj, r) {
 			return false, fmt.Errorf("refusing deletion of unverified or replaced resource %s", r.Key())
 		}
 		if r.Policy == apiv2.DetachOnDelete {
@@ -104,14 +108,14 @@ func (s *Session) Finalize(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-func (s *Session) stopApplicationClients(ctx context.Context) (bool, error) {
+func (s *Session) captureClients(ctx context.Context) error {
 	apps := &apiv2.ApplicationList{}
 	if err := s.reader.List(ctx, apps, client.InNamespace(s.parent.Namespace)); err != nil {
-		return false, err
+		return err
 	}
 	jobs := &batchv1.JobList{}
 	if err := s.reader.List(ctx, jobs, client.InNamespace(s.parent.Namespace)); err != nil {
-		return false, err
+		return err
 	}
 	var objects []client.Object
 	for i := range apps.Items {
@@ -120,16 +124,49 @@ func (s *Session) stopApplicationClients(ctx context.Context) (bool, error) {
 	for i := range jobs.Items {
 		objects = append(objects, &jobs.Items[i])
 	}
+	deployments := &appsv1.DeploymentList{}
+	if err := s.reader.List(ctx, deployments, client.InNamespace(s.parent.Namespace)); err != nil {
+		return err
+	}
+	for i := range deployments.Items {
+		objects = append(objects, &deployments.Items[i])
+	}
+	if s.Ledger.Clients == nil {
+		s.Ledger.Clients = map[string]Resource{}
+	}
 	for _, obj := range objects {
 		if ownedBy(obj, s.parent.UID) {
-			if obj.GetDeletionTimestamp().IsZero() {
-				uid := obj.GetUID()
-				if err := s.Client.Delete(ctx, obj, client.PropagationPolicy(metav1.DeletePropagationForeground), client.Preconditions{UID: &uid}); err != nil {
-					return false, ignoreMissing(err)
-				}
+			gvk, err := s.GroupVersionKindFor(obj)
+			if err != nil {
+				return err
 			}
-			return false, nil
+			r := Resource{APIVersion: gvk.GroupVersion().String(), Kind: gvk.Kind, Namespace: obj.GetNamespace(), Name: obj.GetName(), UID: obj.GetUID()}
+			s.Ledger.Clients[r.Key()] = r
 		}
+	}
+	return s.save(ctx)
+}
+
+func (s *Session) stopApplicationClients(ctx context.Context) (bool, error) {
+	// Orphan propagation can remove ownerReferences before this finalizer runs.
+	// Persist client UIDs while live instead of relying on those references here.
+	for _, r := range s.Ledger.Clients {
+		obj := resourceObject(r)
+		if err := s.reader.Get(ctx, client.ObjectKeyFromObject(obj), obj); absent(err, r) {
+			continue
+		} else if err != nil {
+			return false, err
+		}
+		if obj.GetUID() != r.UID {
+			return false, fmt.Errorf("application client %s was replaced before purge", r.Key())
+		}
+		if obj.GetDeletionTimestamp().IsZero() {
+			uid := r.UID
+			if err := s.Client.Delete(ctx, obj, client.PropagationPolicy(metav1.DeletePropagationForeground), client.Preconditions{UID: &uid}); err != nil {
+				return false, ignoreMissing(err)
+			}
+		}
+		return false, nil
 	}
 	return true, nil
 }

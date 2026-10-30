@@ -109,6 +109,32 @@ func TestPurgeNeverDeletesReplacementUID(t *testing.T) {
 	require.True(t, actual.DeletionTimestamp.IsZero())
 }
 
+func TestPurgeStopsRecordedClientsAfterOrphanPropagation(t *testing.T) {
+	ctx := context.Background()
+	w, c, secret := lifecycleFixture(t, apiv2.PurgeOnDelete)
+	app := &apiv2.Application{ObjectMeta: metav1.ObjectMeta{Name: "server", Namespace: w.Namespace, UID: "server-uid", Finalizers: []string{"test/wait"}, OwnerReferences: secret.OwnerReferences}}
+	require.NoError(t, c.Create(ctx, app))
+	s, err := Open(ctx, c, c, w)
+	require.NoError(t, err)
+	require.NoError(t, s.Reconcile(ctx))
+	app.OwnerReferences = nil
+	require.NoError(t, c.Update(ctx, app))
+	s, err = Open(ctx, c, c, w)
+	require.NoError(t, err)
+	done, err := s.Finalize(ctx)
+	require.NoError(t, err)
+	require.False(t, done)
+	require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(secret), &corev1.Secret{}))
+	require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(app), app))
+	require.False(t, app.DeletionTimestamp.IsZero())
+	app.Finalizers = nil
+	require.NoError(t, c.Update(ctx, app))
+	done, err = s.Finalize(ctx)
+	require.NoError(t, err)
+	require.False(t, done)
+	require.True(t, apierrors.IsNotFound(c.Get(ctx, client.ObjectKeyFromObject(secret), &corev1.Secret{})))
+}
+
 func TestMigrationRetriesEveryObjectAfterRootAlreadyDetached(t *testing.T) {
 	ctx := context.Background()
 	w, c, secret := lifecycleFixture(t, apiv2.DetachOnDelete)
@@ -194,6 +220,10 @@ func TestReadoptionRequiresExplicitUIDAndDeletedPreviousInstallation(t *testing.
 	w.Finalizers = nil
 	require.NoError(t, c.Update(ctx, w))
 	require.NoError(t, c.Delete(ctx, w))
+	// The vendor creates a new Pod after detachment and before readoption.
+	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "restarted", Namespace: w.Namespace, UID: "new-pod", OwnerReferences: []metav1.OwnerReference{{APIVersion: "v1", Kind: "Secret", Name: secret.Name, UID: secret.UID}}}}
+	associate(pod, w, Resource{Component: "mysql", Instance: "default"})
+	require.NoError(t, c.Create(ctx, pod))
 	next, err = Open(ctx, c, c, newW)
 	require.NoError(t, err)
 	require.NoError(t, next.Reconcile(ctx))
@@ -201,6 +231,27 @@ func TestReadoptionRequiresExplicitUIDAndDeletedPreviousInstallation(t *testing.
 	require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(secret), actual))
 	require.Equal(t, secret.UID, actual.UID)
 	require.Equal(t, string(newW.UID), actual.Labels[UIDLabel])
+	require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(pod), pod))
+	require.Equal(t, string(newW.UID), pod.Labels[UIDLabel])
+}
+
+func TestFinalizeUsesRecordedUIDWhenVendorResetsLabels(t *testing.T) {
+	ctx := context.Background()
+	w, c, secret := lifecycleFixture(t, apiv2.DetachOnDelete)
+	s, err := Open(ctx, c, c, w)
+	require.NoError(t, err)
+	require.NoError(t, s.Reconcile(ctx))
+	s.Ledger.Deleting = true
+	require.NoError(t, s.save(ctx))
+	actual := &corev1.Secret{}
+	require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(secret), actual))
+	actual.Labels = nil
+	require.NoError(t, c.Update(ctx, actual))
+	done, err := s.Finalize(ctx)
+	require.NoError(t, err)
+	require.True(t, done)
+	require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(secret), actual))
+	require.Equal(t, secret.UID, actual.UID)
 }
 
 func TestMigrationRejectsIndirectOwnershipPath(t *testing.T) {
@@ -213,6 +264,42 @@ func TestMigrationRejectsIndirectOwnershipPath(t *testing.T) {
 	s, err := Open(ctx, c, c, w)
 	require.NoError(t, err)
 	require.ErrorContains(t, s.Reconcile(ctx), "ownership path")
+}
+
+func TestRetainedResourceWithMissingOwnerBlocksDeletion(t *testing.T) {
+	ctx := context.Background()
+	w, c, secret := lifecycleFixture(t, apiv2.DetachOnDelete)
+	s, err := Open(ctx, c, c, w)
+	require.NoError(t, err)
+	require.NoError(t, s.Reconcile(ctx))
+	require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(secret), secret))
+	secret.OwnerReferences = []metav1.OwnerReference{{APIVersion: "v1", Kind: "ConfigMap", Name: "gone", UID: "gone-uid"}}
+	require.NoError(t, c.Update(ctx, secret))
+	require.ErrorContains(t, s.CheckReady(ctx), "missing owner")
+	require.ErrorContains(t, s.Reconcile(ctx), "missing owner")
+}
+
+func TestDiscoveryRejectsSharedOwnersBeforeAndAfterRecording(t *testing.T) {
+	for _, alreadyRecorded := range []bool{false, true} {
+		t.Run(fmt.Sprint(alreadyRecorded), func(t *testing.T) {
+			ctx := context.Background()
+			w, c, secret := lifecycleFixture(t, apiv2.DetachOnDelete)
+			w.Spec.MySQL["other"] = apiv2.MySQLSpec{ExternalMysql: &apiv2.MysqlConnection{}}
+			other := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "wandb-mysql-connection-other", Namespace: w.Namespace, UID: "other", OwnerReferences: secret.OwnerReferences}}
+			require.NoError(t, c.Create(ctx, other))
+			child := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "shared", Namespace: w.Namespace, UID: "shared", OwnerReferences: []metav1.OwnerReference{{APIVersion: "v1", Kind: "Secret", Name: secret.Name, UID: secret.UID}}}}
+			require.NoError(t, c.Create(ctx, child))
+			s, err := Open(ctx, c, c, w)
+			require.NoError(t, err)
+			if alreadyRecorded {
+				require.NoError(t, s.Reconcile(ctx))
+			}
+			require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(child), child))
+			child.OwnerReferences = append(child.OwnerReferences, metav1.OwnerReference{APIVersion: "v1", Kind: "Secret", Name: other.Name, UID: other.UID})
+			require.NoError(t, c.Update(ctx, child))
+			require.ErrorContains(t, s.Reconcile(ctx), "shared by multiple")
+		})
+	}
 }
 
 func TestDependencyValidationMatchesProvisioningFallback(t *testing.T) {
