@@ -19,7 +19,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
-	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 const (
@@ -195,7 +194,6 @@ func ToRedisStandaloneVendorSpec(
 	scheme *runtime.Scheme,
 	mfst manifest.Manifest,
 ) (*redisv1beta2.Redis, error) {
-	_, log := logx.WithSlog(ctx, logx.Redis)
 	if spec == nil {
 		return nil, nil
 	}
@@ -257,11 +255,6 @@ func ToRedisStandaloneVendorSpec(
 		}
 	}
 
-	if err := ctrl.SetControllerReference(wandb, redis, scheme); err != nil {
-		log.Error("failed to set owner reference on Redis CR", logx.ErrAttr(err))
-		return nil, fmt.Errorf("failed to set owner reference: %w", err)
-	}
-
 	redis.Spec.RedisExporter = createRedisExporterConfig(spec.Telemetry, mfst.Redis["default"].Images["exporter"], wandb)
 
 	return redis, nil
@@ -277,7 +270,6 @@ func ToRedisSentinelVendorSpec(
 	scheme *runtime.Scheme,
 	mfst manifest.Manifest,
 ) (*redissentinelv1beta2.RedisSentinel, error) {
-	_, log := logx.WithSlog(ctx, logx.Redis)
 	if spec == nil {
 		return nil, nil
 	}
@@ -336,10 +328,6 @@ func ToRedisSentinelVendorSpec(
 	}
 
 	// Set owner reference
-	if err := ctrl.SetControllerReference(wandb, sentinel, scheme); err != nil {
-		log.Error("failed to set owner reference on RedisSentinel CR", logx.ErrAttr(err))
-		return nil, fmt.Errorf("failed to set owner reference: %w", err)
-	}
 
 	// Add RedisExporter if telemetry is enabled
 	sentinel.Spec.RedisExporter = createRedisExporterConfig(spec.Telemetry, mfst.Redis["default"].Images["exporter"], wandb)
@@ -426,10 +414,6 @@ func ToRedisReplicationVendorSpec(
 	}
 
 	// Set owner reference
-	if err := ctrl.SetControllerReference(wandb, replication, scheme); err != nil {
-		log.Error("failed to set owner reference on RedisReplication CR", logx.ErrAttr(err))
-		return nil, fmt.Errorf("failed to set owner reference: %w", err)
-	}
 
 	// Add RedisExporter if telemetry is enabled
 	replication.Spec.RedisExporter = createRedisExporterConfig(spec.Telemetry, mfst.Redis["default"].Images["exporter"], wandb)

@@ -45,6 +45,33 @@ func setOpenShiftMode(t *testing.T, enabled bool) {
 	})
 }
 
+func TestInfrastructureHasNoWandbOwnerInEitherNamespace(t *testing.T) {
+	for _, namespace := range []string{"default", "infrastructure"} {
+		t.Run(namespace, func(t *testing.T) {
+			wandb := testWandb()
+			wandb.Spec.Kafka.ManagedKafka.Namespace = namespace
+			nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: namespace, Name: "wandb-kafka"})
+			scheme := testScheme(t)
+			secret, err := ToCredentialsSecret(wandb, nsn, testStorage(), scheme)
+			require.NoError(t, err)
+			config, err := ToConfigMap(wandb, nsn, testStorage(), scheme)
+			require.NoError(t, err)
+			sa, err := ToServiceAccount(wandb, nsn, testStorage(), scheme)
+			require.NoError(t, err)
+			rb, err := ToSccRoleBinding(wandb, nsn, scheme)
+			require.NoError(t, err)
+			etcd, err := ToEtcdApplication(wandb, nsn, scheme, manifest.Manifest{})
+			require.NoError(t, err)
+			broker, err := ToBufstreamApplication(wandb, nsn, testStorage(), true, scheme, manifest.Manifest{})
+			require.NoError(t, err)
+			for _, obj := range []metav1.Object{secret, config, sa, rb, etcd, broker} {
+				require.Equal(t, namespace, obj.GetNamespace(), obj.GetName())
+				require.Empty(t, obj.GetOwnerReferences(), obj.GetName())
+			}
+		})
+	}
+}
+
 func TestToEtcdApplication(t *testing.T) {
 	setOpenShiftMode(t, false)
 	wandb := testWandb()
@@ -274,8 +301,8 @@ func TestToServiceAccount(t *testing.T) {
 	require.Equal(t, "default", sa.Namespace)
 	require.NotNil(t, sa.AutomountServiceAccountToken)
 	require.False(t, *sa.AutomountServiceAccountToken)
-	// Same-namespace resources are owned by the CR for GC.
-	require.Len(t, sa.OwnerReferences, 1)
+	// The retention lifecycle owns deletion even in the same namespace.
+	require.Empty(t, sa.OwnerReferences)
 }
 
 func TestToServiceAccountCanReferenceExistingIdentity(t *testing.T) {

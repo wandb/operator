@@ -1,6 +1,12 @@
 package external
 
 import (
+	"context"
+	apiv2 "github.com/wandb/operator/api/v2"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -49,4 +55,20 @@ func TestInferExternalStatusRequiresConnection(t *testing.T) {
 
 	require.Equal(t, common.ErrorState, state)
 	require.False(t, ready)
+}
+
+func TestConnectionSecretHasNoWandbOwner(t *testing.T) {
+	for _, namespace := range []string{"wandb", "infrastructure"} {
+		t.Run(namespace, func(t *testing.T) {
+			scheme := runtime.NewScheme()
+			require.NoError(t, corev1.AddToScheme(scheme))
+			c := fake.NewClientBuilder().WithScheme(scheme).Build()
+			wandb := &apiv2.WeightsAndBiases{ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "wandb", UID: "installation"}}
+			nsn := types.NamespacedName{Namespace: namespace, Name: "connection"}
+			WriteConnectionSecret(context.Background(), c, wandb, nsn, map[string]string{"host": "database"})
+			var secret corev1.Secret
+			require.NoError(t, c.Get(context.Background(), nsn, &secret))
+			require.Empty(t, secret.OwnerReferences)
+		})
+	}
 }

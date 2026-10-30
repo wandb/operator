@@ -11,8 +11,6 @@ import (
 	"github.com/wandb/operator/internal/controller/common"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -53,7 +51,6 @@ func writeClickHouseConnInfo(
 ) {
 	var err error
 	var found bool
-	var gvk schema.GroupVersionKind
 	var actual = &corev1.Secret{}
 
 	if connInfo == nil {
@@ -72,23 +69,10 @@ func writeClickHouseConnInfo(
 		actual = nil
 	}
 
-	if gvk, err = client.GroupVersionKindFor(owner); err != nil {
-		return nil, fmt.Errorf("could not get GVK for owner: %w", err)
-	}
-	ref := metav1.OwnerReference{
-		APIVersion:         gvk.GroupVersion().String(),
-		Kind:               gvk.Kind,
-		Name:               owner.GetName(),
-		UID:                owner.GetUID(),
-		Controller:         ptr.To(false),
-		BlockOwnerDeletion: ptr.To(false),
-	}
-
 	desired := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            nsName.Name,
-			Namespace:       nsName.Namespace,
-			OwnerReferences: []metav1.OwnerReference{ref},
+			Name:      nsName.Name,
+			Namespace: nsName.Namespace,
 		},
 		Type: corev1.SecretTypeOpaque,
 		StringData: map[string]string{

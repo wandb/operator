@@ -21,6 +21,17 @@ import (
 )
 
 var _ = Describe("Moco MySQL specs", func() {
+	It("builds the cluster and configuration without WandB ownership in either namespace", func() {
+		w := mocoWandb()
+		for _, namespace := range []string{w.Namespace, "retention-other"} {
+			cluster, config, err := ToMocoMySQLClusterSpec(context.Background(), apiv2.ManagedMysqlSpec{Name: "mysql", Namespace: namespace, Replicas: 1, StorageSize: "1Gi"}, w, mocoScheme(), manifest.Manifest{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cluster.OwnerReferences).To(BeEmpty())
+			Expect(config.OwnerReferences).To(BeEmpty())
+			Expect(cluster.Namespace).To(Equal(namespace))
+			Expect(config.Namespace).To(Equal(namespace))
+		}
+	})
 	BeforeEach(func() {
 		utils.SetOpenShiftMode(false)
 	})

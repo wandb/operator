@@ -20,6 +20,28 @@ import (
 )
 
 var _ = Describe("Redis vendor specs", func() {
+	It("builds both modes without WandB ownership in either namespace", func() {
+		for _, otherNamespace := range []bool{false, true} {
+			w := redisWandb(false)
+			spec := w.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis
+			if otherNamespace {
+				spec.Namespace = "retention-other"
+			}
+			standalone, err := ToRedisStandaloneVendorSpec(context.Background(), w, spec, redisScheme(), manifest.Manifest{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(standalone.OwnerReferences).To(BeEmpty())
+			Expect(standalone.Namespace).To(Equal(spec.Namespace))
+			spec.Sentinel.Enabled = true
+			sentinel, err := ToRedisSentinelVendorSpec(context.Background(), w, spec, redisScheme(), manifest.Manifest{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(sentinel.OwnerReferences).To(BeEmpty())
+			Expect(sentinel.Namespace).To(Equal(spec.Namespace))
+			replication, err := ToRedisReplicationVendorSpec(context.Background(), w, spec, redisScheme(), manifest.Manifest{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(replication.OwnerReferences).To(BeEmpty())
+			Expect(replication.Namespace).To(Equal(spec.Namespace))
+		}
+	})
 	BeforeEach(func() {
 		utils.SetOpenShiftMode(false)
 	})
