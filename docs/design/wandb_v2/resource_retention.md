@@ -310,7 +310,10 @@ tracking label is copied from the WandB CR. `IgnoreExtraneous` only changes sync
 status and does not close that deletion race. Customers using label-only
 tracking must configure Argo CD's `application.resourceTrackingMethod` as
 `annotation` or `annotation+label` for this association. Preserving a namespace
-and required CRDs is a separate Argo CD application-layout requirement.
+and required CRDs is a separate Argo CD application-layout requirement. Keep
+the vendor-controller releases available as well: deleting the Application that
+installs those controllers is outside the tested WandB-CR deletion flow and
+prevents retained services from being reconciled or restarted by their vendors.
 
 References: [non-self-referencing tracking](https://argo-cd.readthedocs.io/en/stable/user-guide/resource_tracking/#non-self-referencing-annotations),
 [sync deletion options](https://argo-cd.readthedocs.io/en/stable/user-guide/sync-options/#no-resource-deletion).

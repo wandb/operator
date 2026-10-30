@@ -50,3 +50,25 @@ previous WandB UID. Keep its inventory ConfigMap. The old CR must be gone;
 resources must match the donor inventory's retained identities. A matching CR
 name alone does not authorize adoption. Wait for retention and workload
 readiness before directing traffic to the replacement installation.
+
+## Development validation, 2026-10-30
+
+The following WESTest Kind runs passed during implementation. Artifacts are in
+WESTest's ignored `artifacts/<scenario>/<run-id>` directories; each scenario
+completed its own cluster teardown.
+
+| Scenario (prefix `local-kind-retention-`) | Run ID | Evidence |
+| --- | --- | --- |
+| `detach-foreground` | `20261030T194816Z-22583` | 100 resource identities survived active GC while reconciliation was paused; restart/readoption and seeded-data readback passed. This development run loaded the workload-ordering fix before its recovery assertions. |
+| `argocd-purge-cascade-combined` | `20261030T201829Z-60024` | Resource-tree association and Application cascade; all 101 recorded identities satisfied purge/supplied-resource assertions. |
+| `mixed-background` | `20261030T202950Z-85688` | 124 identities checked; custom-named Redis Sentinel in another namespace purged while default instances and supplied resources survived. |
+| `argocd-detach-prune-combined` | `20261030T203052Z-89779` | Automated Git pruning completed with 101 resource identities satisfying detach/supplied-resource assertions. |
+| `purge-orphan` | `20261030T204114Z-3437` | v1 DELETE with orphan propagation completed explicit purge; 100 recorded identities checked. |
+| `upgrade` | `20261030T203957Z-1833` | Published `2.0.0-beta.9` to candidate; existing identities survived migration, followed by foreground detach, workload restart, readoption, and seeded-data readback. |
+| `argocd-detach-cascade-annotation` | `20261030T205032Z-9866` | Annotation tracking, resource-tree association, and Argo Application cascade deletion preserved retained roots, configuration, credentials, and claims. |
+
+These representative development runs do not replace the full eighteen-case
+release matrix. Unit/envtest suites and the WESTest runner suite pass. Workflow
+helper tests and workflow syntax checks pass. Lint reports no new findings
+against the branch base; the repository's five existing staticcheck findings
+remain outside this change.
