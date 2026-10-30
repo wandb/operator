@@ -7,9 +7,9 @@ both served API versions against fresh canonical state. See the
 readoption, migration requirements, and the guarantee's limits.
 
 All real-cluster tests live in the WESTest repository. Its
-`docs/retention-testing.md` describes the eighteen scenario cases and local runs.
-The first three representative PR checks cover paused foreground detach, orphan
-purge through v1, and mixed policies under background deletion.
+`docs/retention-testing.md` describes the twenty-two scenario cases and local runs.
+The four representative PR checks cover paused foreground detach, orphan
+purge through v1, mixed policies under background deletion, and managed-Gateway route cleanup.
 
 `.github/workflows/retention.yaml` is both a PR workflow and a reusable full
 acceptance gate. The existing nightly workflow calls its full matrix, and the
@@ -67,7 +67,7 @@ completed its own cluster teardown.
 | `upgrade` | `20261030T203957Z-1833` | Published `2.0.0-beta.9` to candidate; existing identities survived migration, followed by foreground detach, workload restart, readoption, and seeded-data readback. |
 | `argocd-detach-cascade-annotation` | `20261030T205032Z-9866` | Annotation tracking, resource-tree association, and Argo Application cascade deletion preserved retained roots, configuration, credentials, and claims. |
 
-These representative development runs do not replace the full eighteen-case
+These representative development runs do not replace the full twenty-two-case
 release matrix. Unit/envtest suites and the WESTest runner suite pass. Workflow
 helper tests and workflow syntax checks pass. Lint reports no new findings
 against the branch base; the repository's five existing staticcheck findings

@@ -116,9 +116,6 @@ func Reconcile(
 			if err := finalizeManifestSecrets(ctx, client, wandb); err != nil {
 				return ctrl.Result{}, err
 			}
-			if err = deleteInfraHTTPRoutes(ctx, client, wandb); err != nil {
-				return ctrl.Result{}, err
-			}
 			if err = deleteWatchtower(ctx, client, wandb); err != nil {
 				return ctrl.Result{}, err
 			}
@@ -256,11 +253,14 @@ func Reconcile(
 		return ctrl.Result{}, err
 	}
 
-	res, err = ReconcileNetworkingAndWatchtower(ctx, client, wandb, manifest)
+	res, err = ReconcileNetworkingAndWatchtower(ctx, client, wandb, manifest, lifecycle)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 	ctrlResults = append(ctrlResults, res)
+	if err := reportRetention(ctx, client, wandb, lifecycle.Reconcile(ctx)); err != nil {
+		return ctrl.Result{}, err
+	}
 
 	ctrlResults = append(ctrlResults, supportBundleResult)
 
@@ -337,6 +337,7 @@ func ReconcileNetworkingAndWatchtower(
 	client ctrlClient.Client,
 	wandb *apiv2.WeightsAndBiases,
 	manifest serverManifest.Manifest,
+	lifecycles ...*retention.Session,
 ) (ctrl.Result, error) {
 	ctx, log := logx.WithSlog(ctx, logx.ReconcileInfraV2)
 
@@ -359,7 +360,7 @@ func ReconcileNetworkingAndWatchtower(
 			log.Error("Failed to reconcile Gateway", logx.ErrAttr(err))
 			return ctrl.Result{}, err
 		}
-		if err := reconcileInfraHTTPRoutes(ctx, client, wandb, manifest); err != nil {
+		if err := reconcileInfraHTTPRoutes(ctx, client, wandb, manifest, lifecycles...); err != nil {
 			log.Error("Failed to reconcile infra HTTPRoutes", logx.ErrAttr(err))
 			return ctrl.Result{}, err
 		}

@@ -8,7 +8,8 @@ def scenarios(profile):
     if profile == "pr":
         return ["local-kind-retention-detach-foreground",
                 "local-kind-retention-purge-orphan",
-                "local-kind-retention-mixed-background"]
+                "local-kind-retention-mixed-background",
+                "local-kind-retention-gateway-detach-foreground"]
     if profile != "full":
         raise ValueError("Retention profile must be pr or full")
     result = [f"local-kind-retention-{policy}-{propagation}"
@@ -18,7 +19,11 @@ def scenarios(profile):
                for policy in ("detach", "purge")
                for operation in ("prune", "cascade")
                for tracking in ("annotation", "combined")]
-    return result + ["local-kind-retention-upgrade"]
+    return result + ["local-kind-retention-upgrade",
+                     "local-kind-retention-gateway-detach-foreground",
+                     "local-kind-retention-gateway-detach-orphan",
+                     "local-kind-retention-external-gateway-detach-foreground",
+                     "local-kind-retention-external-gateway-purge-foreground"]
 
 
 if __name__ == "__main__":

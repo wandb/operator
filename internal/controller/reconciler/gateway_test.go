@@ -118,3 +118,20 @@ func TestBuildListenerTLSKeepsSecretFallbackWithOptions(t *testing.T) {
 	}}, got.CertificateRefs)
 	require.Equal(t, gatewayv1.AnnotationValue("TLS_1_2"), got.Options["example.com/min-tls-version"])
 }
+
+func TestDeleteGatewayAfterOrphanPropagation(t *testing.T) {
+	wandb := newWandbForGateway()
+	for _, uid := range []string{string(wandb.UID), "previous-installation"} {
+		t.Run(uid, func(t *testing.T) {
+			gw := &gatewayv1.Gateway{ObjectMeta: metav1.ObjectMeta{Name: "wandb-gateway", Namespace: wandb.Namespace, UID: "gateway-uid", Labels: map[string]string{"weightsandbiases.apps.wandb.com/uid": uid}}}
+			c := gatewayTestClient(t, wandb, gw)
+			require.NoError(t, deleteGateway(context.Background(), c, wandb))
+			err := c.Get(context.Background(), ctrlClient.ObjectKeyFromObject(gw), gw)
+			if uid == string(wandb.UID) {
+				require.True(t, apiErrors.IsNotFound(err))
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}

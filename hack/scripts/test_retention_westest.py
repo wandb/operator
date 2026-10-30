@@ -22,8 +22,8 @@ runner = load("retention_runner", REPO / ".github/actions/westest-run/run.py")
 class RetentionAcceptanceTests(unittest.TestCase):
     def test_full_matrix_covers_all_policies_propagations_and_argo_modes(self):
         full = matrix.scenarios("full")
-        self.assertEqual(len(full), 18)
-        self.assertEqual(len(set(full)), 18)
+        self.assertEqual(len(full), 22)
+        self.assertEqual(len(set(full)), 22)
         self.assertTrue(set(matrix.scenarios("pr")).issubset(full))
         for policy in ("detach", "purge", "mixed"):
             for propagation in ("background", "foreground", "orphan"):
@@ -33,6 +33,9 @@ class RetentionAcceptanceTests(unittest.TestCase):
                 for tracking in ("annotation", "combined"):
                     self.assertIn(f"local-kind-retention-argocd-{policy}-{operation}-{tracking}", full)
         self.assertIn("local-kind-retention-upgrade", full)
+        for suffix in ("gateway-detach-foreground", "gateway-detach-orphan",
+                       "external-gateway-detach-foreground", "external-gateway-purge-foreground"):
+            self.assertIn(f"local-kind-retention-{suffix}", full)
 
     def test_invalid_profile_fails(self):
         with self.assertRaises(ValueError):

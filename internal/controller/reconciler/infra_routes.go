@@ -8,19 +8,18 @@ import (
 	gkeGatewayApiNetworkingv1 "github.com/GoogleCloudPlatform/gke-gateway-api/apis/networking/v1"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
+	"github.com/wandb/operator/internal/controller/retention"
 	"github.com/wandb/operator/internal/logx"
 	"github.com/wandb/operator/pkg/utils"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
 	v1 "k8s.io/api/core/v1"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"knative.dev/pkg/ptr"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	ctrlClient "sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
@@ -28,6 +27,8 @@ import (
 // infraRouteEntry holds the resolved routing info for a single infra component instance.
 type infraRouteEntry struct {
 	// name is the HTTPRoute resource name
+	component       string
+	instance        string
 	name            string
 	namespace       string
 	serviceName     string
@@ -64,6 +65,7 @@ func resolveInfraRoutes(ctx context.Context, c ctrlClient.Client, wandb *apiv2.W
 			}
 
 			entries = append(entries, infraRouteEntry{
+				component: "objectstore", instance: crKey,
 				name:            fmt.Sprintf("%s-bucket-%s", wandb.Name, infraRouteInstanceName(crKey, instanceName)),
 				namespace:       objectStoreSpec.Namespace,
 				serviceName:     svcName,
@@ -102,6 +104,7 @@ func resolveInfraRoutes(ctx context.Context, c ctrlClient.Client, wandb *apiv2.W
 			}
 
 			entries = append(entries, infraRouteEntry{
+				component: "clickhouse", instance: crKey,
 				name:            fmt.Sprintf("%s-clickhouse-%s", wandb.Name, infraRouteInstanceName(crKey, instanceName)),
 				namespace:       chSpec.Namespace,
 				serviceName:     svcName,
@@ -163,6 +166,7 @@ func reconcileInfraHTTPRoutes(
 	c ctrlClient.Client,
 	wandb *apiv2.WeightsAndBiases,
 	manifest serverManifest.Manifest,
+	lifecycles ...*retention.Session,
 ) error {
 	logger := logx.GetSlog(ctx)
 	if wandb.Spec.Networking.Mode != apiv2.NetworkingModeGatewayAPI {
@@ -192,6 +196,13 @@ func reconcileInfraHTTPRoutes(
 
 		parentRef := buildInfraGatewayParentRef(ref, gwConfig, entry.namespace)
 		route := buildInfraHTTPRoute(wandb, parentRef, hostnames, entry)
+		writer := c
+		if len(lifecycles) > 0 && lifecycles[0] != nil {
+			if err := lifecycles[0].PrepareRoute(ctx, route, entry.component, entry.instance); err != nil {
+				return err
+			}
+			writer = lifecycles[0]
+		}
 
 		httpRoute := &gatewayv1.HTTPRoute{
 			ObjectMeta: metav1.ObjectMeta{
@@ -199,15 +210,13 @@ func reconcileInfraHTTPRoutes(
 				Namespace: entry.namespace,
 			},
 		}
-		op, err := controllerruntime.CreateOrUpdate(ctx, c, httpRoute, func() error {
+		op, err := controllerruntime.CreateOrUpdate(ctx, writer, httpRoute, func() error {
 			httpRoute.Labels = utils.MergeMapsStringString(httpRoute.Labels, route.Labels)
 			httpRoute.Annotations = utils.MergeMapsStringString(httpRoute.Annotations, route.Annotations)
 			httpRoute.Spec.ParentRefs = route.Spec.ParentRefs
 			httpRoute.Spec.Hostnames = route.Spec.Hostnames
 			httpRoute.Spec.Rules = route.Spec.Rules
-			if err := setInfraHTTPRouteOwnership(wandb, route, c.Scheme()); err != nil {
-				return fmt.Errorf("failed to set ownership on infra HTTPRoute %s: %w", entry.name, err)
-			}
+			common.RemoveOwnerReference(httpRoute, wandb.UID)
 			return nil
 		})
 		if err != nil {
@@ -222,7 +231,12 @@ func reconcileInfraHTTPRoutes(
 					Namespace: entry.namespace,
 				},
 			}
-			op, err = controllerruntime.CreateOrUpdate(ctx, c, healthCheckPolicy, func() error {
+			if len(lifecycles) > 0 && lifecycles[0] != nil {
+				if err := lifecycles[0].PrepareRouteSupport(ctx, healthCheckPolicy, httpRoute); err != nil {
+					return err
+				}
+			}
+			op, err = controllerruntime.CreateOrUpdate(ctx, writer, healthCheckPolicy, func() error {
 				healthCheckPolicy.Labels = utils.MergeMapsStringString(healthCheckPolicy.Labels, infraHealthCheckPolicyLabels(wandb))
 				healthCheckPolicy.Spec.Default = &gkeGatewayApiNetworkingv1.HealthCheckPolicyConfig{
 					CheckIntervalSec:   ptr.Int64(5),
@@ -248,9 +262,7 @@ func reconcileInfraHTTPRoutes(
 				if err != nil {
 					return err
 				}
-				if err := controllerutil.SetControllerReference(wandb, healthCheckPolicy, c.Scheme()); err != nil {
-					return err
-				}
+				common.RemoveOwnerReference(healthCheckPolicy, wandb.UID)
 				return nil
 			})
 			if err != nil {
@@ -455,16 +467,4 @@ func infraHTTPRouteLabels(wandb *apiv2.WeightsAndBiases) map[string]string {
 
 func infraHTTPRouteKey(namespace, name string) types.NamespacedName {
 	return types.NamespacedName{Namespace: namespace, Name: name}
-}
-
-func setInfraHTTPRouteOwnership(
-	wandb *apiv2.WeightsAndBiases,
-	route *gatewayv1.HTTPRoute,
-	scheme *runtime.Scheme,
-) error {
-	if route.Namespace != wandb.Namespace {
-		route.OwnerReferences = nil
-		return nil
-	}
-	return controllerutil.SetOwnerReference(wandb, route, scheme)
 }

@@ -50,11 +50,24 @@ Removing finalizers manually bypasses lifecycle completion. Vendor controllers
 and the required cluster services must remain available for retained services
 to reconcile and restart.
 
-W&B application workloads, initialization/migration jobs, ingress/routes,
+W&B application workloads, initialization/migration jobs, application ingress/routes,
 support bundles, and installation telemetry are outside infrastructure
 retention. Their cleanup must not delete a retained instance's dependencies.
 Retention does not promise continued access through the deleted installation's
 ingress or continued operation of the W&B application itself.
+
+Infrastructure HTTPRoutes and their GKE HealthCheckPolicies are inventoried
+separately from the backend data. With an external Gateway, they follow each
+backend instance's retention policy: preserve routes for detached services and
+remove routes for purged services. When the parent Gateway belongs to this
+installation, delete these routes before completing Gateway teardown even if the
+backend is detached. The external Gateway itself is never a purge target.
+
+Routes have no WandB owner reference and use the same UID verification and Argo
+protection as other retained resources. Migration of previously unowned routes
+requires operator metadata plus a live, verified backend Service. Names alone
+do not authorize adoption or deletion. A managed Gateway carries installation
+UID metadata so orphan propagation cannot prevent its explicit cleanup.
 
 ## Inventory and provenance
 

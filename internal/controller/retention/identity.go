@@ -33,6 +33,9 @@ type Resource struct {
 	Component  string               `json:"component"`
 	Instance   string               `json:"instance"`
 	Policy     apiv2.OnDeletePolicy `json:"policy"`
+	// Routes follow their backend policy unless their managed Gateway is removed.
+	RouteFor          string `json:"routeFor,omitempty"`
+	RemoveWithGateway string `json:"removeWithGateway,omitempty"`
 	// Stage orders explicit deletion: workloads, then supporting objects, then storage.
 	Stage    int  `json:"stage"`
 	Supplied bool `json:"supplied,omitempty"`

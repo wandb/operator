@@ -102,6 +102,15 @@ func Open(ctx context.Context, c client.Client, reader client.Reader, w *apiv2.W
 		}
 		// Descendants and retired names inherit policy changes to their instance.
 		for key, r := range s.Ledger.Resources {
+			if r.RouteFor != "" {
+				if p, ok := policies[r.RouteFor]; ok {
+					r.Policy = p
+					if r.RemoveWithGateway != "" {
+						r.Policy = apiv2.PurgeOnDelete
+					}
+					s.Ledger.Resources[key] = r
+				}
+			}
 			if p, ok := policies[InstanceID(r.Component, r.Instance)]; ok {
 				r.Policy = p
 				s.Ledger.Resources[key] = r

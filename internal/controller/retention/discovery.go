@@ -67,7 +67,7 @@ func (s *Session) discover(ctx context.Context) error {
 	var objects []*unstructured.Unstructured
 	kinds := descendantKinds()
 	for _, gvk := range WatchedKinds() {
-		if gvk.Group != "" && gvk.Group != "rbac.authorization.k8s.io" {
+		if gvk.Group != "" && gvk.Group != "rbac.authorization.k8s.io" && gvk.Group != "gateway.networking.k8s.io" {
 			if _, err := s.Scheme().New(gvk); err == nil {
 				kinds = append(kinds, gvk)
 			}
@@ -208,7 +208,7 @@ func (s *Session) discover(ctx context.Context) error {
 			return fmt.Errorf("cannot verify instance provenance for claim %s", candidate.Key())
 		}
 	}
-	return nil
+	return s.discoverRoutes(ctx, namespaces)
 }
 
 func isInfraComponent(value string) bool {

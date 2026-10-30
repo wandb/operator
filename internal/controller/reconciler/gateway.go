@@ -8,6 +8,7 @@ import (
 
 	nginxGatewayv1alpha1 "github.com/nginx/nginx-gateway-fabric/apis/v1alpha1"
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/retention"
 	"github.com/wandb/operator/internal/logx"
 	"github.com/wandb/operator/pkg/utils"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
@@ -61,6 +62,7 @@ func reconcileGateway(ctx context.Context, c ctrlClient.Client, wandb *apiv2.Wei
 			Labels: map[string]string{
 				"app.kubernetes.io/managed-by": "wandb-operator",
 				"app.kubernetes.io/instance":   wandb.Name,
+				retention.UIDLabel:             string(wandb.UID),
 			},
 			Annotations: annotations,
 		},
@@ -101,6 +103,9 @@ func reconcileGateway(ctx context.Context, c ctrlClient.Client, wandb *apiv2.Wei
 			return err
 		}
 	} else {
+		if !isOwnedBy(current, wandb) && current.Labels[retention.UIDLabel] != string(wandb.UID) {
+			return fmt.Errorf("refusing to overwrite unowned Gateway %s/%s", current.Namespace, current.Name)
+		}
 		desired.ResourceVersion = current.ResourceVersion
 		if err := c.Update(ctx, desired); err != nil {
 			return err
@@ -160,15 +165,12 @@ func deleteGateway(ctx context.Context, c ctrlClient.Client, wandb *apiv2.Weight
 	}
 	// Never delete a gateway we don't own: a user may run their own gateway that
 	// happens to share our derived name.
-	owned, err := controllerutil.HasOwnerReference(gw.GetOwnerReferences(), wandb, c.Scheme())
-	if err != nil {
-		return err
-	}
-	if !owned {
+	if !isOwnedBy(gw, wandb) && (wandb.UID == "" || gw.Labels[retention.UIDLabel] != string(wandb.UID)) {
 		return nil
 	}
 	logger.Info("Deleting gateway", "gateway", gatewayName)
-	return c.Delete(ctx, gw)
+	uid := gw.UID
+	return c.Delete(ctx, gw, ctrlClient.Preconditions{UID: &uid})
 }
 
 func validateExternalGatewayExists(

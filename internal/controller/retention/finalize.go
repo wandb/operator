@@ -16,6 +16,8 @@ import (
 func purgeOrder(r Resource) int {
 	base := 20
 	switch r.Component {
+	case "networking":
+		base = -10
 	case "kafka":
 		base = 0
 	case "clickhouse":
