@@ -36,6 +36,8 @@ type Resource struct {
 	// Stage orders explicit deletion: workloads, then supporting objects, then storage.
 	Stage    int  `json:"stage"`
 	Supplied bool `json:"supplied,omitempty"`
+	// Records an exact-UID purge intent before DELETE, including across retries.
+	DeleteRequested bool `json:"deleteRequested,omitempty"`
 	// OptionalAPI is used only for inventory from removed legacy CRDs.
 	OptionalAPI    bool            `json:"optionalAPI,omitempty"`
 	ClaimTemplates []ClaimTemplate `json:"claimTemplates,omitempty"`

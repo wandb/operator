@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -88,7 +89,19 @@ func (s *Session) discover(ctx context.Context) error {
 			}
 		}
 	}
-	// Owner chains may be listed in any order (e.g. Pods before StatefulSets).
+	// Resolve vendor workload replacements before their existing children.
+	slices.SortStableFunc(objects, func(a, b *unstructured.Unstructured) int {
+		order := func(kind string) int {
+			switch kind {
+			case "Deployment", "StatefulSet", "ReplicaSet", "Pod":
+				return 1 + workloadOrder(kind)
+			default:
+				return 0
+			}
+		}
+		return order(a.GetKind()) - order(b.GetKind())
+	})
+	// Other owner chains may still be listed in any order.
 	for changed := true; changed; {
 		changed = false
 		owners := map[types.UID]Resource{}
@@ -114,10 +127,28 @@ func (s *Session) discover(ctx context.Context) error {
 				if found && !existing.Supplied && InstanceID(existing.Component, existing.Instance) != InstanceID(parent.Component, parent.Instance) {
 					return fmt.Errorf("descendant %s has an owner in another infrastructure instance", candidate.Key())
 				}
+				// A vendor's in-flight reconcile can recreate an explicitly purged
+				// claim after its workload/root disappeared. A reused name alone is
+				// insufficient: require our persisted delete intent, full installation
+				// association, and independent owner or StatefulSet-template proof.
+				if existing.Stage == 3 && existing.UID != obj.GetUID() && existing.DeleteRequested && s.Ledger.Deleting && string(existing.Policy) == "purge" && associated(obj, s.parent, existing) {
+					if !found {
+						parent, found = s.claimParent(obj, objects, owners)
+					}
+					if found && parent.Component == existing.Component && parent.Instance == existing.Instance {
+						existing.UID = obj.GetUID()
+						existing.DeleteRequested = false
+						if err := s.reconcileObject(ctx, existing, obj); err != nil {
+							return err
+						}
+						changed = true
+					}
+				}
 				if existing.UID != obj.GetUID() && (existing.Stage == 1 || existing.Stage == 2) && obj.GetDeletionTimestamp().IsZero() {
 					if err := s.reconcileObject(ctx, existing, obj); err != nil {
 						return err
 					}
+					changed = true
 				}
 				continue
 			}

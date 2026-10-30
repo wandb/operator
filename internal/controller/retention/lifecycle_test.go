@@ -292,6 +292,68 @@ func TestRetainedResourceWithMissingOwnerBlocksDeletion(t *testing.T) {
 	require.ErrorContains(t, s.Reconcile(ctx), "missing owner")
 }
 
+func TestVendorCanReplaceStatefulSetAndPodTogether(t *testing.T) {
+	ctx := context.Background()
+	w, c, secret := lifecycleFixture(t, apiv2.DetachOnDelete)
+	sts := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: "keeper", Namespace: w.Namespace, UID: "old-sts", OwnerReferences: []metav1.OwnerReference{{APIVersion: "v1", Kind: "Secret", Name: secret.Name, UID: secret.UID}}}}
+	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "keeper-0", Namespace: w.Namespace, UID: "old-pod", OwnerReferences: []metav1.OwnerReference{{APIVersion: "apps/v1", Kind: "StatefulSet", Name: sts.Name, UID: sts.UID}}}}
+	require.NoError(t, c.Create(ctx, sts))
+	require.NoError(t, c.Create(ctx, pod))
+	s, err := Open(ctx, c, c, w)
+	require.NoError(t, err)
+	require.NoError(t, s.Reconcile(ctx))
+	require.NoError(t, c.Delete(ctx, pod))
+	require.NoError(t, c.Delete(ctx, sts))
+	sts.UID = "new-sts"
+	sts.ResourceVersion = ""
+	pod.UID = "new-pod"
+	pod.ResourceVersion = ""
+	pod.OwnerReferences[0].UID = sts.UID
+	require.NoError(t, c.Create(ctx, sts))
+	require.NoError(t, c.Create(ctx, pod))
+	s, err = Open(ctx, c, c, w)
+	require.NoError(t, err)
+	require.NoError(t, s.Reconcile(ctx))
+	require.NoError(t, s.CheckReady(ctx))
+	require.Equal(t, pod.UID, s.Ledger.Resources["Pod/"+w.Namespace+"/"+pod.Name].UID)
+	// A second replacement lands after deletion admission and before finalization.
+	require.NoError(t, c.Delete(ctx, pod))
+	require.NoError(t, c.Delete(ctx, sts))
+	sts.UID, sts.ResourceVersion = "final-sts", ""
+	pod.UID, pod.ResourceVersion = "final-pod", ""
+	pod.OwnerReferences[0].UID = sts.UID
+	require.NoError(t, c.Create(ctx, sts))
+	require.NoError(t, c.Create(ctx, pod))
+	now := metav1.Now()
+	w.DeletionTimestamp = &now
+	s, err = Open(ctx, c, c, w)
+	require.NoError(t, err)
+	done, err := s.Finalize(ctx)
+	require.NoError(t, err)
+	require.True(t, done)
+	require.Equal(t, pod.UID, s.Ledger.Resources["Pod/"+w.Namespace+"/"+pod.Name].UID)
+}
+
+func TestFinalizationRefusesLateWandbOwnership(t *testing.T) {
+	ctx := context.Background()
+	w, c, secret := lifecycleFixture(t, apiv2.DetachOnDelete)
+	s, err := Open(ctx, c, c, w)
+	require.NoError(t, err)
+	require.NoError(t, s.Reconcile(ctx))
+	late := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "late", Namespace: w.Namespace, UID: "late", OwnerReferences: secret.OwnerReferences}}
+	late.OwnerReferences = append(late.OwnerReferences, metav1.OwnerReference{APIVersion: "v1", Kind: "Secret", Name: secret.Name, UID: secret.UID})
+	require.NoError(t, c.Create(ctx, late))
+	now := metav1.Now()
+	w.DeletionTimestamp = &now
+	s, err = Open(ctx, c, c, w)
+	require.NoError(t, err)
+	done, err := s.Finalize(ctx)
+	require.False(t, done)
+	require.ErrorContains(t, err, "still belongs to a deleting installation")
+	require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(late), late))
+	require.True(t, ownedBy(late, w.UID))
+}
+
 func TestDiscoveryRejectsSharedOwnersBeforeAndAfterRecording(t *testing.T) {
 	for _, alreadyRecorded := range []bool{false, true} {
 		t.Run(fmt.Sprint(alreadyRecorded), func(t *testing.T) {
@@ -311,6 +373,10 @@ func TestDiscoveryRejectsSharedOwnersBeforeAndAfterRecording(t *testing.T) {
 			child.OwnerReferences = append(child.OwnerReferences, metav1.OwnerReference{APIVersion: "v1", Kind: "Secret", Name: other.Name, UID: other.UID})
 			require.NoError(t, c.Update(ctx, child))
 			require.ErrorContains(t, s.Reconcile(ctx), "shared by multiple")
+			require.Empty(t, s.Ledger.ReadyFingerprint)
+			reloaded, err := Open(ctx, c, c, w)
+			require.NoError(t, err)
+			require.ErrorContains(t, reloaded.CheckReady(ctx), "migration is not ready")
 		})
 	}
 }

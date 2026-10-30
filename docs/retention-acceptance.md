@@ -42,3 +42,11 @@ the completed operator rollout, and `RetentionReady=True` for its generation.
 Admission also checks current ownership, resource UIDs, Argo protection and the
 spec fingerprint, so the condition alone cannot authorize deletion. Do not
 remove the inventory ConfigMap or cleanup finalizer to bypass a migration block.
+
+To readopt after a completed detach, create the replacement WandB CR with the
+same infrastructure instance keys, resource names and namespaces, and set
+`metadata.annotations["weightsandbiases.apps.wandb.com/adopt-from-uid"]` to the
+previous WandB UID. Keep its inventory ConfigMap. The old CR must be gone;
+resources must match the donor inventory's retained identities. A matching CR
+name alone does not authorize adoption. Wait for retention and workload
+readiness before directing traffic to the replacement installation.

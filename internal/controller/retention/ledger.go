@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"reflect"
@@ -191,7 +192,7 @@ func (s *Session) trusted(obj client.Object, r Resource) bool {
 			return false
 		}
 		for _, parent := range s.Ledger.Resources {
-			if parent.UID != "" && !parent.Supplied && ownedBy(obj, parent.UID) {
+			if parent.UID != "" && !parent.Supplied && parent.Component == r.Component && parent.Instance == r.Instance && ownedBy(obj, parent.UID) {
 				return true
 			}
 		}
@@ -204,7 +205,7 @@ func (s *Session) trusted(obj client.Object, r Resource) bool {
 		return true
 	}
 	for _, parent := range s.Ledger.Resources {
-		if parent.UID != "" && !parent.Supplied && ownedBy(obj, parent.UID) {
+		if parent.UID != "" && !parent.Supplied && parent.Component == r.Component && parent.Instance == r.Instance && ownedBy(obj, parent.UID) {
 			return true
 		}
 	}
@@ -212,6 +213,9 @@ func (s *Session) trusted(obj client.Object, r Resource) bool {
 }
 
 func (s *Session) reconcileObject(ctx context.Context, r Resource, obj client.Object) error {
+	if !s.parent.DeletionTimestamp.IsZero() && ownedBy(obj, s.parent.UID) {
+		return fmt.Errorf("resource %s still belongs to a deleting installation; retention cannot be guaranteed", r.Key())
+	}
 	if !s.trusted(obj, r) {
 		adopt, err := s.canAdopt(ctx, obj, r)
 		if err != nil {
@@ -253,7 +257,16 @@ func (s *Session) reconcileObject(ctx context.Context, r Resource, obj client.Ob
 	return nil
 }
 
-func (s *Session) Reconcile(ctx context.Context) error {
+func (s *Session) Reconcile(ctx context.Context) (err error) {
+	// A newly discovered conflict invalidates a previously successful migration,
+	// even when the spec fingerprint has not changed. Persist only on failure so
+	// steady-state inventory watches do not trigger a write/reconcile loop.
+	defer func() {
+		if err != nil && s.parent.DeletionTimestamp.IsZero() && s.Ledger.ReadyFingerprint != "" {
+			s.Ledger.ReadyFingerprint = ""
+			err = errors.Join(err, s.save(ctx))
+		}
+	}()
 	resources := s.sortedResources()
 	for _, r := range resources {
 		obj := resourceObject(r)
@@ -309,12 +322,32 @@ func (s *Session) sortedResources() []Resource {
 		if a.Stage != b.Stage {
 			return a.Stage - b.Stage
 		}
+		if a.Stage == 1 && workloadOrder(a.Kind) != workloadOrder(b.Kind) {
+			return workloadOrder(a.Kind) - workloadOrder(b.Kind)
+		}
 		return strings.Compare(a.Key(), b.Key())
 	})
 	return resources
 }
 
+// Verify replacements from parent to child. A vendor may replace a StatefulSet
+// and its Pods together; accepting the new parent UID must precede its children.
+func workloadOrder(kind string) int {
+	switch kind {
+	case "Deployment", "StatefulSet":
+		return 0
+	case "ReplicaSet":
+		return 1
+	default:
+		return 2
+	}
+}
+
 func (s *Session) CheckReady(ctx context.Context) error {
+	return s.checkReady(ctx, false)
+}
+
+func (s *Session) checkReady(ctx context.Context, refreshDescendants bool) error {
 	if !argoProtected(s.cm, s.parent) {
 		return fmt.Errorf("retention inventory is missing Argo CD deletion protection")
 	}
@@ -322,6 +355,12 @@ func (s *Session) CheckReady(ctx context.Context) error {
 		return fmt.Errorf("retention migration is not ready for the current configuration")
 	}
 	for _, r := range s.Ledger.Resources {
+		// Finalization can refresh vendor-replaced workloads/support from verified
+		// parents. Admission always takes the strict path, and roots/PVCs never
+		// permit replacement. Reconcile then verifies the complete refreshed graph.
+		if refreshDescendants && !r.Supplied && (r.Stage == 1 || r.Stage == 2) {
+			continue
+		}
 		obj := resourceObject(r)
 		err := s.reader.Get(ctx, client.ObjectKeyFromObject(obj), obj)
 		if absent(err, r) {

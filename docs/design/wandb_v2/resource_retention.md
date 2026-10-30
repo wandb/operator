@@ -270,18 +270,21 @@ served API versions must enforce the same contract.
    consumers before their dependencies, using exact resource identities and UID
    preconditions. Retry conflicts and API errors; do not delete a replacement
    resource at a reused name. Finish only when required cleanup is observed.
+   A late vendor-created PVC is eligible for a new inventory record only after
+   a persisted purge intent for the old UID, with the complete installation
+   association and independently matching owner or StatefulSet-template
+   provenance. Name reuse alone never authorizes deleting a replacement.
 5. Retain provenance after detachment. A new WandB CR with the same name has a
    different UID and must not automatically acquire the old inventory. Define
    an explicit, verified readoption workflow. Older operators that restore
    owner references require a documented rollback restriction.
 
-Current gaps to replace are concentrated in
-[retention dispatch](../../../internal/controller/reconciler/reconcile_v2.go),
-the per-component `detach.go` / `purge.go` implementations,
-[association labels](../../../internal/controller/common/labels.go), and
-[resource update merging](../../../internal/controller/common/resource.go).
-The current MySQL ConfigMap, ClickHouse Keeper/ServiceAccount, and Kafka
-ServiceAccount/SCC binding must not remain outside the lifecycle inventory.
+The [v2 reconcile path](../../../internal/controller/reconciler/reconcile_v2.go)
+now delegates deletion to the [durable lifecycle](../../../internal/controller/retention/finalize.go).
+The scoped infrastructure client blocks legacy cleanup outside the verified
+inventory and explicitly removes ownership during resource update merging.
+The inventory includes the MySQL ConfigMap, ClickHouse Keeper/ServiceAccount,
+and Kafka ServiceAccount/SCC binding as well as discovered vendor descendants.
 
 ## Argo CD integration
 
@@ -334,7 +337,12 @@ prove garbage-collector behavior because it does not run the controller manager.
 WESTest validators must capture resource UIDs, required Secret/ConfigMap content
 digests, claim identities, and ownership before deletion. After deletion, assert
 that retained roots, configuration, credentials, and PVCs have the same UIDs and
-no deletion timestamp. Pods may be replaced during the deliberate restart test.
+no deletion timestamp. These deletion assertions run before deliberate restart.
+During explicit readoption, vendor workloads may reconcile or be recreated
+(Altinity can recreate Keeper StatefulSets when adoption metadata changes), and
+vendor runtime ConfigMaps may update Pod/IP/topology state. Recovery must still
+preserve root, configuration, credential and claim identities, credential and
+operator-created configuration contents, workload readiness, and stored data.
 Verify real data reads/writes and restartability, not only resource counts or
 the existence of the primary CR. Avoid logging credential contents.
 

@@ -30,13 +30,10 @@ func purgeOrder(r Resource) int {
 // receive DELETE, and explicit UID preconditions protect replacements.
 func (s *Session) Finalize(ctx context.Context) (bool, error) {
 	if !s.Ledger.Deleting {
-		if err := s.CheckReady(ctx); err != nil {
+		if err := s.checkReady(ctx, true); err != nil {
 			return false, err
 		}
-		if err := s.captureClients(ctx); err != nil {
-			return false, err
-		}
-		if err := s.discover(ctx); err != nil {
+		if err := s.Reconcile(ctx); err != nil {
 			return false, err
 		}
 		if err := s.CheckReady(ctx); err != nil {
@@ -65,6 +62,9 @@ func (s *Session) Finalize(ctx context.Context) (bool, error) {
 	slices.SortFunc(resources, func(a, b Resource) int {
 		if purgeOrder(a) != purgeOrder(b) {
 			return purgeOrder(a) - purgeOrder(b)
+		}
+		if a.Stage == 1 && b.Stage == 1 && workloadOrder(a.Kind) != workloadOrder(b.Kind) {
+			return workloadOrder(a.Kind) - workloadOrder(b.Kind)
 		}
 		return strings.Compare(a.Key(), b.Key())
 	})
@@ -96,6 +96,13 @@ func (s *Session) Finalize(ctx context.Context) (bool, error) {
 			return false, fmt.Errorf("invalid stored retention policy for %s", r.Key())
 		}
 		if obj.GetDeletionTimestamp().IsZero() {
+			if !r.DeleteRequested {
+				r.DeleteRequested = true
+				s.Ledger.Resources[r.Key()] = r
+				if err := s.save(ctx); err != nil {
+					return false, err
+				}
+			}
 			uid := r.UID
 			if err := s.Client.Delete(ctx, obj, client.PropagationPolicy(metav1.DeletePropagationForeground), client.Preconditions{UID: &uid}); err != nil {
 				return false, ignoreMissing(err)
