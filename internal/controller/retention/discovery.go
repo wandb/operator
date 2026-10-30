@@ -120,13 +120,6 @@ func (s *Session) discover(ctx context.Context) error {
 				parent, found = s.claimParent(obj, objects, owners)
 			}
 			if !found {
-				primary := obj.GroupVersionKind().Group != "" && obj.GroupVersionKind().Group != "apps" && obj.GroupVersionKind().Group != "apps.wandb.com" && obj.GroupVersionKind().Group != "rbac.authorization.k8s.io" && obj.GroupVersionKind().Group != "policy"
-				if ownedBy(obj, s.parent.UID) && (primary || isInfraComponent(obj.GetLabels()[common.WandbComponentLabel])) {
-					return fmt.Errorf("unmapped legacy infrastructure %s; restore its instance configuration before deletion", candidate.Key())
-				}
-				if obj.GetKind() == "PersistentVolumeClaim" && obj.GetLabels()[common.WandbNameLabel] == s.parent.Name && obj.GetLabels()[common.WandbNamespaceLabel] == s.parent.Namespace && isInfraComponent(obj.GetLabels()[common.WandbComponentLabel]) {
-					return fmt.Errorf("cannot verify instance provenance for claim %s", candidate.Key())
-				}
 				continue
 			}
 			candidate.Component = parent.Component
@@ -161,6 +154,22 @@ func (s *Session) discover(ctx context.Context) error {
 				return err
 			}
 			changed = true
+		}
+	}
+	// Claims can precede their StatefulSet in an API list. Reject unknown
+	// provenance only after the entire owner graph reaches a fixed point.
+	for _, obj := range objects {
+		candidate := Resource{APIVersion: obj.GetAPIVersion(), Kind: obj.GetKind(), Namespace: obj.GetNamespace(), Name: obj.GetName()}
+		if _, ok := s.Ledger.Resources[candidate.Key()]; ok {
+			continue
+		}
+		group := obj.GroupVersionKind().Group
+		primary := group != "" && group != "apps" && group != "apps.wandb.com" && group != "rbac.authorization.k8s.io" && group != "policy"
+		if ownedBy(obj, s.parent.UID) && (primary || isInfraComponent(obj.GetLabels()[common.WandbComponentLabel])) {
+			return fmt.Errorf("unmapped legacy infrastructure %s; restore its instance configuration before deletion", candidate.Key())
+		}
+		if obj.GetKind() == "PersistentVolumeClaim" && obj.GetLabels()[common.WandbNameLabel] == s.parent.Name && obj.GetLabels()[common.WandbNamespaceLabel] == s.parent.Namespace && isInfraComponent(obj.GetLabels()[common.WandbComponentLabel]) {
+			return fmt.Errorf("cannot verify instance provenance for claim %s", candidate.Key())
 		}
 	}
 	return nil

@@ -267,7 +267,11 @@ func TestClaimProvenanceSurvivesWorkloadDeletion(t *testing.T) {
 	require.NoError(t, s.Reconcile(ctx))
 	sts := &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: "cache", Namespace: w.Namespace, UID: "workload", OwnerReferences: []metav1.OwnerReference{{APIVersion: "v1", Kind: "Secret", Name: secret.Name, UID: secret.UID}}}, Spec: appsv1.StatefulSetSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "cache"}}, VolumeClaimTemplates: []corev1.PersistentVolumeClaim{{ObjectMeta: metav1.ObjectMeta{Name: "data"}}}}}
 	require.NoError(t, c.Create(ctx, sts))
+	earlyClaim := &corev1.PersistentVolumeClaim{ObjectMeta: metav1.ObjectMeta{Name: "data-cache-0", Namespace: w.Namespace, UID: "early-claim", Labels: common.BuildWandbLabels(w, "mysql")}}
+	earlyClaim.Labels["app"] = "cache"
+	require.NoError(t, c.Create(ctx, earlyClaim))
 	require.NoError(t, s.Reconcile(ctx))
+	require.Contains(t, s.Ledger.Resources, (Resource{APIVersion: "v1", Kind: "PersistentVolumeClaim", Namespace: w.Namespace, Name: earlyClaim.Name}).Key())
 	require.NoError(t, c.Delete(ctx, sts))
 	// A late PVC from an in-flight vendor reconcile has no owner reference.
 	claim := &corev1.PersistentVolumeClaim{ObjectMeta: metav1.ObjectMeta{Name: "data-cache-3", Namespace: w.Namespace, UID: "claim", Labels: map[string]string{"app": "cache"}}}
