@@ -26,7 +26,7 @@ jobs:
           fi
 
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -51,7 +51,7 @@ jobs:
         id: watchtower-token
         # The image build downloads the Watchtower binary from that private repo;
         # this repo's GITHUB_TOKEN can't reach it.
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           app-id: ${{ secrets.WESTEST_APP_ID }}
           private-key: ${{ secrets.WESTEST_APP_PRIVATE_KEY }}
