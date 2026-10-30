@@ -14,6 +14,7 @@ const (
 	NoResourceReason      = "NoResource"
 	ReportedStatusReason  = "ReportedStatus"
 	ApiErrorReason        = "ApiError"
+	PreflightFailedReason = "PreflightFailed"
 	ControllerErrorReason = "ControllerError"
 	ResourceErrorReason   = "ResourceError"
 	UnknownReason         = "Unknown"
