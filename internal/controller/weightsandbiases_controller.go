@@ -24,6 +24,7 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
 	v2 "github.com/wandb/operator/internal/controller/reconciler"
+	"github.com/wandb/operator/internal/controller/retention"
 	"github.com/wandb/operator/internal/observability/supportbundle"
 	"github.com/wandb/operator/internal/observability/telemetry"
 	"github.com/wandb/operator/pkg/utils"
@@ -163,8 +164,31 @@ func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			builder.WithPredicates(predicate.NewPredicateFuncs(r.isTelemetryConfig)),
 		)
 	}
+	for _, gvk := range retention.WatchedKinds() {
+		obj, err := r.Scheme.New(gvk)
+		if err != nil {
+			continue
+		}
+		if resource, ok := obj.(client.Object); ok {
+			b = b.Watches(resource, handler.EnqueueRequestsFromMapFunc(r.mapRetainedResourceToWandb))
+		}
+	}
 
 	return b.Complete(r)
+}
+
+func (r *WeightsAndBiasesReconciler) mapRetainedResourceToWandb(ctx context.Context, obj client.Object) []ctrl.Request {
+	labels := obj.GetLabels()
+	uid := labels[retention.UIDLabel]
+	key := types.NamespacedName{Namespace: labels[common.WandbNamespaceLabel], Name: labels[common.WandbNameLabel]}
+	if uid == "" || key.Name == "" || key.Namespace == "" {
+		return nil
+	}
+	w := &apiv2.WeightsAndBiases{}
+	if err := r.Get(ctx, key, w); err != nil || string(w.UID) != uid {
+		return nil
+	}
+	return []ctrl.Request{{NamespacedName: key}}
 }
 
 func (r *WeightsAndBiasesReconciler) loadTelemetryConfig(ctx context.Context) (telemetry.TelemetryRuntimeConfig, error) {

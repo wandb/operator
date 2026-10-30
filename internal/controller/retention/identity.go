@@ -1,0 +1,103 @@
+package retention
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"maps"
+
+	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/common"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+const (
+	UIDLabel           = "weightsandbiases.apps.wandb.com/uid"
+	InstanceLabel      = "weightsandbiases.apps.wandb.com/instance"
+	InstanceAnnotation = "weightsandbiases.apps.wandb.com/instance-key"
+	ReadyCondition     = "RetentionReady"
+	Finalizer          = "wandb.apps.wandb.com/cleanup"
+)
+
+// Resource identifies one object, not a label-selected collection. UID is filled
+// after creation; the creation intent and association close the crash window.
+type Resource struct {
+	APIVersion string               `json:"apiVersion"`
+	Kind       string               `json:"kind"`
+	Namespace  string               `json:"namespace"`
+	Name       string               `json:"name"`
+	UID        types.UID            `json:"uid,omitempty"`
+	Component  string               `json:"component"`
+	Instance   string               `json:"instance"`
+	Policy     apiv2.OnDeletePolicy `json:"policy"`
+	// Stage orders explicit deletion: workloads, then supporting objects, then storage.
+	Stage    int  `json:"stage"`
+	Supplied bool `json:"supplied,omitempty"`
+	// OptionalAPI is used only for inventory from removed legacy CRDs.
+	OptionalAPI bool `json:"optionalAPI,omitempty"`
+}
+
+func (r Resource) GVK() schema.GroupVersionKind {
+	return schema.FromAPIVersionAndKind(r.APIVersion, r.Kind)
+}
+
+func (r Resource) Key() string {
+	return r.GVK().GroupKind().String() + "/" + r.Namespace + "/" + r.Name
+}
+
+func InstanceID(component, key string) string { return component + "/" + key }
+
+func instanceLabel(key string) string {
+	sum := sha256.Sum256([]byte(key))
+	return hex.EncodeToString(sum[:])[:63]
+}
+
+func associate(obj client.Object, w *apiv2.WeightsAndBiases, r Resource) {
+	labels := maps.Clone(obj.GetLabels())
+	if labels == nil {
+		labels = map[string]string{}
+	}
+	maps.Copy(labels, common.BuildWandbLabels(w, r.Component))
+	labels[UIDLabel] = string(w.UID)
+	labels[InstanceLabel] = instanceLabel(r.Instance)
+	obj.SetLabels(labels)
+	annotations := maps.Clone(obj.GetAnnotations())
+	if annotations == nil {
+		annotations = map[string]string{}
+	}
+	annotations[InstanceAnnotation] = r.Instance
+	obj.SetAnnotations(annotations)
+	common.RemoveOwnerReference(obj, w.UID)
+}
+
+func associated(obj client.Object, w *apiv2.WeightsAndBiases, r Resource) bool {
+	return obj.GetLabels()[UIDLabel] == string(w.UID) &&
+		obj.GetLabels()[common.WandbComponentLabel] == r.Component &&
+		obj.GetLabels()[InstanceLabel] == instanceLabel(r.Instance) &&
+		obj.GetAnnotations()[InstanceAnnotation] == r.Instance
+}
+
+func ownedBy(obj client.Object, uid types.UID) bool {
+	if uid == "" {
+		return false
+	}
+	for _, ref := range obj.GetOwnerReferences() {
+		if ref.UID == uid {
+			return true
+		}
+	}
+	return false
+}
+
+func Policy(w *apiv2.WeightsAndBiases, spec apiv2.ManagedInfraSpec) (apiv2.OnDeletePolicy, error) {
+	p := w.GetRetentionPolicy(spec).OnDelete
+	if p == "" {
+		p = apiv2.DetachOnDelete
+	}
+	if p != apiv2.DetachOnDelete && p != apiv2.PurgeOnDelete {
+		return "", fmt.Errorf("invalid retention policy %q: expected detach or purge", p)
+	}
+	return p, nil
+}

@@ -67,9 +67,20 @@ func CrudResource[T client.Object](ctx context.Context, c client.Client, desired
 	var action CrudAction
 	desiredExists := !IsNil(desired) && desired.GetName() != ""
 	actualExists := !IsNil(actual) && actual.GetName() != ""
+	forceUpdate := false
+	if desiredExists {
+		if preparer, ok := c.(interface {
+			PrepareResource(context.Context, client.Object, client.Object) (bool, error)
+		}); ok {
+			forceUpdate, err = preparer.PrepareResource(ctx, desired, actual)
+			if err != nil {
+				return NoAction, err
+			}
+		}
+	}
 
 	if actualExists && desiredExists {
-		if resourceManagedFieldsEqual(desired, actual) {
+		if !forceUpdate && resourceManagedFieldsEqual(desired, actual) {
 			action = UnchangedAction
 		} else {
 			action = UpdateAction
