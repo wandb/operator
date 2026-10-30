@@ -1,0 +1,44 @@
+# Running retention acceptance
+
+The implementation lives in `internal/controller/retention`; the v2 reconcile
+path uses its scoped client and durable inventory. The DELETE webhook validates
+both served API versions against fresh canonical state. See the
+[contract and inventory](design/wandb_v2/resource_retention.md) for dependencies,
+readoption, migration requirements, and the guarantee's limits.
+
+All real-cluster tests live in the WESTest repository. Its
+`docs/retention-testing.md` describes the eighteen scenario cases and local runs.
+The first three representative PR checks cover paused foreground detach, orphan
+purge through v1, and mixed policies under background deletion.
+
+`.github/workflows/retention.yaml` is both a PR workflow and a reusable full
+acceptance gate. The existing nightly workflow calls its full matrix, and the
+tagged release job waits for that matrix before publishing. The existing nightly
+schedule remains disabled. Maintainers can dispatch either profile manually.
+
+The gate compiles a WESTest runner with its embedded scenarios and runs it inside
+the pinned published tool image. It therefore does not assume a new WESTest
+container release already exists. The candidate operator is built from the
+checkout for PR/release checks; nightly checks use the published chart produced
+by the nightly build.
+
+CI rollout prerequisites:
+
+- Merge the companion WESTest branch first, or set `WESTEST_RETENTION_REF` to an
+  available reviewed revision containing the scenarios. The default is `main`.
+- The existing `WESTEST_APP_ID` / `WESTEST_APP_PRIVATE_KEY` app needs read access
+  to `wandb/westest` and `wandb/watchtower` for source and pinned build assets.
+- Use the existing eight-core runner pool. Fork PRs keep unit/envtest coverage;
+  maintainers dispatch acceptance explicitly because private assets require the
+  app credential.
+
+Only the existing public-safe summary is uploaded. Inventory digests, cluster
+state, logs and kubeconfigs stay in the private run artifacts. The source
+checkout and runner executable mount read-only into the local Kind test runner;
+cloud scenarios cannot use those mounts.
+
+Before deleting an upgraded installation, wait for the new webhook endpoints,
+the completed operator rollout, and `RetentionReady=True` for its generation.
+Admission also checks current ownership, resource UIDs, Argo protection and the
+spec fingerprint, so the condition alone cannot authorize deletion. Do not
+remove the inventory ConfigMap or cleanup finalizer to bypass a migration block.

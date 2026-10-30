@@ -154,6 +154,18 @@ jobs:
           app-version: ${{ needs.setup.outputs.app_version }}
           app-manifest-digest: ${{ needs.setup.outputs.app_manifest_digest }}
 
+  retention-test:
+    needs: [build, setup]
+    if: ${{ !cancelled() && needs.setup.result == 'success' && inputs.scenario == '' }}
+    uses: ./.github/workflows/retention.yaml
+    permissions:
+      contents: read
+    secrets: inherit
+    with:
+      profile: full
+      app_version: ${{ needs.setup.outputs.app_version }}
+      operator_version: ${{ needs.setup.outputs.chart_version }}
+
   cloud-test:
     name: ${{ matrix.scenario }}
     needs: [build, setup]
