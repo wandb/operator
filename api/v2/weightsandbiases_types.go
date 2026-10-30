@@ -91,8 +91,18 @@ const (
 	SizeMedium  Size = "medium"
 	SizeLarge   Size = "large"
 	SizeXLarge  Size = "xlarge"
+	Size2XLarge Size = "2xlarge"
+	// SizeXXLarge is the legacy spelling of Size2XLarge.
 	SizeXXLarge Size = "xxlarge"
 )
+
+// Canonical returns the canonical spelling used by server-manifest sizing keys.
+func (s Size) Canonical() Size {
+	if s == SizeXXLarge {
+		return Size2XLarge
+	}
+	return s
+}
 
 type OnDeletePolicy string
 
@@ -111,7 +121,7 @@ type RetentionPolicy struct {
 // WeightsAndBiasesSpec defines the desired state of WeightsAndBiases.
 type WeightsAndBiasesSpec struct {
 	// Size is akin to high-level environment info
-	// +kubebuilder:validation:Enum=dev;micro;small;medium;large;xlarge;xxlarge
+	// +kubebuilder:validation:Enum=dev;micro;small;medium;large;xlarge;"2xlarge";xxlarge
 	Size Size `json:"size,omitempty"`
 	// RequireLimits By default, only resource requests are set for deployments, set to true to also set resource limits
 	RequireLimits bool `json:"requireLimits,omitempty"`

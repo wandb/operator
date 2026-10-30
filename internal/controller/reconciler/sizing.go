@@ -7,6 +7,11 @@ import (
 	"k8s.io/api/core/v1"
 )
 
+func resolveSizeConfig[T any](sizing map[v2.Size]T, size v2.Size) (T, bool) {
+	config, ok := sizing[size.Canonical()]
+	return config, ok
+}
+
 func ResolveResources(app manifest.Application, wandb *v2.WeightsAndBiases, containerResources *v1.ResourceRequirements) *v1.ResourceRequirements {
 	var resources *v1.ResourceRequirements
 
@@ -16,7 +21,7 @@ func ResolveResources(app manifest.Application, wandb *v2.WeightsAndBiases, cont
 	}
 
 	// check if there is a sizing config in the map that corresponds to the size in the wandb spec and apply that
-	if sizeConfig, ok := app.Sizing[wandb.Spec.Size]; ok && sizeConfig.Resources != nil {
+	if sizeConfig, ok := resolveSizeConfig(app.Sizing, wandb.Spec.Size); ok && sizeConfig.Resources != nil {
 		resources = mergeResources(resources, sizeConfig.Resources, wandb.Spec.RequireLimits)
 	}
 
@@ -52,7 +57,7 @@ func ResolveAutoscaling(app manifest.Application, wandb *v2.WeightsAndBiases) *v
 	}
 
 	// check if there is a sizing config in the map that corresponds to the size in the wandb spec and apply that
-	if sizeConfig, ok := app.Sizing[wandb.Spec.Size]; ok && sizeConfig.Autoscaling != nil {
+	if sizeConfig, ok := resolveSizeConfig(app.Sizing, wandb.Spec.Size); ok && sizeConfig.Autoscaling != nil {
 		if sizeConfig.Autoscaling.Horizontal.MinReplicas != nil {
 			hpa.MinReplicas = sizeConfig.Autoscaling.Horizontal.MinReplicas
 		}
@@ -157,7 +162,7 @@ func ResolveInfraSizing(sizing map[v2.Size]manifest.SizingConfig, size v2.Size, 
 	}
 
 	// Override with size-specific sizing, merging resources
-	if sizeSizing, ok := sizing[size]; ok {
+	if sizeSizing, ok := resolveSizeConfig(sizing, size); ok {
 		if sizeSizing.Replicas != 0 {
 			result.Replicas = sizeSizing.Replicas
 		}
@@ -196,7 +201,7 @@ func ResolveKafkaSizing(sizing map[v2.Size]manifest.KafkaSizingConfig, size v2.S
 		}
 	}
 
-	if sizeSizing, ok := sizing[size]; ok {
+	if sizeSizing, ok := resolveSizeConfig(sizing, size); ok {
 		if sizeSizing.Replicas != 0 {
 			result.Replicas = sizeSizing.Replicas
 		}
