@@ -12,7 +12,9 @@ import (
 	seaweedv1 "github.com/wandb/operator/pkg/vendored/seaweedfs-operator/seaweed.seaweedfs.com/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -152,6 +154,7 @@ func writeSeaweedS3Config(
 ) (*objectstore.ConnInfo, error) {
 	var err error
 	var found bool
+	var gvk schema.GroupVersionKind
 	var secretKey string
 	var actual = &corev1.Secret{}
 
@@ -194,10 +197,23 @@ func writeSeaweedS3Config(
 		return nil, err
 	}
 
+	if gvk, err = client.GroupVersionKindFor(owner); err != nil {
+		return nil, fmt.Errorf("could not get GVK for owner: %w", err)
+	}
+	ref := metav1.OwnerReference{
+		APIVersion:         gvk.GroupVersion().String(),
+		Kind:               gvk.Kind,
+		Name:               owner.GetName(),
+		UID:                owner.GetUID(),
+		Controller:         ptr.To(false),
+		BlockOwnerDeletion: ptr.To(false),
+	}
+
 	desired := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      nsnBuilder.ConfigName(),
-			Namespace: nsnBuilder.Namespace(),
+			Name:            nsnBuilder.ConfigName(),
+			Namespace:       nsnBuilder.Namespace(),
+			OwnerReferences: []metav1.OwnerReference{ref},
 		},
 		Type: corev1.SecretTypeOpaque,
 		StringData: map[string]string{
