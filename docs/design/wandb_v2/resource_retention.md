@@ -300,11 +300,15 @@ pruning, but it must not be relied on to prevent Application cascade deletion.
 The operator remains responsible for explicit purge. Preserve unrelated options;
 copy only selected association metadata, never arbitrary hooks or sync settings.
 
-Recommend `annotation` or `annotation+label` tracking. Document and test any
-label-only compatibility mode explicitly, including custom instance-label keys,
-`IgnoreExtraneous`, and deletion protection. `IgnoreExtraneous` alone does not
-protect against deletion. Preserving a namespace and required CRDs is a separate
-Argo CD application-layout requirement.
+Use `annotation` or `annotation+label` tracking. Label-only association is not
+enabled: vendor controllers can propagate an Application's instance label to
+new children before the operator can add deletion protection to them. This
+creates another prune race. Neither the default instance label nor a custom
+tracking label is copied from the WandB CR. `IgnoreExtraneous` only changes sync
+status and does not close that deletion race. Customers using label-only
+tracking must configure Argo CD's `application.resourceTrackingMethod` as
+`annotation` or `annotation+label` for this association. Preserving a namespace
+and required CRDs is a separate Argo CD application-layout requirement.
 
 References: [non-self-referencing tracking](https://argo-cd.readthedocs.io/en/stable/user-guide/resource_tracking/#non-self-referencing-annotations),
 [sync deletion options](https://argo-cd.readthedocs.io/en/stable/user-guide/sync-options/#no-resource-deletion).
@@ -362,8 +366,8 @@ References: [Kubernetes foreground deletion](https://kubernetes.io/docs/concepts
    the source inventory above.
 3. Implement the durable, retryable lifecycle and dependency validation, including
    exact instance scoping, safe purge ordering, and readoption.
-4. Implement Argo CD association and deletion protection, including compatibility
-   documentation and metadata tests.
+4. Implement Argo CD association and deletion protection, including tracking-mode
+   compatibility documentation and metadata tests.
 5. Implement migration readiness and DELETE admission for both served versions;
    add policy enum validation and generated deployment/CRD changes. Deploy the
    guard before removing legacy ownership and document rollback constraints.

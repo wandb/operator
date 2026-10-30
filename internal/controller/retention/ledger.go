@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"reflect"
 	"slices"
 	"strings"
@@ -125,6 +126,9 @@ func Open(ctx context.Context, c client.Client, reader client.Reader, w *apiv2.W
 }
 
 func (s *Session) save(ctx context.Context) error {
+	oldLabels := maps.Clone(s.cm.Labels)
+	oldAnnotations := maps.Clone(s.cm.Annotations)
+	associate(s.cm, s.parent, Resource{Component: "retention", Instance: "inventory"})
 	data, err := json.Marshal(s.Ledger)
 	if err != nil {
 		return err
@@ -132,7 +136,7 @@ func (s *Session) save(ctx context.Context) error {
 	if len(data) > 900000 {
 		return fmt.Errorf("retention inventory exceeds its safe storage limit")
 	}
-	if s.cm.Data[ledgerDataKey] == string(data) && s.cm.ResourceVersion != "" {
+	if s.cm.Data[ledgerDataKey] == string(data) && s.cm.ResourceVersion != "" && maps.Equal(oldLabels, s.cm.Labels) && maps.Equal(oldAnnotations, s.cm.Annotations) {
 		return nil
 	}
 	s.cm.Data = map[string]string{ledgerDataKey: string(data)}
@@ -294,6 +298,9 @@ func (s *Session) sortedResources() []Resource {
 }
 
 func (s *Session) CheckReady(ctx context.Context) error {
+	if !argoProtected(s.cm, s.parent) {
+		return fmt.Errorf("retention inventory is missing Argo CD deletion protection")
+	}
 	if s.Ledger.ReadyFingerprint != s.fingerprint {
 		return fmt.Errorf("retention migration is not ready for the current configuration")
 	}
@@ -308,6 +315,9 @@ func (s *Session) CheckReady(ctx context.Context) error {
 		}
 		if r.Stage == 1 && !obj.GetDeletionTimestamp().IsZero() {
 			continue
+		}
+		if !r.Supplied && !argoProtected(obj, s.parent) {
+			return fmt.Errorf("resource %s is missing Argo CD deletion protection", r.Key())
 		}
 		if r.UID == "" || r.UID != obj.GetUID() || !s.trusted(obj, r) || ownedBy(obj, s.parent.UID) || !obj.GetDeletionTimestamp().IsZero() {
 			return fmt.Errorf("resource %s has not completed retention migration", r.Key())

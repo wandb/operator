@@ -78,6 +78,7 @@ func associate(obj client.Object, w *apiv2.WeightsAndBiases, r Resource) {
 	annotations[InstanceAnnotation] = r.Instance
 	obj.SetAnnotations(annotations)
 	common.RemoveOwnerReference(obj, w.UID)
+	protectArgo(obj, w)
 }
 
 func associated(obj client.Object, w *apiv2.WeightsAndBiases, r Resource) bool {
