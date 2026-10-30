@@ -15,6 +15,7 @@ import (
 
 const (
 	UIDLabel           = "weightsandbiases.apps.wandb.com/uid"
+	ComponentLabel     = "weightsandbiases.apps.wandb.com/retention-component"
 	InstanceLabel      = "weightsandbiases.apps.wandb.com/instance"
 	InstanceAnnotation = "weightsandbiases.apps.wandb.com/instance-key"
 	ReadyCondition     = "RetentionReady"
@@ -59,7 +60,14 @@ func associate(obj client.Object, w *apiv2.WeightsAndBiases, r Resource) {
 	if labels == nil {
 		labels = map[string]string{}
 	}
-	maps.Copy(labels, common.BuildWandbLabels(w, r.Component))
+	// Vendor selectors can include their own component label (notably Keeper).
+	// Keep it intact and use a separate key for the logical retention instance.
+	for key, value := range common.BuildWandbLabels(w, r.Component) {
+		if key != common.WandbComponentLabel || labels[key] == "" {
+			labels[key] = value
+		}
+	}
+	labels[ComponentLabel] = r.Component
 	labels[UIDLabel] = string(w.UID)
 	labels[InstanceLabel] = instanceLabel(r.Instance)
 	obj.SetLabels(labels)
@@ -74,7 +82,7 @@ func associate(obj client.Object, w *apiv2.WeightsAndBiases, r Resource) {
 
 func associated(obj client.Object, w *apiv2.WeightsAndBiases, r Resource) bool {
 	return obj.GetLabels()[UIDLabel] == string(w.UID) &&
-		obj.GetLabels()[common.WandbComponentLabel] == r.Component &&
+		obj.GetLabels()[ComponentLabel] == r.Component &&
 		obj.GetLabels()[InstanceLabel] == instanceLabel(r.Instance) &&
 		obj.GetAnnotations()[InstanceAnnotation] == r.Instance
 }

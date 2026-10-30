@@ -49,6 +49,7 @@ import (
 // WeightsAndBiasesReconciler reconciles a WeightsAndBiases object
 type WeightsAndBiasesReconciler struct {
 	client.Client
+	APIReader          client.Reader
 	IsAirgapped        bool
 	DeployerClient     deployer.DeployerInterface
 	Scheme             *runtime.Scheme
@@ -129,7 +130,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, err
 	}
 
-	return v2.Reconcile(ctx, r.Client, r.Recorder, wandb, telemetryConfig)
+	return v2.Reconcile(ctx, r.Client, r.Recorder, wandb, telemetryConfig, r.APIReader)
 }
 
 // Delete was taken from original v1 reconciler
@@ -139,6 +140,7 @@ func (r *WeightsAndBiasesReconciler) Delete(e event.DeleteEvent) bool {
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.APIReader = mgr.GetAPIReader()
 	var b = ctrl.NewControllerManagedBy(mgr).
 		For(&apiv2.WeightsAndBiases{}).
 		// Applications carry plain (non-controller) owner refs; without

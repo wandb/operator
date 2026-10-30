@@ -240,10 +240,8 @@ func ToClickHouseVendorSpec(
 		serverSettings.Set("prometheus/status_info", v1.NewSettingScalar("true"))
 	}
 
-	reclaimPolicy := v1.PVCReclaimPolicyUnspecified
-	if wandb.GetRetentionPolicy(spec.ManagedInfraSpec).OnDelete == apiv2.PurgeOnDelete {
-		reclaimPolicy = v1.PVCReclaimPolicyDelete
-	}
+	// The retention lifecycle deletes verified claims after workloads stop.
+	reclaimPolicy := v1.PVCReclaimPolicyRetain
 
 	clickHouseImage := ClickHouseImage(mfst.Clickhouse["default"].Images["server"], wandb.Spec.Global.ImageRegistry)
 	podSpec := corev1.PodSpec{

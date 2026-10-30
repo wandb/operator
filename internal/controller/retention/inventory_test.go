@@ -74,6 +74,7 @@ func TestAssociationPreservesInternalOwnershipAndInstanceKey(t *testing.T) {
 	w := testWandb()
 	r := Resource{Component: "redis", Instance: "arbitrary/key with spaces"}
 	obj := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"customer": "keep"}, OwnerReferences: []metav1.OwnerReference{{UID: w.UID}, {UID: "internal-parent"}}}}
+	obj.Labels["weightsandbiases.apps.wandb.com/component"] = "clickhouse-keeper"
 	associate(obj, w, r)
 	require.False(t, ownedBy(obj, w.UID))
 	require.True(t, ownedBy(obj, "internal-parent"))
@@ -81,6 +82,7 @@ func TestAssociationPreservesInternalOwnershipAndInstanceKey(t *testing.T) {
 	require.Len(t, obj.Labels[InstanceLabel], 63)
 	require.Equal(t, r.Instance, obj.Annotations[InstanceAnnotation])
 	require.Equal(t, "keep", obj.Labels["customer"])
+	require.Equal(t, "clickhouse-keeper", obj.Labels["weightsandbiases.apps.wandb.com/component"])
 	require.Equal(t, []metav1.OwnerReference{{UID: "internal-parent"}}, obj.OwnerReferences)
 	other := r
 	other.Instance = "arbitrary_key with spaces"

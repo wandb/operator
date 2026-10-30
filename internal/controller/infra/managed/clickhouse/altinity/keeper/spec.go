@@ -122,8 +122,9 @@ func ToKeeperVendorSpec(
 				},
 				VolumeClaimTemplates: []chiv1.VolumeClaimTemplate{
 					{
-						Name:       volumeTemplateName,
-						ObjectMeta: metav1.ObjectMeta{Labels: labels},
+						PVCReclaimPolicy: chiv1.PVCReclaimPolicyRetain,
+						Name:             volumeTemplateName,
+						ObjectMeta:       metav1.ObjectMeta{Labels: labels},
 						Spec: corev1.PersistentVolumeClaimSpec{
 							AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
 							Resources: corev1.VolumeResourceRequirements{
