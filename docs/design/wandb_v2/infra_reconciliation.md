@@ -1,5 +1,9 @@
 # Infra V2 Reconciliation Flows
 
+For the current infrastructure inventory and the target deletion behavior, see
+[Resource retention](resource_retention.md). The diagrams below describe the
+earlier architecture and include providers that have since been replaced.
+
 Given that we're entering a WandB V2 Reconciliation, here is how the process flows from a coarse-grained
 perspective followed by narrower and more detailed views.
 
