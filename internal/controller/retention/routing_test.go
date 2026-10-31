@@ -243,3 +243,31 @@ func TestLegacyRouteRequiresVerifiedLiveBackend(t *testing.T) {
 	require.NoError(t, s.Get(ctx, client.ObjectKeyFromObject(route), route))
 	require.Empty(t, route.Labels[UIDLabel])
 }
+
+func TestExternalRouteCanBeExplicitlyReadopted(t *testing.T) {
+	ctx := context.Background()
+	s, route, _, service := routeFixture(t, false, apiv2.DetachOnDelete)
+	require.NoError(t, s.Reconcile(ctx))
+	finishRoutes(t, s)
+	backend, _, err := s.objectResource(service)
+	require.NoError(t, err)
+	old := s.parent.DeepCopy()
+	require.NoError(t, s.Get(ctx, client.ObjectKeyFromObject(old), old))
+	old.Finalizers = nil
+	require.NoError(t, s.Client.Update(ctx, old))
+	require.NoError(t, s.Client.Delete(ctx, old))
+	next := s.parent.DeepCopy()
+	next.UID = "new-installation"
+	next.ResourceVersion = ""
+	next.Annotations[AdoptFromAnnotation] = string(s.parent.UID)
+	require.NoError(t, s.Client.Create(ctx, next))
+	adopter, err := Open(ctx, s.Client, s.reader, next)
+	require.NoError(t, err)
+	adopter.Ledger.Resources[backend.Key()] = backend
+	require.NoError(t, adopter.Reconcile(ctx))
+	require.NoError(t, adopter.CheckReady(ctx))
+	require.NoError(t, s.Get(ctx, client.ObjectKeyFromObject(route), route))
+	require.Equal(t, string(next.UID), route.Labels[UIDLabel])
+	require.Equal(t, types.UID("route-uid"), route.UID)
+	require.Empty(t, route.OwnerReferences)
+}

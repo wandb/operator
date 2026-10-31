@@ -108,7 +108,9 @@ func (s *Session) legacyRouteCandidate(obj client.Object, component string) bool
 	if name := labels[common.WandbNameLabel]; name != "" && name != s.parent.Name {
 		return false
 	}
-	if c := labels[common.WandbComponentLabel]; c != "" && c != component {
+	// Migration of minimally labeled legacy routes may have filled this
+	// display label with the retention component. Donor UID checks still apply.
+	if c := labels[common.WandbComponentLabel]; c != "" && c != component && (c != "networking" || labels[ComponentLabel] != "networking") {
 		return false
 	}
 	return true
