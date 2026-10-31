@@ -72,3 +72,24 @@ release matrix. Unit/envtest suites and the WESTest runner suite pass. Workflow
 helper tests and workflow syntax checks pass. Lint reports no new findings
 against the branch base; the repository's five existing staticcheck findings
 remain outside this change.
+
+## Gateway follow-up validation
+
+Four additional WESTest cases cover managed Gateway detach under foreground and
+orphan propagation, and external Gateway detach/purge under foreground
+propagation. The validator lists live infrastructure HTTPRoutes independently
+of the inventory, checks their expected policy against the backend Services,
+and checks Gateway removal or preservation. Unit tests additionally cover
+legacy-route migration, explicit readoption, GKE HealthCheckPolicies,
+cross-namespace routes, UID replacement rejection, and finalizer retries.
+
+Operator unit/envtest and WESTest runner suites pass after this change. The full
+operator linter reports the same five pre-existing findings, with no new
+findings. CI matrix helper tests pass; the full release matrix now has 22 cases.
+
+The initial managed-Gateway run `20261030T230659Z-97593` and external-Gateway
+purge run `20261030T230701Z-97950` both created and attached the bucket HTTPRoute.
+Before deletion assertions, the local OrbStack Docker engine stopped responding;
+Kubernetes API requests timed out and Docker container listing and stop requests
+also hung. These attempts do **not** establish real-cluster teardown results.
+The new Gateway scenarios still require a completed run on a healthy engine.
