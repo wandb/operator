@@ -1166,20 +1166,16 @@ type WeightsAndBiasesStatus struct {
 	IngressStatus    *IngressStatusSummary       `json:"ingressStatus,omitempty"`
 	WatchtowerStatus *WatchtowerStatusSummary    `json:"watchtowerStatus,omitempty"`
 	SupportBundle    *SupportBundleStatusSummary `json:"supportBundle,omitempty"`
-	Preflights       *PreflightStatus            `json:"preflightStatus,omitempty"`
+	Preflights       map[string]PreflightStatus  `json:"preflights,omitempty"`
 }
 
 type SupportBundleStatusSummary struct {
-	Ready              bool                     `json:"ready"`
-	Image              string                   `json:"image,omitempty"`
-	CronJob            string                   `json:"cronJob,omitempty"`
-	Version            string                   `json:"version,omitempty"`
-	Running            bool                     `json:"running,omitempty"`
-	LastSuccessfulTime *metav1.Time             `json:"lastSuccessfulTime,omitempty"`
-	IngressStatus      *IngressStatusSummary    `json:"ingressStatus,omitempty"`
-	WatchtowerStatus   *WatchtowerStatusSummary `json:"watchtowerStatus,omitempty"`
-	// +optional
-	Preflights map[string]PreflightStatus `json:"preflights,omitempty"`
+	Ready              bool         `json:"ready"`
+	Image              string       `json:"image,omitempty"`
+	CronJob            string       `json:"cronJob,omitempty"`
+	Version            string       `json:"version,omitempty"`
+	Running            bool         `json:"running,omitempty"`
+	LastSuccessfulTime *metav1.Time `json:"lastSuccessfulTime,omitempty"`
 }
 
 type WatchtowerStatusSummary struct {
