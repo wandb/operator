@@ -65,7 +65,23 @@ func TestToEtcdApplication(t *testing.T) {
 	require.NotNil(t, app.Spec.ServiceTemplate)
 
 	// etcd is not sized by the server manifest; it must still carry requests so
-	// the members are schedulable/bin-packed rather than BestEffort.
+	// the members are schedulable/bin-packed rather than BestEffort. Limits are
+	// gated by spec.requireLimits (false here), matching every other workload.
+	etcdResources := app.Spec.PodTemplate.Spec.Containers[0].Resources
+	require.Equal(t, "250m", etcdResources.Requests.Cpu().String())
+	require.Equal(t, "512Mi", etcdResources.Requests.Memory().String())
+	require.Empty(t, etcdResources.Limits)
+}
+
+func TestToEtcdApplicationRequireLimits(t *testing.T) {
+	setOpenShiftMode(t, false)
+	wandb := testWandb()
+	wandb.Spec.RequireLimits = true
+	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
+
+	app, err := ToEtcdApplication(wandb, nsn, testScheme(t), manifest.Manifest{})
+	require.NoError(t, err)
+
 	etcdResources := app.Spec.PodTemplate.Spec.Containers[0].Resources
 	require.Equal(t, "250m", etcdResources.Requests.Cpu().String())
 	require.Equal(t, "512Mi", etcdResources.Requests.Memory().String())

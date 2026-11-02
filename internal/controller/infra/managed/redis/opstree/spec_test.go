@@ -63,12 +63,12 @@ var _ = Describe("Redis vendor specs", func() {
 			VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
 		}))
 		// Sentinels are not sized by the server manifest; they still need
-		// requests so the quorum is schedulable rather than BestEffort.
+		// requests so the quorum is schedulable rather than BestEffort. Limits
+		// are gated by spec.requireLimits (false here), like every other workload.
 		Expect(sentinel.Spec.KubernetesConfig.Resources).NotTo(BeNil())
 		Expect(sentinel.Spec.KubernetesConfig.Resources.Requests.Cpu().String()).To(Equal("100m"))
 		Expect(sentinel.Spec.KubernetesConfig.Resources.Requests.Memory().String()).To(Equal("128Mi"))
-		Expect(sentinel.Spec.KubernetesConfig.Resources.Limits.Cpu().String()).To(Equal("250m"))
-		Expect(sentinel.Spec.KubernetesConfig.Resources.Limits.Memory().String()).To(Equal("256Mi"))
+		Expect(sentinel.Spec.KubernetesConfig.Resources.Limits).To(BeEmpty())
 
 		replication, err := ToRedisReplicationVendorSpec(context.Background(), wandb, wandb.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis, redisScheme(), manifest.Manifest{})
 		Expect(err).NotTo(HaveOccurred())
@@ -79,6 +79,18 @@ var _ = Describe("Redis vendor specs", func() {
 		Expect(replication.Spec.InitContainer.Enabled).To(HaveValue(BeFalse()))
 		expectRedisDefaultContainerSecurityContext(replication.Spec.InitContainer.SecurityContext)
 		expectRedisWritableTmpMount(replication.Spec.Storage.VolumeMount.MountPath)
+	})
+
+	It("sets default sentinel limits only when requireLimits is true", func() {
+		wandb := redisWandb(true)
+		wandb.Spec.RequireLimits = true
+
+		sentinel, err := ToRedisSentinelVendorSpec(context.Background(), wandb, wandb.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis, redisScheme(), manifest.Manifest{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(sentinel.Spec.KubernetesConfig.Resources.Requests.Cpu().String()).To(Equal("100m"))
+		Expect(sentinel.Spec.KubernetesConfig.Resources.Requests.Memory().String()).To(Equal("128Mi"))
+		Expect(sentinel.Spec.KubernetesConfig.Resources.Limits.Cpu().String()).To(Equal("250m"))
+		Expect(sentinel.Spec.KubernetesConfig.Resources.Limits.Memory().String()).To(Equal("256Mi"))
 	})
 
 	It("lets an explicit CR sentinel resource block replace the default", func() {

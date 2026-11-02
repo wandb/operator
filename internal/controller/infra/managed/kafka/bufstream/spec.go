@@ -26,17 +26,24 @@ const defaultEtcdStorageSize = "10Gi"
 // to be evicted under node pressure. The numbers cover the measured
 // footprint (~35 MB / <0.05 CPU per member at the small envelope) with
 // generous headroom while leaving the broker sizing to the manifest.
-func defaultEtcdResources() corev1.ResourceRequirements {
-	return corev1.ResourceRequirements{
+//
+// Limits follow the same gate as every other managed workload: they are only
+// set when spec.requireLimits is true, so a requests-only install stays
+// requests-only here too.
+func defaultEtcdResources(requireLimits bool) corev1.ResourceRequirements {
+	res := corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{
 			corev1.ResourceCPU:    resource.MustParse("250m"),
 			corev1.ResourceMemory: resource.MustParse("512Mi"),
 		},
-		Limits: corev1.ResourceList{
+	}
+	if requireLimits {
+		res.Limits = corev1.ResourceList{
 			corev1.ResourceCPU:    resource.MustParse("1"),
 			corev1.ResourceMemory: resource.MustParse("1Gi"),
-		},
+		}
 	}
+	return res
 }
 
 const (
@@ -364,7 +371,7 @@ func ToEtcdApplication(
 							Name:            "etcd",
 							Image:           EtcdImage(mfst.Kafka.Images[imageKeyEtcd], wandb.Spec.Global.ImageRegistry),
 							Env:             etcdEnv,
-							Resources:       defaultEtcdResources(),
+							Resources:       defaultEtcdResources(wandb.Spec.RequireLimits),
 							SecurityContext: kafkaContainerSecurityContext(),
 							Ports: []corev1.ContainerPort{
 								{Name: "client", ContainerPort: EtcdClientPort},
