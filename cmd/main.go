@@ -69,7 +69,7 @@ func main() {
 	var enableHTTP2 bool
 	var tlsOpts []func(*tls.Config)
 	var deployerAPI, isolationNamespaces string
-	var debug, airgapped, managedSpecEnabled bool
+	var debug, airgapped, managedSpecEnabled, userSpecEnabled bool
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -95,6 +95,7 @@ func main() {
 
 	flag.BoolVar(&debug, "debug", false, "Enable debug mode")
 	flag.BoolVar(&managedSpecEnabled, "managed-spec-enabled", false, "Use managed spec when available, falling back to Deployer")
+	flag.BoolVar(&userSpecEnabled, "user-spec-enabled", true, "Read and apply the instance user spec")
 
 	opts := zap.Options{
 		Development: true,
@@ -237,6 +238,7 @@ func main() {
 		DeployerClient:     &deployer.DeployerClient{DeployerAPI: deployerAPI},
 		Debug:              debug,
 		ManagedSpecEnabled: managedSpecEnabled,
+		UserSpecEnabled:    userSpecEnabled,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "WeightsAndBiases")
 		os.Exit(1)
