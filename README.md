@@ -24,6 +24,23 @@ Selection is reevaluated on each reconcile. No cutover state is written or read;
 old `wandb-managed-spec-state` ConfigMaps can remain and are ignored. Setting
 the flag to false returns the operator to Deployer after restart.
 
+## User spec
+
+`USER_SPEC_ENABLED` defaults to `true`. Set it to `false`, or pass
+`--user-spec-enabled=false`, to stop reading and applying the
+`<instance-name>-spec-user` Secret for every instance watched by this operator.
+Restart the operator after changing the environment variable.
+
+Disabled mode does not create or change the user-spec Secret and ignores its
+values, chart, metadata, `_releaseId`, and license inputs. The CR spec, selected
+managed/Deployer base, and operator defaults continue to apply. Managed-spec
+selection and Deployer fallback retain their existing behavior.
+
+Disable user spec only after the installation's required settings have moved
+to retained sources. Keep the Secret for rollback: setting the flag back to
+`true` resumes reading it. Console-managed OIDC, Slack, SMTP, and bucket
+Secrets/ConfigMaps remain independent of this flag.
+
 ## Development
 
 ### Prerequisites

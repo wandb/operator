@@ -77,12 +77,13 @@ var _ = Describe("WeightsandbiasesController", func() {
 			deployerClient := &deployerfakes.FakeDeployerInterface{}
 			deployerClient.GetSpecReturns(&deployerSpec, nil)
 			reconciler = &WeightsAndBiasesReconciler{
-				Client:         k8sClient,
-				IsAirgapped:    false,
-				DeployerClient: deployerClient,
-				Scheme:         scheme.Scheme,
-				Recorder:       recorder,
-				DryRun:         true,
+				Client:          k8sClient,
+				IsAirgapped:     false,
+				DeployerClient:  deployerClient,
+				Scheme:          scheme.Scheme,
+				Recorder:        recorder,
+				DryRun:          true,
+				UserSpecEnabled: true,
 			}
 			wandb := wandbcomv1.WeightsAndBiases{
 				ObjectMeta: metav1.ObjectMeta{
@@ -164,12 +165,13 @@ var _ = Describe("WeightsandbiasesController", func() {
 			deployerClient := &deployerfakes.FakeDeployerInterface{}
 			deployerClient.GetSpecReturns(&deployerSpec, nil)
 			reconciler = &WeightsAndBiasesReconciler{
-				Client:         k8sClient,
-				IsAirgapped:    false,
-				DeployerClient: deployerClient,
-				Scheme:         scheme.Scheme,
-				Recorder:       recorder,
-				DryRun:         true,
+				Client:          k8sClient,
+				IsAirgapped:     false,
+				DeployerClient:  deployerClient,
+				Scheme:          scheme.Scheme,
+				Recorder:        recorder,
+				DryRun:          true,
+				UserSpecEnabled: true,
 			}
 			wandb := wandbcomv1.WeightsAndBiases{
 				ObjectMeta: metav1.ObjectMeta{
@@ -349,6 +351,7 @@ var _ = Describe("WeightsandbiasesController", func() {
 				Recorder:           recorder,
 				DryRun:             true,
 				ManagedSpecEnabled: true,
+				UserSpecEnabled:    true,
 			}
 
 			wandb := &wandbcomv1.WeightsAndBiases{

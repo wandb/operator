@@ -64,6 +64,7 @@ type WeightsAndBiasesReconciler struct {
 	DryRun             bool
 	Debug              bool
 	ManagedSpecEnabled bool
+	UserSpecEnabled    bool
 }
 
 //+kubebuilder:rbac:groups=apps.wandb.com,resources=weightsandbiases,verbs=get;list;watch;create;update;patch;delete
@@ -120,17 +121,23 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	r.Recorder.Event(wandb, corev1.EventTypeNormal, "LoadingConfig", "Loading desired configuration")
 
-	userInputSpec, err := specManager.GetUserInput()
-	if errors.IsNotFound(err) {
-		log.Info("No user input spec found, creating a new one")
-		userInputSpec = &spec.Spec{Values: map[string]interface{}{}}
-		err = specManager.SetUserInput(userInputSpec)
-		if err != nil {
+	userInputSpec := &spec.Spec{Values: map[string]interface{}{}}
+	if r.UserSpecEnabled {
+		var err error
+		userInputSpec, err = specManager.GetUserInput()
+		if errors.IsNotFound(err) {
+			log.Info("No user input spec found, creating a new one")
+			userInputSpec = &spec.Spec{Values: map[string]interface{}{}}
+			err = specManager.SetUserInput(userInputSpec)
+			if err != nil {
+				return ctrlqueue.RequeueWithError(err)
+			}
+		} else if err != nil {
+			log.Error(err, "error retrieving user input spec")
 			return ctrlqueue.RequeueWithError(err)
 		}
-	} else if err != nil {
-		log.Error(err, "error retrieving user input spec")
-		return ctrlqueue.RequeueWithError(err)
+	} else {
+		log.Info("User spec is disabled")
 	}
 
 	var releaseID string
