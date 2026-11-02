@@ -40,7 +40,7 @@ cloud scenarios cannot use those mounts.
 Before deleting an upgraded installation, wait for the new webhook endpoints,
 the completed operator rollout, and `RetentionReady=True` for its generation.
 Admission also checks current ownership, resource UIDs, Argo protection and the
-spec fingerprint, so the condition alone cannot authorize deletion. Do not
+spec/lifecycle fingerprint, so the condition alone cannot authorize deletion. Do not
 remove the inventory ConfigMap or cleanup finalizer to bypass a migration block.
 
 To readopt after a completed detach, create the replacement WandB CR with the
@@ -88,8 +88,31 @@ operator linter reports the same five pre-existing findings, with no new
 findings. CI matrix helper tests pass; the full release matrix now has 22 cases.
 
 The initial managed-Gateway run `20261030T230659Z-97593` and external-Gateway
-purge run `20261030T230701Z-97950` both created and attached the bucket HTTPRoute.
-Before deletion assertions, the local OrbStack Docker engine stopped responding;
-Kubernetes API requests timed out and Docker container listing and stop requests
-also hung. These attempts do **not** establish real-cluster teardown results.
-The new Gateway scenarios still require a completed run on a healthy engine.
+purge run `20261030T230701Z-97950` both created and attached the bucket HTTPRoute,
+but stalled before deletion assertions. Kubernetes API requests timed out and
+Docker listing and stop requests hung; the underlying cause was not established.
+On November 2, Docker responded normally without a restart. Both abandoned test
+environments were removed before resuming scenarios sequentially; the unrelated
+development cluster was left running.
+
+The first resumed managed-Gateway run, `20261102T165821Z-78620`, caught a real
+teardown bug: the route disappeared, but NGINX continually recreated children of
+the foreground-deleting Gateway. Managed Gateways now enter the explicit
+inventory, lose their WandB owner before admission, and use UID-checked
+background deletion after routes. Their children remain under ordinary Gateway
+GC. A lifecycle revision in the readiness fingerprint prevents older inventories
+from authorizing deletion before this migration completes.
+
+| Scenario (prefix `local-kind-retention-`) | Run ID | Evidence |
+| --- | --- | --- |
+| `gateway-detach-foreground` | `20261102T172302Z-236` | Passed with operator `05b2922b`; all 102 recorded identities checked, managed Gateway/routes removed and detached backends preserved. The test cluster was then explicitly destroyed. |
+| `gateway-detach-orphan` | `20261102T173230Z-16182` | Passed with operator `54cdb6bf`; 102 identities checked after orphan deletion, including explicit Gateway/route cleanup and detached backend preservation. Automatic cluster teardown passed. |
+| `external-gateway-detach-foreground` | `20261102T174108Z-26306` | Passed with operator `54cdb6bf`; all 102 identities checked, including preserved customer Gateway, infrastructure routes, and detached backends. Automatic cluster teardown passed. |
+| `external-gateway-purge-foreground` | `20261102T174849Z-31142` | Passed with operator `54cdb6bf`; all 102 identities checked, infrastructure routes/backends purged while the customer Gateway and supplied resources survived. Automatic cluster teardown passed. |
+
+The failed November 2 environment was also destroyed. The readiness-revision
+guard was added in `54cdb6bf` and is covered by a legacy-inventory admission and
+migration regression test; it does not change fresh-installation teardown.
+All four Gateway scenarios completed on November 2 without restarting OrbStack.
+Operator unit/envtest and WESTest runner tests passed; lint still reports only
+the five baseline findings and zero new findings against `aa068410`.
