@@ -6,6 +6,7 @@ import "k8s.io/apimachinery/pkg/runtime/schema"
 // routed by installation UID instead of a garbage-collection owner reference.
 func WatchedKinds() []schema.GroupVersionKind {
 	return []schema.GroupVersionKind{
+		{Group: "gateway.networking.k8s.io", Version: "v1", Kind: "Gateway"},
 		{Group: "gateway.networking.k8s.io", Version: "v1", Kind: "HTTPRoute"},
 		{Group: "", Version: "v1", Kind: "Secret"},
 		{Group: "", Version: "v1", Kind: "ConfigMap"},

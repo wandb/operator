@@ -13,7 +13,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+func isGateway(r Resource) bool {
+	return r.Kind == "Gateway" && r.GVK().Group == "gateway.networking.k8s.io"
+}
+
 func purgeOrder(r Resource) int {
+	if isGateway(r) {
+		// Infrastructure routes precede their Gateway.
+		return -1
+	}
+
 	base := 20
 	switch r.Component {
 	case "networking":
@@ -106,7 +115,13 @@ func (s *Session) Finalize(ctx context.Context) (bool, error) {
 				}
 			}
 			uid := r.UID
-			if err := s.Client.Delete(ctx, obj, client.PropagationPolicy(metav1.DeletePropagationForeground), client.Preconditions{UID: &uid}); err != nil {
+			propagation := metav1.DeletePropagationForeground
+			// NGINX recreates its children while a terminating Gateway remains visible.
+			// Delete the Gateway first so background GC can finish those children.
+			if isGateway(r) {
+				propagation = metav1.DeletePropagationBackground
+			}
+			if err := s.Client.Delete(ctx, obj, client.PropagationPolicy(propagation), client.Preconditions{UID: &uid}); err != nil {
 				return false, ignoreMissing(err)
 			}
 		}

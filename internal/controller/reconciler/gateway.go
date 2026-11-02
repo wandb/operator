@@ -17,7 +17,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	ctrlClient "sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
@@ -85,10 +84,6 @@ func reconcileGateway(ctx context.Context, c ctrlClient.Client, wandb *apiv2.Wei
 		desired.Spec.Listeners = buildListenersFromConfig(gwConfig.Gateway.Listeners, wandb)
 	} else {
 		desired.Spec.Listeners = buildDefaultListeners(wandb)
-	}
-
-	if err := controllerutil.SetOwnerReference(wandb, desired, c.Scheme()); err != nil {
-		return err
 	}
 
 	current := &gatewayv1.Gateway{}
@@ -170,7 +165,7 @@ func deleteGateway(ctx context.Context, c ctrlClient.Client, wandb *apiv2.Weight
 	}
 	logger.Info("Deleting gateway", "gateway", gatewayName)
 	uid := gw.UID
-	return c.Delete(ctx, gw, ctrlClient.Preconditions{UID: &uid})
+	return c.Delete(ctx, gw, ctrlClient.PropagationPolicy(metav1.DeletePropagationBackground), ctrlClient.Preconditions{UID: &uid})
 }
 
 func validateExternalGatewayExists(

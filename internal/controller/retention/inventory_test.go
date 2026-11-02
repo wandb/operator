@@ -88,3 +88,25 @@ func TestAssociationPreservesInternalOwnershipAndInstanceKey(t *testing.T) {
 	other.Instance = "arbitrary_key with spaces"
 	require.False(t, associated(obj, w, other))
 }
+
+func TestInventoryAlwaysPurgesOnlyManagedGateways(t *testing.T) {
+	for _, managed := range []bool{false, true} {
+		w := testWandb()
+		w.Spec.Networking = apiv2.NetworkingSpec{Mode: apiv2.NetworkingModeGatewayAPI, GatewayAPI: &apiv2.GatewayAPIConfig{Gateway: apiv2.GatewayConfig{Managed: managed}}}
+		resources, err := Inventory(w)
+		require.NoError(t, err)
+		count := 0
+		for _, r := range resources {
+			if isGateway(r) {
+				count++
+				require.Equal(t, apiv2.PurgeOnDelete, r.Policy)
+				require.Equal(t, w.Name+"-gateway", r.Name)
+			}
+		}
+		if managed {
+			require.Equal(t, 1, count)
+		} else {
+			require.Zero(t, count)
+		}
+	}
+}

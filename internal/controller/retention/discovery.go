@@ -106,7 +106,9 @@ func (s *Session) discover(ctx context.Context) error {
 		changed = false
 		owners := map[types.UID]Resource{}
 		for _, r := range s.Ledger.Resources {
-			if r.UID != "" && !r.Supplied {
+			// Gateway controllers may recreate children until the Gateway is gone.
+			// Leave those networking children to background GC, outside data retention.
+			if r.UID != "" && !r.Supplied && !isGateway(r) {
 				owners[r.UID] = r
 			}
 		}

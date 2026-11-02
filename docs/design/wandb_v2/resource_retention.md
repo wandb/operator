@@ -63,11 +63,18 @@ remove routes for purged services. When the parent Gateway belongs to this
 installation, delete these routes before completing Gateway teardown even if the
 backend is detached. The external Gateway itself is never a purge target.
 
-Routes have no WandB owner reference and use the same UID verification and Argo
-protection as other retained resources. Migration of previously unowned routes
-requires operator metadata plus a live, verified backend Service. Names alone
-do not authorize adoption or deletion. A managed Gateway carries installation
-UID metadata so orphan propagation cannot prevent its explicit cleanup.
+Routes and managed Gateways have no WandB owner reference and use the same UID
+verification and Argo protection as other inventoried resources. Managed
+Gateways always use purge, independent of the data policy. Delete infrastructure
+routes first, then delete the Gateway with background propagation and observe
+its removal. Leave Gateway-controller children to background GC: NGINX can
+recreate them while a Gateway is held in foreground deletion. These networking
+children are outside the data-retention inventory.
+
+Migration of previously unowned routes requires operator metadata plus a live,
+verified backend Service. Names alone do not authorize adoption or deletion.
+Gateway identity and owner-reference removal must be established before DELETE
+admission, including when upgrading an existing installation.
 
 ## Inventory and provenance
 

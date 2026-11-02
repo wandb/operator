@@ -18,6 +18,9 @@ import (
 func Inventory(w *apiv2.WeightsAndBiases) ([]Resource, error) {
 	var resources []Resource
 	var firstErr error
+	if w.Spec.Networking.Mode == apiv2.NetworkingModeGatewayAPI && w.Spec.Networking.GatewayAPI != nil && w.Spec.Networking.GatewayAPI.Gateway.Managed {
+		resources = append(resources, Resource{APIVersion: "gateway.networking.k8s.io/v1", Kind: "Gateway", Namespace: w.Namespace, Name: w.Name + "-gateway", Component: "networking", Instance: "gateway", Policy: apiv2.PurgeOnDelete, Stage: 0})
+	}
 	add := func(component, key, ns, name string, spec apiv2.ManagedInfraSpec, api, kind string, stage int) {
 		policy, err := Policy(w, spec)
 		if err != nil {

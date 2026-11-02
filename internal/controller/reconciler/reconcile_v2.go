@@ -356,7 +356,11 @@ func ReconcileNetworkingAndWatchtower(
 	switch wandb.Spec.Networking.Mode {
 	case apiv2.NetworkingModeGatewayAPI:
 		wandb.Status.GatewayStatus = nil
-		if err := reconcileGateway(ctx, client, wandb); err != nil {
+		gatewayClient := client
+		if len(lifecycles) > 0 && lifecycles[0] != nil {
+			gatewayClient = lifecycles[0]
+		}
+		if err := reconcileGateway(ctx, gatewayClient, wandb); err != nil {
 			log.Error("Failed to reconcile Gateway", logx.ErrAttr(err))
 			return ctrl.Result{}, err
 		}

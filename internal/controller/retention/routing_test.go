@@ -13,6 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
@@ -287,4 +288,48 @@ func TestLegacyManagedGatewaySurvivesOrphanOwnershipRemoval(t *testing.T) {
 	require.True(t, apierrors.IsNotFound(s.Get(ctx, client.ObjectKeyFromObject(route), route)), "a managed Gateway's route must still be purged after orphan propagation")
 	require.NoError(t, s.Get(ctx, client.ObjectKeyFromObject(gw), gw))
 	require.Equal(t, string(s.parent.UID), gw.Labels[UIDLabel], "Gateway cleanup must have durable ownership proof before DELETE admission")
+}
+
+func TestManagedGatewayUsesBackgroundDeletionAfterRoutes(t *testing.T) {
+	ctx := context.Background()
+	w, c, secret := lifecycleFixture(t, apiv2.DetachOnDelete)
+	require.NoError(t, gatewayv1.Install(c.Scheme()))
+	w.Spec.Networking = apiv2.NetworkingSpec{Mode: apiv2.NetworkingModeGatewayAPI, GatewayAPI: &apiv2.GatewayAPIConfig{Gateway: apiv2.GatewayConfig{Managed: true}}}
+	require.NoError(t, c.Update(ctx, w))
+	gw := &gatewayv1.Gateway{ObjectMeta: metav1.ObjectMeta{Name: w.Name + "-gateway", Namespace: w.Namespace, UID: "gateway", OwnerReferences: secret.OwnerReferences}}
+	require.NoError(t, c.Create(ctx, gw))
+	child := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "nginx", Namespace: w.Namespace, UID: "nginx", OwnerReferences: []metav1.OwnerReference{{APIVersion: "gateway.networking.k8s.io/v1", Kind: "Gateway", Name: gw.Name, UID: gw.UID}}}}
+	require.NoError(t, c.Create(ctx, child))
+	var deleted []string
+	observed := interceptor.NewClient(c.(client.WithWatch), interceptor.Funcs{Delete: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.DeleteOption) error {
+		options := (&client.DeleteOptions{}).ApplyOptions(opts)
+		deleted = append(deleted, obj.GetName())
+		if obj.GetName() == gw.Name {
+			require.NotNil(t, options.PropagationPolicy)
+			require.Equal(t, metav1.DeletePropagationBackground, *options.PropagationPolicy)
+			require.Equal(t, gw.UID, *options.Preconditions.UID)
+		}
+		return c.Delete(ctx, obj, opts...)
+	}})
+	s, err := Open(ctx, observed, c, w)
+	require.NoError(t, err)
+	backend := Resource{APIVersion: "v1", Kind: "Service", Namespace: w.Namespace, Name: "store", UID: "store", Component: "objectstore", Instance: "default", Policy: apiv2.DetachOnDelete, Stage: 2}
+	service := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: backend.Name, Namespace: backend.Namespace, UID: backend.UID}}
+	associate(service, w, backend)
+	require.NoError(t, c.Create(ctx, service))
+	s.Ledger.Resources[backend.Key()] = backend
+	route := &gatewayv1.HTTPRoute{ObjectMeta: metav1.ObjectMeta{Name: "bucket", Namespace: w.Namespace, UID: "route"}, Spec: gatewayv1.HTTPRouteSpec{CommonRouteSpec: gatewayv1.CommonRouteSpec{ParentRefs: []gatewayv1.ParentReference{{Name: gatewayv1.ObjectName(gw.Name)}}}}}
+	require.NoError(t, s.PrepareRoute(ctx, route, "objectstore", "default"))
+	require.NoError(t, s.Create(ctx, route))
+	require.NoError(t, s.Reconcile(ctx))
+	require.NoError(t, s.CheckReady(ctx))
+	require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(gw), gw))
+	require.Empty(t, gw.OwnerReferences)
+	require.True(t, argoProtected(gw, w))
+	_, known, err := s.objectResource(child)
+	require.NoError(t, err)
+	require.False(t, known, "Gateway children must be left to background GC")
+	finishRoutes(t, s)
+	require.Equal(t, []string{route.Name, gw.Name}, deleted)
+	require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(service), service))
 }
