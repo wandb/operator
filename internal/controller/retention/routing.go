@@ -77,6 +77,23 @@ func (s *Session) routePolicy(ctx context.Context, route *gatewayv1.HTTPRoute, r
 		} else if err != nil {
 			return err
 		}
+		if ownedBy(gw, s.parent.UID) {
+			if uid := gw.Labels[UIDLabel]; uid != "" && uid != string(s.parent.UID) {
+				return fmt.Errorf("managed Gateway %s/%s has conflicting installation identity", ns, ref.Name)
+			}
+			if gw.Labels[UIDLabel] == "" {
+				// DELETE can be admitted before normal Gateway reconciliation runs.
+				// Persist identity now, before orphan propagation removes its owner.
+				before := gw.DeepCopy()
+				if gw.Labels == nil {
+					gw.Labels = map[string]string{}
+				}
+				gw.Labels[UIDLabel] = string(s.parent.UID)
+				if err := s.Client.Patch(ctx, gw, client.MergeFromWithOptions(before, client.MergeFromWithOptimisticLock{})); err != nil {
+					return err
+				}
+			}
+		}
 		if ownedBy(gw, s.parent.UID) || gw.Labels[UIDLabel] == string(s.parent.UID) {
 			remove = ns + "/" + string(ref.Name)
 		}

@@ -271,3 +271,20 @@ func TestExternalRouteCanBeExplicitlyReadopted(t *testing.T) {
 	require.Equal(t, types.UID("route-uid"), route.UID)
 	require.Empty(t, route.OwnerReferences)
 }
+
+func TestLegacyManagedGatewaySurvivesOrphanOwnershipRemoval(t *testing.T) {
+	ctx := context.Background()
+	s, route, gw, _ := routeFixture(t, true, apiv2.DetachOnDelete)
+	require.Empty(t, gw.Labels[UIDLabel])
+	require.NoError(t, s.Reconcile(ctx))
+	require.NoError(t, s.CheckReady(ctx))
+	require.NoError(t, s.Get(ctx, client.ObjectKeyFromObject(gw), gw))
+	gw.OwnerReferences = nil
+	require.NoError(t, s.Client.Update(ctx, gw))
+	s, err := Open(ctx, s.Client, s.reader, s.parent)
+	require.NoError(t, err)
+	finishRoutes(t, s)
+	require.True(t, apierrors.IsNotFound(s.Get(ctx, client.ObjectKeyFromObject(route), route)), "a managed Gateway's route must still be purged after orphan propagation")
+	require.NoError(t, s.Get(ctx, client.ObjectKeyFromObject(gw), gw))
+	require.Equal(t, string(s.parent.UID), gw.Labels[UIDLabel], "Gateway cleanup must have durable ownership proof before DELETE admission")
+}
