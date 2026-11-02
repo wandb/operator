@@ -121,29 +121,18 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	r.Recorder.Event(wandb, corev1.EventTypeNormal, "LoadingConfig", "Loading desired configuration")
 
-	userInputSpec := &spec.Spec{Values: map[string]interface{}{}}
-	if r.UserSpecEnabled {
-		var err error
-		userInputSpec, err = specManager.GetUserInput()
-		if errors.IsNotFound(err) {
-			log.Info("No user input spec found, creating a new one")
-			userInputSpec = &spec.Spec{Values: map[string]interface{}{}}
-			err = specManager.SetUserInput(userInputSpec)
-			if err != nil {
-				return ctrlqueue.RequeueWithError(err)
-			}
-		} else if err != nil {
-			log.Error(err, "error retrieving user input spec")
-			return ctrlqueue.RequeueWithError(err)
-		}
-	} else {
-		log.Info("User spec is disabled")
+	userInputSpec, err := r.loadUserSpec(ctx, specManager)
+	if err != nil {
+		log.Error(err, "Failed to load user input spec")
+		return ctrlqueue.RequeueWithError(err)
 	}
 
 	var releaseID string
-	if releaseIDValue, ok := userInputSpec.Values["_releaseId"].(string); ok {
-		releaseID = releaseIDValue
-		log.Info("Version Pinning is enabled", "releaseId:", releaseID)
+	if userInputSpec != nil {
+		if releaseIDValue, ok := userInputSpec.Values["_releaseId"].(string); ok {
+			releaseID = releaseIDValue
+			log.Info("Version Pinning is enabled", "releaseId:", releaseID)
+		}
 	}
 
 	crdSpec := operator.Spec(wandb)
