@@ -217,9 +217,21 @@ Alternatively, you can use the provided scripts to manage the kind cluster.
 # Create cluster
 ./hack/scripts/setup_kind.sh
 
+# Create a cluster with a specific Kubernetes version and two worker nodes
+./hack/scripts/setup_kind.sh 2 --kubernetes-version 1.35
+
+# Select an exact patch version
+./hack/scripts/setup_kind.sh --kubernetes-version v1.35.2
+
 # Delete cluster
 ./hack/scripts/teardown_kind.sh
 ```
+
+The optional version selects a `kindest/node` image; `1.35` selects `v1.35.0`.
+Use an image supported by your installed [kind release](https://github.com/kubernetes-sigs/kind/releases).
+Without a version, kind uses its default image. An existing cluster is reused only
+if its nodes match the requested minor or exact patch version; the script does
+not recreate mismatched clusters automatically.
 
 #### Install Tilt
 

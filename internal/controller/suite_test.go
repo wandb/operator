@@ -36,6 +36,7 @@ import (
 	redisreplicationv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redisreplication/v1beta2"
 	redissentinelv1beta2 "github.com/wandb/operator/pkg/vendored/redis-operator/redissentinel/v1beta2"
 	seaweedv1 "github.com/wandb/operator/pkg/vendored/seaweedfs-operator/seaweed.seaweedfs.com/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -170,6 +171,14 @@ var _ = BeforeSuite(func() {
 	Eventually(func() error {
 		return mgr.GetWebhookServer().StartedChecker()(nil)
 	}).Should(Succeed())
+})
+
+var _ = AfterEach(func() {
+	// Envtest has no garbage collector; fixed-name Secrets must not leak a
+	// previous spec's CR ownership into the next spec.
+	Expect(k8sClient.DeleteAllOf(ctx, &corev1.Secret{}, client.InNamespace("default"), client.MatchingLabels{
+		"weightsandbiases.apps.wandb.com/manifest-secret": "true",
+	})).To(Succeed())
 })
 
 var _ = AfterSuite(func() {

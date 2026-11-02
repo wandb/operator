@@ -11,6 +11,7 @@ import (
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -88,8 +89,8 @@ func TestRunMigrationsSurfacesFailedJobPhaseAndReason(t *testing.T) {
 	if err := apiv2.AddToScheme(scheme); err != nil {
 		t.Fatalf("add W&B API to scheme: %v", err)
 	}
-	if err := batchv1.AddToScheme(scheme); err != nil {
-		t.Fatalf("add batch API to scheme: %v", err)
+	if err := clientgoscheme.AddToScheme(scheme); err != nil {
+		t.Fatalf("add Kubernetes APIs to scheme: %v", err)
 	}
 	wandb := &apiv2.WeightsAndBiases{
 		ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "default"},
@@ -237,8 +238,8 @@ func TestRunMigrationsSecurityProfileOverrides(t *testing.T) {
 				if err := apiv2.AddToScheme(scheme); err != nil {
 					t.Fatalf("add W&B API to scheme: %v", err)
 				}
-				if err := batchv1.AddToScheme(scheme); err != nil {
-					t.Fatalf("add batch API to scheme: %v", err)
+				if err := clientgoscheme.AddToScheme(scheme); err != nil {
+					t.Fatalf("add Kubernetes APIs to scheme: %v", err)
 				}
 
 				wandb := &apiv2.WeightsAndBiases{
@@ -308,7 +309,7 @@ func TestSecurityProfileDoesNotRestartCompletedMigrations(t *testing.T) {
 	if err := apiv2.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
 	}
-	if err := batchv1.AddToScheme(scheme); err != nil {
+	if err := clientgoscheme.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
 	}
 	const version = "0.85.0"
