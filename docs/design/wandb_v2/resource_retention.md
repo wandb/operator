@@ -394,6 +394,11 @@ older replicas during rolling upgrades. Conversion preserves the canonical spec
 when a native v2 installation is deleted through v1. Install the new webhook
 configuration before migration; do not delete installations during an upgrade
 until the guard is deployed and `RetentionReady=True` for their generation.
+The readiness fingerprint includes a lifecycle contract revision as well as the
+spec and Argo association. When deletion safety rules change, bump that revision
+so admission requires migration even if the installation's spec is unchanged.
+This is separate from the ledger format version, preserving readable donor
+inventories for upgrades and readoption.
 Do not roll back to an ownership-adding operator after migration without a
 separate rollback procedure and blocked deletion window.
 

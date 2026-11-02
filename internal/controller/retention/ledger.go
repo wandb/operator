@@ -24,6 +24,10 @@ import (
 
 const ledgerDataKey = "inventory.json"
 
+// Bump when deletion safety requires migration beyond an unchanged spec. Keep
+// the ledger format version independent so older inventories remain readable.
+const lifecycleRevision = 2
+
 type Ledger struct {
 	Version          int                 `json:"version"`
 	InstallationUID  types.UID           `json:"installationUID"`
@@ -52,9 +56,10 @@ func LedgerName(uid types.UID) string {
 
 func Fingerprint(w *apiv2.WeightsAndBiases) string {
 	data, _ := json.Marshal(struct {
+		LifecycleRevision      int
 		Spec                   apiv2.WeightsAndBiasesSpec
 		Tracking, Installation string
-	}{w.Spec, w.Annotations["argocd.argoproj.io/tracking-id"], w.Annotations["argocd.argoproj.io/installation-id"]})
+	}{lifecycleRevision, w.Spec, w.Annotations["argocd.argoproj.io/tracking-id"], w.Annotations["argocd.argoproj.io/installation-id"]})
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
 }
