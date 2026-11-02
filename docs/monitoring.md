@@ -49,6 +49,7 @@ telemetry:
 
 Notes:
 - Retention defaults to `1d`.
+- `telemetry.grafana.rootUrl` (default `/console/grafana/`) is the one path Grafana is served on, in-cluster through the admin console and out-of-cluster through a port-forward. It must be `/console/grafana/`, `/grafana/`, `/observability/grafana/` or `/telemetry/grafana/`: paths no W&B app or Watchtower route uses. The operator routes it to Watchtower and passes it as `WATCHTOWER_GRAFANA_PATH`, so a path other than the default needs a Watchtower that reads that variable.
 - `telemetry.mode=forward/full` requires `telemetry.otel.secretName`.
 - `telemetry.mode=forward` requires `telemetry.forwarding.otlp.endpoint`.
 - The telemetry mode controls the stack behavior, but Helm still needs dependency booleans for the VictoriaMetrics and Grafana operator subcharts.

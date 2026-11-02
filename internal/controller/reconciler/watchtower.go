@@ -10,6 +10,7 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/logx"
+	"github.com/wandb/operator/internal/observability/telemetry"
 	"github.com/wandb/operator/pkg/utils"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
@@ -70,6 +71,7 @@ func reconcileWatchtower(
 	c ctrlClient.Client,
 	wandb *apiv2.WeightsAndBiases,
 	manifest serverManifest.Manifest,
+	grafanaPath string,
 ) error {
 	logger := logx.GetSlog(ctx)
 
@@ -95,7 +97,7 @@ func reconcileWatchtower(
 	if err != nil {
 		return err
 	}
-	desired := buildWatchtowerApplication(wandb, authService, image)
+	desired := buildWatchtowerApplication(wandb, authService, image, grafanaPath)
 	usesAWSIngress, err := ingressUsesAWSLoadBalancerController(ctx, c, wandb)
 	if err != nil {
 		return err
@@ -175,16 +177,14 @@ func deleteWatchtower(ctx context.Context, c ctrlClient.Client, wandb *apiv2.Wei
 	return nil
 }
 
-func buildWatchtowerApplication(wandb *apiv2.WeightsAndBiases, authService string, image string) *apiv2.Application {
+func buildWatchtowerApplication(wandb *apiv2.WeightsAndBiases, authService, image, grafanaPath string) *apiv2.Application {
 	labels := watchtowerLabels(wandb)
 	basePath := apiv2.DefaultWatchtowerBasePath
 
 	app := &apiv2.Application{
-		ObjectMeta: metav1.ObjectMeta{
 			Name:      watchtowerName(wandb),
 			Namespace: wandb.Namespace,
 			Labels:    labels,
-		},
 		Spec: apiv2.ApplicationSpec{
 			Kind: "Deployment",
 			// Pinned to one replica: in-flight deploy jobs and their SSE streams
@@ -207,7 +207,7 @@ func buildWatchtowerApplication(wandb *apiv2.WeightsAndBiases, authService strin
 							Command:         []string{"/watchtower"},
 							Args:            []string{"--port", fmt.Sprintf("%d", watchtowerContainerPort)},
 							SecurityContext: resolveContainerSecurityContext(apiv2.WorkloadSecurityProfile{}),
-							Env:             watchtowerEnv(wandb, authService, basePath),
+							Env:             watchtowerEnv(wandb, authService, basePath, grafanaPath),
 							Resources:       watchtowerResources(),
 							Ports: []corev1.ContainerPort{{
 								Name:          watchtowerPortName,
@@ -238,7 +238,7 @@ func buildWatchtowerApplication(wandb *apiv2.WeightsAndBiases, authService strin
 		wandb.Status.GatewayStatus != nil && wandb.Status.GatewayStatus.GatewayRef != nil {
 		app.Spec.HTTPRouteTemplate = buildHTTPRouteTemplateForPaths(
 			wandb,
-			[]string{basePath},
+			watchtowerRoutePaths(grafanaPath),
 			string(networkingv1.PathTypePrefix),
 			ptr.To(gatewayv1.PortNumber(watchtowerContainerPort)),
 		)
@@ -250,7 +250,7 @@ func buildWatchtowerApplication(wandb *apiv2.WeightsAndBiases, authService strin
 // watchtowerEnv is the operator's side of the contract with the Watchtower
 // container: it is told where it is mounted and which service validates the
 // caller's session, so neither has to be baked into the image.
-func watchtowerEnv(wandb *apiv2.WeightsAndBiases, authService, basePath string) []corev1.EnvVar {
+func watchtowerEnv(wandb *apiv2.WeightsAndBiases, authService, basePath, grafanaPath string) []corev1.EnvVar {
 	env := []corev1.EnvVar{
 		// Locks the UI to the cluster it runs in: no context switching, no teardown.
 		{Name: "WATCHTOWER_MODE", Value: "cluster"},
@@ -262,10 +262,14 @@ func watchtowerEnv(wandb *apiv2.WeightsAndBiases, authService, basePath string) 
 		}},
 		{Name: "WATCHTOWER_PASSWORD", ValueFrom: &corev1.EnvVarSource{
 			SecretKeyRef: &corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{Name: watchtowerSecretName(wandb)},
+				Name: watchtowerSecretName(wandb),
 				Key:                  watchtowerPasswordKey,
 			},
 		}},
+	}
+
+	if grafanaPath != "" {
+		env = append(env, corev1.EnvVar{Name: "WATCHTOWER_GRAFANA_PATH", Value: grafanaPath})
 	}
 
 	// Forwarded only when set, so the default deployment carries no trace of it
@@ -325,23 +329,75 @@ func watchtowerAuthServicePort(app serverManifest.Application) int32 {
 	return watchtowerContainerPort
 }
 
-// watchtowerIngressPath returns the consolidated-Ingress path for Watchtower, or
-// nil when it is not installed.
-func watchtowerIngressPath(wandb *apiv2.WeightsAndBiases) *networkingv1.HTTPIngressPath {
+// watchtowerGrafanaPath is the path Watchtower proxies Grafana on, or "" when it
+// has none to proxy.
+func watchtowerGrafanaPath(cfg telemetry.TelemetryRuntimeConfig) string {
+	if !cfg.GrafanaEnabled() {
+		return ""
+	}
+	return cfg.GrafanaPath
+}
+
+// watchtowerGrafanaPathClash returns the application whose ingress path overlaps
+// grafanaPath, or "" when none does. Routing a clashing path to Watchtower would
+// take that application's traffic.
+func watchtowerGrafanaPathClash(manifest serverManifest.Manifest, grafanaPath string) string {
+	grafana := strings.TrimSuffix(grafanaPath, "/")
+	if grafana == "" {
+		return ""
+	}
+	for _, app := range sortedManifestApplications(manifest) {
+		if app.Ingress == nil || app.Service == nil {
+			continue
+		}
+		if len(app.Features) > 0 && !manifest.FeaturesEnabled(app.Features) {
+			continue
+		}
+		for _, p := range app.Ingress.Paths {
+			p = strings.TrimSuffix(p, "/")
+			if p == "" {
+				continue
+			}
+			covers := app.Ingress.PathType != "Exact" && strings.HasPrefix(grafana, p+"/")
+			if p == grafana || covers || strings.HasPrefix(p, grafana+"/") {
+				return app.Name
+			}
+		}
+	}
+	return ""
+}
+
+// watchtowerRoutePaths are the path prefixes routed to Watchtower. Grafana needs
+// its own entry when it is served outside the base path.
+func watchtowerRoutePaths(grafanaPath string) []string {
+	paths := []string{apiv2.DefaultWatchtowerBasePath}
+	if grafanaPath != "" && !strings.HasPrefix(grafanaPath, apiv2.DefaultWatchtowerBasePath+"/") {
+		paths = append(paths, strings.TrimSuffix(grafanaPath, "/"))
+	}
+	return paths
+}
+
+// watchtowerIngressPaths returns the consolidated-Ingress paths for Watchtower,
+// or nil when it is not installed.
+func watchtowerIngressPaths(wandb *apiv2.WeightsAndBiases, grafanaPath string) []networkingv1.HTTPIngressPath {
 	if !wandb.WatchtowerEnabled() {
 		return nil
 	}
 	pathType := networkingv1.PathTypePrefix
-	return &networkingv1.HTTPIngressPath{
-		Path:     apiv2.DefaultWatchtowerBasePath,
-		PathType: &pathType,
-		Backend: networkingv1.IngressBackend{
-			Service: &networkingv1.IngressServiceBackend{
-				Name: watchtowerName(wandb),
-				Port: networkingv1.ServiceBackendPort{Number: watchtowerContainerPort},
+	var paths []networkingv1.HTTPIngressPath
+	for _, p := range watchtowerRoutePaths(grafanaPath) {
+		paths = append(paths, networkingv1.HTTPIngressPath{
+			Path:     p,
+			PathType: &pathType,
+			Backend: networkingv1.IngressBackend{
+				Service: &networkingv1.IngressServiceBackend{
+					Name: watchtowerName(wandb),
+					Port: networkingv1.ServiceBackendPort{Number: watchtowerContainerPort},
+				},
 			},
-		},
+		})
 	}
+	return paths
 }
 
 func watchtowerProbe(path string) *corev1.Probe {

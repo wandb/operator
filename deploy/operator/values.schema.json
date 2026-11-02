@@ -31,6 +31,9 @@
           "properties": {
             "pluginImage": {
               "type": "string"
+            },
+            "rootUrl": {
+              "type": "string"
             }
           }
         },

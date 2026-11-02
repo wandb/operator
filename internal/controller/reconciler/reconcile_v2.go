@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -275,7 +276,7 @@ func Reconcile(
 		return ctrl.Result{}, err
 	}
 
-	res, err = ReconcileNetworkingAndWatchtower(ctx, client, wandb, manifest)
+	res, err = ReconcileNetworkingAndWatchtower(ctx, client, wandb, manifest, telemetryConfig)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -341,6 +342,7 @@ func ReconcileNetworkingAndWatchtower(
 	client ctrlClient.Client,
 	wandb *apiv2.WeightsAndBiases,
 	manifest serverManifest.Manifest,
+	telemetryConfig telemetry.TelemetryRuntimeConfig,
 ) (ctrl.Result, error) {
 	ctx, log := logx.WithSlog(ctx, logx.ReconcileInfraV2)
 
@@ -349,6 +351,16 @@ func ReconcileNetworkingAndWatchtower(
 	// gateway, ingress and Watchtower summaries would never reach the API — and an
 	// operator looking for Watchtower's URL during an outage would find nothing.
 	statusBefore := wandb.DeepCopy().Status
+
+	grafanaPath := watchtowerGrafanaPath(telemetryConfig)
+	if grafanaPath != "" && !slices.Contains(telemetry.GrafanaPaths, grafanaPath) {
+		log.Error("Grafana path is not a supported path; not routing it to Watchtower", "path", grafanaPath)
+		grafanaPath = ""
+	}
+	if app := watchtowerGrafanaPathClash(manifest, grafanaPath); app != "" {
+		log.Error("Grafana path overlaps an application route; not routing it to Watchtower", "path", grafanaPath, "application", app)
+		grafanaPath = ""
+	}
 
 	if err := cleanupNetworkingModeResources(ctx, client, wandb); err != nil {
 		log.Error("Failed to clean up stale networking resources", logx.ErrAttr(err))
@@ -370,7 +382,7 @@ func ReconcileNetworkingAndWatchtower(
 	case apiv2.NetworkingModeIngress:
 		wandb.Status.IngressStatus = nil
 		if ingressManaged(wandb) {
-			if err := reconcileConsolidatedIngress(ctx, client, wandb, manifest); err != nil {
+			if err := reconcileConsolidatedIngress(ctx, client, wandb, manifest, grafanaPath); err != nil {
 				log.Error("Failed to reconcile consolidated Ingress", logx.ErrAttr(err))
 				return ctrl.Result{}, err
 			}
@@ -383,7 +395,7 @@ func ReconcileNetworkingAndWatchtower(
 	// Requeue rather than propagate: the rest of the reconcile must still run, but
 	// the failure has to be retried by something.
 	var result ctrl.Result
-	if err := reconcileWatchtower(ctx, client, wandb, manifest); err != nil {
+	if err := reconcileWatchtower(ctx, client, wandb, manifest, grafanaPath); err != nil {
 		log.Error("Failed to reconcile Watchtower", logx.ErrAttr(err))
 		result.RequeueAfter = defaultRequeueDuration
 	}

@@ -168,6 +168,64 @@ func TestGrafanaPluginImageDefaultsToOperatorImage(t *testing.T) {
 	}
 }
 
+func TestGrafanaRootURL(t *testing.T) {
+	full := []string{"--values", filepath.Join(operatorChartPath, "profiles", "telemetry-full.yaml")}
+	for name, tc := range map[string]struct {
+		args []string
+		path string
+	}{
+		"default":           {path: "/console/grafana/"},
+		"grafana":           {args: []string{"--set", "telemetry.grafana.rootUrl=/grafana/"}, path: "/grafana/"},
+		"no trailing slash": {args: []string{"--set", "telemetry.grafana.rootUrl=/telemetry/grafana"}, path: "/telemetry/grafana/"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			output := runHelmTemplate(t, append(full, tc.args...)...)
+			mustContain(t, output, "TELEMETRY_GRAFANA_PATH: \""+tc.path+"\"")
+			if count := strings.Count(output, "root_url:"); count != 1 {
+				t.Fatalf("rendered %d root_url settings, want 1", count)
+			}
+			mustContain(t, output, "root_url: \""+tc.path+"\"\n      serve_from_sub_path: \"true\"")
+		})
+	}
+}
+
+// The chart's telemetry.grafanaPaths and GrafanaPaths must accept the same paths.
+func TestGrafanaRootURLAcceptsEveryGrafanaPath(t *testing.T) {
+	for _, path := range GrafanaPaths {
+		t.Run(path, func(t *testing.T) {
+			output := runHelmTemplate(t,
+				"--values", filepath.Join(operatorChartPath, "profiles", "telemetry-full.yaml"),
+				"--set", "telemetry.grafana.rootUrl="+path,
+			)
+			mustContain(t, output, "TELEMETRY_GRAFANA_PATH: \""+path+"\"")
+		})
+	}
+}
+
+func TestGrafanaRootURLRejectsUnsupportedPaths(t *testing.T) {
+	for _, path := range []string{"", "/", "/api/", "/traces/", "/my-wandb-operator/", "/console/"} {
+		t.Run(path, func(t *testing.T) {
+			output, err := runHelmTemplateWithError(t, operatorChartPath,
+				"--values", filepath.Join(operatorChartPath, "profiles", "telemetry-full.yaml"),
+				"--set", "telemetry.grafana.rootUrl="+path,
+			)
+			if err == nil {
+				t.Fatalf("expected helm template to fail for rootUrl %q", path)
+			}
+			mustContain(t, output, "is not a supported Grafana path")
+		})
+	}
+
+	_, err := runHelmTemplateWithError(t, filepath.Join("..", "..", "..", "deploy", "telemetry"),
+		"--set", "mode=full",
+		"--set", "grafana.pluginImage=wandb/operator:test",
+		"--set", "grafana.rootUrl=/my-wandb-operator/",
+	)
+	if err == nil {
+		t.Fatalf("expected the standalone telemetry chart to reject an unsupported rootUrl")
+	}
+}
+
 func TestTelemetryChartRejectsStringPullSecrets(t *testing.T) {
 	output, err := runHelmTemplateWithError(t, operatorChartPath,
 		"--set", "telemetry.mode=forward",
@@ -179,6 +237,24 @@ func TestTelemetryChartRejectsStringPullSecrets(t *testing.T) {
 		t.Fatalf("expected helm template to fail")
 	}
 	mustContain(t, output, "global.imagePullSecrets entry to be a {name: <secret>} object")
+}
+
+func TestVictoriaMetricsWebhookIgnoresFailures(t *testing.T) {
+	output := runHelmTemplate(t, "--values", filepath.Join(operatorChartPath, "profiles", "telemetry-full.yaml"))
+
+	var webhook string
+	for _, doc := range strings.Split(output, "\n---\n") {
+		if strings.Contains(doc, "kind: ValidatingWebhookConfiguration") && strings.Contains(doc, "victoria-metrics-operator-admission") {
+			webhook = doc
+		}
+	}
+	if webhook == "" {
+		t.Fatalf("VictoriaMetrics ValidatingWebhookConfiguration not rendered")
+	}
+	policies := strings.Count(webhook, "failurePolicy:")
+	if policies == 0 || strings.Count(webhook, "failurePolicy: Ignore") != policies {
+		t.Fatalf("want every VictoriaMetrics webhook failurePolicy to be Ignore:\n%s", webhook)
+	}
 }
 
 func TestStandaloneTelemetryChartFullModeRendersCoreStack(t *testing.T) {

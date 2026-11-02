@@ -20,6 +20,7 @@ const (
 	telemetryConfigKeyOTelProtocol       = "TELEMETRY_OTEL_PROTOCOL"
 	telemetryConfigKeyOTelServiceName    = "TELEMETRY_OTEL_SERVICE_NAME"
 	telemetryConfigKeyResourceAttributes = "TELEMETRY_OTEL_RESOURCE_ATTRIBUTES"
+	telemetryConfigKeyGrafanaPath        = "TELEMETRY_GRAFANA_PATH"
 )
 
 func LoadTelemetryRuntimeConfigFromConfigMap(
@@ -67,6 +68,9 @@ func LoadTelemetryRuntimeConfigFromConfigMap(
 	}
 	if value, ok := cm.Data[telemetryConfigKeyResourceAttributes]; ok {
 		cfg.OTel.ResourceAttributes = value
+	}
+	if value, ok := cm.Data[telemetryConfigKeyGrafanaPath]; ok {
+		cfg.GrafanaPath = value
 	}
 
 	cfg.Normalize()

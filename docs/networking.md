@@ -45,6 +45,10 @@ for controller-specific health checks. Switching an operator-managed Ingress to
 `managed: false` deletes only the consolidated Ingress owned by that
 `WeightsAndBiases` resource.
 
+With `managed: false`, route these paths to the `<name>-watchtower` Service on
+port 8080, without rewriting them: `/console`, and `telemetry.grafana.rootUrl`
+when it is not under `/console` (for example `/grafana`).
+
 ### AWS Load Balancer Controller
 
 When the selected `IngressClass.spec.controller` is `ingress.k8s.aws/alb`, the

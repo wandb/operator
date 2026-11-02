@@ -118,6 +118,7 @@ func TestLoadTelemetryRuntimeConfigFromConfigMap(t *testing.T) {
 			"TELEMETRY_OTEL_PROTOCOL":            "grpc",
 			"TELEMETRY_OTEL_SERVICE_NAME":        "custom-service",
 			"TELEMETRY_OTEL_RESOURCE_ATTRIBUTES": "deployment.environment=dev",
+			"TELEMETRY_GRAFANA_PATH":             " /grafana/ ",
 		},
 	}
 
@@ -153,6 +154,9 @@ func TestLoadTelemetryRuntimeConfigFromConfigMap(t *testing.T) {
 	}
 	if cfg.OTel.ResourceAttributes != "deployment.environment=dev" {
 		t.Fatalf("unexpected resource attributes: %q", cfg.OTel.ResourceAttributes)
+	}
+	if cfg.GrafanaPath != "/grafana/" {
+		t.Fatalf("unexpected grafana path: %q", cfg.GrafanaPath)
 	}
 }
 
@@ -237,6 +241,9 @@ func TestLoadTelemetryRuntimeConfigFromConfigMapMissingReturnsDisabledDefaults(t
 
 	if cfg != defaults {
 		t.Fatalf("expected missing configmap to return disabled defaults, got %#v", cfg)
+	}
+	if cfg.GrafanaPath != "/console/grafana/" {
+		t.Fatalf("unexpected default grafana path: %q", cfg.GrafanaPath)
 	}
 }
 

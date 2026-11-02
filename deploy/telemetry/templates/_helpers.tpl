@@ -75,6 +75,16 @@ victoria-log-agent
 {{ include "telemetry.registryPrefix" . }}victoriametrics/operator:config-reloader-v0.73.1
 {{- end -}}
 
+{{- /* grafana.rootUrl with exactly one trailing slash. */ -}}
+{{- define "telemetry.grafanaPath" -}}
+{{- printf "%s/" (trimSuffix "/" (default "" .Values.grafana.rootUrl)) -}}
+{{- end -}}
+
+{{- /* Paths no W&B app or Watchtower route uses; must match telemetry.GrafanaPaths in the operator. */ -}}
+{{- define "telemetry.grafanaPaths" -}}
+{{- list "/console/grafana/" "/grafana/" "/observability/grafana/" "/telemetry/grafana/" | toJson -}}
+{{- end -}}
+
 {{- define "telemetry.imagePullSecrets" -}}
 {{- with dig "imagePullSecrets" (list) (.Values.global | default dict) }}{{ toYaml . }}{{ end -}}
 {{- end -}}
@@ -98,7 +108,7 @@ spec:
   {{- end }}
   config:
     server:
-      root_url: "/console/grafana/"
+      root_url: {{ include "telemetry.grafanaPath" $root | quote }}
       serve_from_sub_path: "true"
     log:
       mode: console

@@ -17,6 +17,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/observability/telemetry"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -304,7 +305,7 @@ func TestReconcileWatchtowerRBACGrantsActionRunLifecycle(t *testing.T) {
 func TestWatchtowerEnvReferencesThePasswordSecret(t *testing.T) {
 	wandb := watchtowerTestCR("wandb", "wandb")
 
-	env := watchtowerEnv(wandb, "api:8081", "/console")
+	env := watchtowerEnv(wandb, "api:8081", "/console", "")
 
 	byName := map[string]corev1.EnvVar{}
 	for _, e := range env {
@@ -337,7 +338,7 @@ func TestWatchtowerEnvOmitsDBAdminUnlessOperatorOptsIn(t *testing.T) {
 	wandb := watchtowerTestCR("wandb", "wandb")
 
 	t.Setenv(dbAdminEnvVar, "")
-	for _, e := range watchtowerEnv(wandb, "api:8080", "/console") {
+	for _, e := range watchtowerEnv(wandb, "api:8080", "/console", "") {
 		if e.Name == dbAdminEnvVar {
 			t.Fatalf("%s leaked into the pod env with the operator env unset", dbAdminEnvVar)
 		}
@@ -345,7 +346,7 @@ func TestWatchtowerEnvOmitsDBAdminUnlessOperatorOptsIn(t *testing.T) {
 
 	t.Setenv(dbAdminEnvVar, "true")
 	var got string
-	for _, e := range watchtowerEnv(wandb, "api:8080", "/console") {
+	for _, e := range watchtowerEnv(wandb, "api:8080", "/console", "") {
 		if e.Name == dbAdminEnvVar {
 			got = e.Value
 		}
@@ -390,20 +391,125 @@ func TestWatchtowerAuthServiceFailsWhenNoApplicationServesOIDC(t *testing.T) {
 func TestWatchtowerIngressPathTargetsTheApplicationService(t *testing.T) {
 	wandb := watchtowerTestCR("wandb", "wandb")
 
-	path := watchtowerIngressPath(wandb)
+	paths := watchtowerIngressPaths(wandb, "/console/grafana/")
 
-	require.NotNil(t, path)
-	require.Equal(t, "/console", path.Path)
-	require.Equal(t, networkingv1.PathTypePrefix, *path.PathType)
-	require.Equal(t, watchtowerName(wandb), path.Backend.Service.Name)
-	require.Equal(t, watchtowerContainerPort, path.Backend.Service.Port.Number)
+	require.Len(t, paths, 1)
+	require.Equal(t, "/console", paths[0].Path)
+	require.Equal(t, networkingv1.PathTypePrefix, *paths[0].PathType)
+	require.Equal(t, watchtowerName(wandb), paths[0].Backend.Service.Name)
+	require.Equal(t, watchtowerContainerPort, paths[0].Backend.Service.Port.Number)
 }
 
-func TestWatchtowerIngressPathIsNilWhenDisabled(t *testing.T) {
+func TestWatchtowerIngressPathsIsNilWhenDisabled(t *testing.T) {
 	wandb := watchtowerTestCR("wandb", "wandb")
 	wandb.Spec.AdminConsoleEnabled = ptr.To(false)
 
-	require.Nil(t, watchtowerIngressPath(wandb))
+	require.Nil(t, watchtowerIngressPaths(wandb, "/grafana/"))
+}
+
+// Grafana only needs its own route when it is served outside the base path.
+func TestWatchtowerRoutePaths(t *testing.T) {
+	for _, tc := range []struct {
+		grafanaPath string
+		want        []string
+	}{
+		{grafanaPath: "/console/grafana/", want: []string{"/console"}},
+		{grafanaPath: "/grafana/", want: []string{"/console", "/grafana"}},
+		{grafanaPath: "/consoles/", want: []string{"/console", "/consoles"}},
+		{grafanaPath: "", want: []string{"/console"}},
+	} {
+		t.Run(tc.grafanaPath, func(t *testing.T) {
+			require.Equal(t, tc.want, watchtowerRoutePaths(tc.grafanaPath))
+		})
+	}
+}
+
+// A Grafana path routed to Watchtower must never take over an application's route.
+func TestWatchtowerGrafanaPathClash(t *testing.T) {
+	manifest := manifestWithOIDC()
+	for grafanaPath, want := range map[string]string{
+		"/grafana/":         "",
+		"/oidc/":            "api",
+		"/graphql/grafana/": "api",
+		"/":                 "",
+		"":                  "",
+	} {
+		t.Run(grafanaPath, func(t *testing.T) {
+			require.Equal(t, want, watchtowerGrafanaPathClash(manifest, grafanaPath))
+		})
+	}
+}
+
+// Only routed apps can clash, and an Exact path only takes its own URL.
+func TestWatchtowerGrafanaPathClashOnlyCountsRoutedPaths(t *testing.T) {
+	app := func(name, pathType string, paths ...string) serverManifest.Application {
+		return serverManifest.Application{
+			Name:    name,
+			Ingress: &serverManifest.AppIngressSpec{Paths: paths, PathType: pathType},
+			Service: &serverManifest.ServiceSpec{},
+		}
+	}
+	gated := app("gated", "", "/grafana")
+	gated.Features = []string{"gated"}
+	noService := app("noservice", "", "/grafana")
+	noService.Service = nil
+
+	manifest := serverManifest.Manifest{Applications: map[string]serverManifest.Application{
+		"gated":     gated,
+		"noservice": noService,
+		"exact":     app("exact", "Exact", "/observability"),
+	}}
+	require.Empty(t, watchtowerGrafanaPathClash(manifest, "/grafana/"))
+	require.Empty(t, watchtowerGrafanaPathClash(manifest, "/observability/grafana/"))
+
+	manifest.Features = map[string]bool{"gated": true}
+	require.Equal(t, "gated", watchtowerGrafanaPathClash(manifest, "/grafana/"))
+
+	manifest.Applications["exact"] = app("exact", "Exact", "/observability/grafana/x")
+	require.Equal(t, "exact", watchtowerGrafanaPathClash(manifest, "/observability/grafana/"))
+}
+
+func TestWatchtowerHTTPRouteRoutesTheGrafanaPath(t *testing.T) {
+	wandb := watchtowerTestCR("wandb", "wandb")
+	wandb.Spec.Networking.Mode = apiv2.NetworkingModeGatewayAPI
+	wandb.Status.GatewayStatus = &apiv2.GatewayStatusSummary{
+		GatewayRef: &apiv2.GatewayReference{Name: "gateway", Namespace: "wandb"},
+	}
+
+	app := buildWatchtowerApplication(wandb, "api:8081", testOperatorImage, "/grafana/")
+
+	require.NotNil(t, app.Spec.HTTPRouteTemplate)
+	require.Equal(t, []string{"/console", "/grafana"}, app.Spec.HTTPRouteTemplate.Paths)
+}
+
+func TestWatchtowerGrafanaPathOnlyInFullMode(t *testing.T) {
+	for mode, want := range map[string]string{"full": "/grafana/", "forward": "", "off": ""} {
+		t.Run(mode, func(t *testing.T) {
+			cfg := telemetry.DefaultTelemetryRuntimeConfig()
+			cfg.Mode = mode
+			cfg.OTel.SecretName = "otel"
+			cfg.GrafanaPath = "/grafana/"
+			cfg.Normalize()
+
+			require.Equal(t, want, watchtowerGrafanaPath(cfg))
+		})
+	}
+}
+
+func TestWatchtowerEnvCarriesTheGrafanaPath(t *testing.T) {
+	wandb := watchtowerTestCR("wandb", "wandb")
+
+	var got []string
+	for _, e := range watchtowerEnv(wandb, "api:8080", "/console", "/grafana/") {
+		if e.Name == "WATCHTOWER_GRAFANA_PATH" {
+			got = append(got, e.Value)
+		}
+	}
+	require.Equal(t, []string{"/grafana/"}, got)
+
+	for _, e := range watchtowerEnv(wandb, "api:8080", "/console", "") {
+		require.NotEqual(t, "WATCHTOWER_GRAFANA_PATH", e.Name)
+	}
 }
 
 func TestWatchtowerURL(t *testing.T) {
@@ -459,7 +565,7 @@ func TestWatchtowerImageFailsWhenOperatorImageIsUnset(t *testing.T) {
 func TestBuildWatchtowerApplicationPinsOneReplica(t *testing.T) {
 	wandb := watchtowerTestCR("wandb", "wandb")
 
-	app := buildWatchtowerApplication(wandb, "api:8081", testOperatorImage)
+	app := buildWatchtowerApplication(wandb, "api:8081", testOperatorImage, "")
 
 	require.Equal(t, int32(1), *app.Spec.Replicas)
 	require.Equal(t, "Deployment", app.Spec.Kind)
@@ -468,7 +574,7 @@ func TestBuildWatchtowerApplicationPinsOneReplica(t *testing.T) {
 
 func TestBuildWatchtowerApplicationPreservesSecurityBaseline(t *testing.T) {
 	wandb := watchtowerTestCR("wandb", "wandb")
-	pod := buildWatchtowerApplication(wandb, "api:8081", testOperatorImage).Spec.PodTemplate.Spec
+	pod := buildWatchtowerApplication(wandb, "api:8081", testOperatorImage, "").Spec.PodTemplate.Spec
 
 	assertPodSecurityBaseline(t, pod.SecurityContext)
 	assertOptionalBool(t, "runAsNonRoot", pod.SecurityContext.RunAsNonRoot, nil)
@@ -482,7 +588,7 @@ func TestBuildWatchtowerApplicationPreservesSecurityBaseline(t *testing.T) {
 func TestBuildWatchtowerApplicationCarriesTheComponentLabel(t *testing.T) {
 	wandb := watchtowerTestCR("wandb", "wandb")
 
-	app := buildWatchtowerApplication(wandb, "api:8081", testOperatorImage)
+	app := buildWatchtowerApplication(wandb, "api:8081", testOperatorImage, "")
 
 	require.Equal(t, watchtowerComponent, app.Labels["weightsandbiases.apps.wandb.com/component"])
 }
@@ -492,7 +598,7 @@ func TestBuildWatchtowerApplicationCarriesTheComponentLabel(t *testing.T) {
 func TestBuildWatchtowerApplicationSelectsTheWatchtowerEntrypoint(t *testing.T) {
 	wandb := watchtowerTestCR("wandb", "wandb")
 
-	container := buildWatchtowerApplication(wandb, "api:8081", testOperatorImage).
+	container := buildWatchtowerApplication(wandb, "api:8081", testOperatorImage, "").
 		Spec.PodTemplate.Spec.Containers[0]
 
 	require.Equal(t, testOperatorImage, container.Image)
@@ -506,7 +612,7 @@ func TestBuildWatchtowerApplicationSelectsTheWatchtowerEntrypoint(t *testing.T) 
 func TestBuildWatchtowerApplicationProbesGoThroughTheBasePath(t *testing.T) {
 	wandb := watchtowerTestCR("wandb", "wandb")
 
-	container := buildWatchtowerApplication(wandb, "api:8081", testOperatorImage).
+	container := buildWatchtowerApplication(wandb, "api:8081", testOperatorImage, "").
 		Spec.PodTemplate.Spec.Containers[0]
 
 	require.Equal(t, "/console/healthz", container.LivenessProbe.HTTPGet.Path)
@@ -635,7 +741,7 @@ func TestReconcileWatchtowerIgnoresInfraReadiness(t *testing.T) {
 	require.False(t, objectStoreAllReady(wandb), "precondition: object store unready")
 
 	c := watchtowerTestClient(t, wandb)
-	require.NoError(t, reconcileWatchtower(context.Background(), c, wandb, manifestWithOIDC()))
+	require.NoError(t, reconcileWatchtower(context.Background(), c, wandb, manifestWithOIDC(), ""))
 
 	ctx := context.Background()
 	ns := wandb.Namespace
@@ -670,7 +776,7 @@ func TestReconcileWatchtowerConfiguresAWSIngressHealthCheck(t *testing.T) {
 	}
 
 	c := watchtowerTestClient(t, wandb, ingressClass)
-	require.NoError(t, reconcileWatchtower(context.Background(), c, wandb, manifestWithOIDC()))
+	require.NoError(t, reconcileWatchtower(context.Background(), c, wandb, manifestWithOIDC(), ""))
 
 	application := &apiv2.Application{}
 	require.NoError(t, c.Get(context.Background(), types.NamespacedName{
