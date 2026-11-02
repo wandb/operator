@@ -106,8 +106,9 @@ def run(env):
     app_digest = env.get("APP_MANIFEST_DIGEST", "")
     if not re.fullmatch(r"sha256:[0-9a-f]{64}", app_digest):
         raise ValueError("Missing or invalid application release metadata from workflow setup")
-    upgrade = scenario == "local-kind-operator-upgrade"
-    if upgrade and operator_repo is not None:
+    retention_upgrade = scenario == "local-kind-retention-upgrade"
+    upgrade = scenario == "local-kind-operator-upgrade" or retention_upgrade
+    if upgrade and not retention_upgrade and operator_repo is not None:
         raise ValueError("Operator upgrade scenarios require published chart versions")
     params = (["--operator-repo", "/src/operator"] if operator_repo is not None
               else ["--param", f"operatorVersion={version}"])
@@ -117,8 +118,13 @@ def run(env):
             raise ValueError("Invalid or missing operator upgrade starting chart version")
         if from_version == version:
             raise ValueError("Operator upgrade starting and destination chart versions must differ")
-        params = ["--param", f"fromOperatorVersion={from_version}",
-                  "--param", f"toOperatorVersion={version}"]
+        # Retention pins its baseline phase to remote while the candidate can
+        # use the existing checkout mode. Never pass a chart pin for that build.
+        params = ["--param", f"fromOperatorVersion={from_version}"]
+        if operator_repo is not None:
+            params = ["--operator-repo", "/src/operator"] + params
+        else:
+            params += ["--param", f"toOperatorVersion={version}"]
     # The upgrade scenario maps appVersion to both phases, holding the app fixed.
     params += ["--param", f"appVersion={app_version}"]
     image = image_for_tag(env["WESTEST_IMAGE_TAG"])
@@ -192,7 +198,7 @@ def collect(root):
                      f"Exit code: {summary['exit_code']}\n\n"
                      f"Cleanup checkpoints remaining: {summary['cleanup_checkpoint_count']}\n\n")
         if summary.get("operator_from_version"):
-            output.write(f"Operator upgrade: {summary['operator_from_version']} -> {summary['operator_version']}\n\n")
+            output.write(f"Operator upgrade: {summary['operator_from_version']} -> {operator}\n\n")
         if summary["cleanup_checkpoint_count"]:
             output.write("Cleanup needs investigation in the cloud account. Recovery bundles are a follow-up; "
                          "runner-local state is lost when the runner is deleted.\n")

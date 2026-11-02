@@ -16,26 +16,33 @@ acceptance gate. The existing nightly workflow calls its full matrix, and the
 tagged release job waits for that matrix before publishing. The existing nightly
 schedule remains disabled. Maintainers can dispatch either profile manually.
 
-The gate compiles a WESTest runner with its embedded scenarios and runs it inside
-the pinned published tool image. It therefore does not assume a new WESTest
-container release already exists. The candidate operator is built from the
-checkout for PR/release checks; nightly checks use the published chart produced
-by the nightly build.
+The gate runs a published WESTest container from the shared action's fixed image
+repository. It uses the local operator checkout support from
+[operator PR #438](https://github.com/wandb/operator/pull/438) for PR/release
+checks; nightly checks use the published chart produced by the nightly build.
+For retention upgrades, the baseline phase stays on its published chart while
+the candidate phase can build the checkout. Operator CI does not build WESTest
+or replace the executable inside its container.
 
 CI rollout prerequisites:
 
-- Merge the companion WESTest branch first, or set `WESTEST_RETENTION_REF` to an
-  available reviewed revision containing the scenarios. The default is `main`.
+- Merge operator PR #438 before the retention PR; the latter is stacked on it.
+- Merge [WESTest PR #67](https://github.com/wandb/westest/pull/67), publish a
+  WESTest container containing the scenarios, and set the operator repository
+  variable `WESTEST_RETENTION_IMAGE_TAG` to that published tag. Manual and
+  reusable invocations can override it with `westest_image_tag`. Setup fails
+  clearly if no tag is configured; a missing scenario is also a hard failure.
+  WESTest 0.5.2 predates the retention scenarios and cannot run this gate.
 - The existing `WESTEST_APP_ID` / `WESTEST_APP_PRIVATE_KEY` app needs read access
-  to `wandb/westest` and `wandb/watchtower` for source and pinned build assets.
+  to `wandb/watchtower` for local operator image assets.
 - Use the existing eight-core runner pool. Fork PRs keep unit/envtest coverage;
-  maintainers dispatch acceptance explicitly because private assets require the
-  app credential.
+  draft and Dependabot PR runs also skip provisioning, matching PR WESTest's
+  credential requirements. Maintainers can dispatch acceptance explicitly.
 
 Only the existing public-safe summary is uploaded. Inventory digests, cluster
-state, logs and kubeconfigs stay in the private run artifacts. The source
-checkout and runner executable mount read-only into the local Kind test runner;
-cloud scenarios cannot use those mounts.
+state, logs and kubeconfigs stay in the private run artifacts. The operator
+checkout mounts read-only into the local Kind test runner through the
+existing shared action; cloud scenarios cannot use checkout mode.
 
 Before deleting an upgraded installation, wait for the new webhook endpoints,
 the completed operator rollout, and `RetentionReady=True` for its generation.
