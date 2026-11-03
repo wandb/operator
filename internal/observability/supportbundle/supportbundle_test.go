@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/observability/telemetry"
+	sb "github.com/wandb/operator/pkg/observability/supportbundle"
 	"github.com/wandb/operator/pkg/utils"
 	"gopkg.in/yaml.v3"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
@@ -51,8 +52,8 @@ func TestEnabledRequiresExplicitTrue(t *testing.T) {
 
 func TestImageResolution(t *testing.T) {
 	wandb := testWandb()
-	require.Equal(t, DefaultSupportBundleVersion, Version(wandb))
-	require.Equal(t, "us-docker.pkg.dev/wandb-production/public/wandb/lumen:0.4.10", Image(wandb))
+	require.Equal(t, sb.DefaultSupportBundleVersion, Version(wandb))
+	require.Equal(t, "us-docker.pkg.dev/wandb-production/public/wandb/lumen:"+sb.DefaultSupportBundleVersion, Image(wandb))
 
 	wandb.Spec.SupportBundle.Version = "0.5.0"
 	wandb.Spec.Global.ImageRegistry = "registry.corp"
@@ -209,7 +210,7 @@ func TestApplicationIsSuspendedCronJobTemplate(t *testing.T) {
 	require.Equal(t, "wandb-support-bundle-collector", cron.Name)
 	require.Equal(t, "0 0 * * *", cron.Spec.Schedule)
 	require.True(t, *cron.Spec.Suspend)
-	require.Equal(t, "0.4.10", cron.Labels["app.kubernetes.io/version"])
+	require.Equal(t, sb.DefaultSupportBundleVersion, cron.Labels["app.kubernetes.io/version"])
 
 	job := cron.Spec.JobTemplate.Spec
 	require.Equal(t, int32(0), *job.BackoffLimit)
