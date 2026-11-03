@@ -154,6 +154,7 @@ func (c *ActionableChart) newUpgrade() *action.Upgrade {
 	client.WaitStrategy = kube.HookOnlyStrategy
 	client.ServerSideApply = "false"
 	client.Timeout = hookTimeout
+	client.PostRenderer = envSourcePostRenderer{}
 	return client
 }
 

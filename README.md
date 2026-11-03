@@ -41,6 +41,16 @@ to retained sources. Keep the Secret for rollback: setting the flag back to
 `true` resumes reading it. Console-managed OIDC, Slack, SMTP, and bucket
 Secrets/ConfigMaps remain independent of this flag.
 
+## Helm upgrade recovery
+
+A failed Helm upgrade can change some workloads while leaving the previous
+successful release as Helm's patch baseline. On subsequent upgrades, the
+operator explicitly clears the unused `value` or `valueFrom` field in rendered
+environment variables for Deployments, DaemonSets, StatefulSets, and CronJobs.
+This lets the next upgrade recover from conflicting env sources left by a
+partial apply, including in init containers. It does not repair other upgrade
+failures, such as a forbidden PVC shrink or a failing migration hook.
+
 ## Development
 
 ### Prerequisites
