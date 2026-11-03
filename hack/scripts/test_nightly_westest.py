@@ -262,6 +262,36 @@ class RunnerTests(unittest.TestCase):
         self.env.update(OPERATOR_VERSION="", OPERATOR_REPO=str(checkout), GITHUB_SHA="abc123")
         return checkout
 
+    def test_airgap_shares_host_paths_with_the_sibling_registry(self):
+        checkout = self.prepare_operator_checkout()
+        for scenario in ["local-kind-airgap", "local-kind-airgap-enforce"]:
+            with self.subTest(scenario=scenario):
+                self.env.update(SCENARIO=scenario, WESTEST_IMAGE_TAG="0.7.0")
+                with patch.object(runner.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as command:
+                    self.assertEqual(runner.run(self.env), 0)
+                work = (self.root / f"westest-{scenario}/work").resolve()
+                calls = [call.args[0] for call in command.call_args_list]
+                config = next(args for args in calls if "config" in args)
+                run = next(args for args in calls if args[0] == "timeout")
+                for args in [config, run]:
+                    self.assertIn(f"type=bind,src={work},dst={work}", args)
+                    self.assertEqual(args[args.index("--workdir") + 1], str(work))
+                    self.assertIn(f"WESTEST_ARTIFACT_ROOT={work / 'artifacts'}", args)
+                    self.assertIn(f"WESTEST_WSM_REPO={work}", args)
+                    self.assertIn("type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock", args)
+                    self.assertIn(f"type=bind,src={checkout.resolve()},dst=/src/operator,readonly", args)
+                    self.assertEqual(args[-4:], ["--operator-repo", "/src/operator",
+                                                 "--param", f"appVersion={self.env['APP_VERSION']}"])
+
+    def test_non_airgap_scenarios_keep_the_existing_work_mount(self):
+        for provider in ["local", "aws"]:
+            with self.subTest(provider=provider):
+                args = runner.docker_args(self.root, provider, self.env)
+                self.assertIn(f"type=bind,src={self.root / 'work'},dst=/work", args)
+                self.assertIn("WESTEST_ARTIFACT_ROOT=/work/artifacts", args)
+                self.assertNotIn("--workdir", args)
+                self.assertFalse(any(arg.startswith("WESTEST_WSM_REPO=") for arg in args))
+
     def test_checkout_builds_locally_instead_of_using_a_published_version(self):
         checkout = self.prepare_operator_checkout()
         with patch.object(runner.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as command:

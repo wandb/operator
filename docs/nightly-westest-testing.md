@@ -32,9 +32,9 @@ cloud scenarios. A named scenario selects only that scenario. Unsupported names
 and attempts to select a cloud scenario on another ref fail during setup. There
 is no pull-request trigger for these provisioning tests.
 
-The separate [PR WESTest workflow](pr-westest-testing.md) runs seven local
-Kind scenarios against the PR's operator checkout without publishing an operator
-image or chart.
+The separate [PR WESTest workflow](pr-westest-testing.md) runs nine local
+Kind scenarios against the PR's operator checkout, including airgap scenarios
+that publish the checkout's image and chart only to a temporary test registry.
 
 The local matrix covers external datastores, authenticated proxy egress, and
 TLS-intercepting proxy CA trust alongside the baseline routing and OIDC checks.

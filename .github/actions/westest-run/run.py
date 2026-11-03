@@ -28,9 +28,21 @@ def write_private(path, content):
 
 
 def docker_args(root, provider, env, operator_repo=None):
+    work = root / "work"
+    airgap = provider == "local" and env.get("SCENARIO") in {
+        "local-kind-airgap", "local-kind-airgap-enforce",
+    }
+    if airgap:
+        work = work.resolve()
+    container_work = work if airgap else Path("/work")
     args = ["docker", "run", "--rm", "--init", "--mount",
-            f"type=bind,src={root / 'work'},dst=/work",
-            "--env", "WESTEST_ARTIFACT_ROOT=/work/artifacts"]
+            f"type=bind,src={work},dst={container_work}",
+            "--env", f"WESTEST_ARTIFACT_ROOT={container_work / 'artifacts'}"]
+    if airgap:
+        # The sibling registry bind-mounts generated TLS files. Its Docker daemon
+        # must see the same absolute artifact paths as the WESTest container.
+        args += ["--workdir", str(container_work),
+                 "--env", f"WESTEST_WSM_REPO={container_work}"]
     if provider == "local":
         args += ["--network", "host", "--mount",
                  "type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock"]
