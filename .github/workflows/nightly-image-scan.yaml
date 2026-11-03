@@ -1,8 +1,12 @@
 name: Nightly third-party image scan
 
+# Scans the third-party images that the newest released W&B server manifest deploys (MOCO MySQL, OpsTree Redis,
+# SeaweedFS, Altinity ClickHouse/Keeper, bufstream, ...) and posts fixable HIGH/CRITICAL CVEs to #wb-infra.
+# The image list comes from the published manifest itself (hack/manifest-images), so it follows each release.
+
 on:
   schedule:
-    - cron: "0 7 * * *"   # daily, 07:00 UTC (2am EST)
+    - cron: "0 7 * * *" # daily, 07:00 UTC
   # Temporary, for end-to-end testing on the PR; remove before merging.
   pull_request:
     paths:
@@ -26,55 +30,110 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       list: ${{ steps.list.outputs.list }}
+      version: ${{ steps.list.outputs.version }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      # Every infra image the server manifest pins: MOCO MySQL, OpsTree Redis, SeaweedFS, ClickHouse/Keeper, bufstream, ...
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
       - id: list
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
-          list=$(yq -o=json '[.. | select(has("repository") and has("tag")) | .registry + "/" + .repository + ":" + .tag] | unique' \ hack/testing-manifests/server-manifest/0.85.1/manifest.yaml) echo "list=$(echo "$list" | jq -c .)" >> "$GITHUB_OUTPUT"
+          version=$(go run ./hack/manifest-images -version "$VERSION" -show-version)
+          go run ./hack/manifest-images -version "$version" > images.txt
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "list=$(jq -R -s -c 'split("\n") | map(select(length > 0))' images.txt)" >> "$GITHUB_OUTPUT"
+          { echo "Server manifest \`$version\`:"; sed 's/^/- /' images.txt; } >> "$GITHUB_STEP_SUMMARY"
 
-scan:
-  needs: images
-  runs-on: ubuntu-latest
-  strategy:
-    fail-fast: false
-    matrix:
-      image: ${{ fromJson(needs.images.outputs.list) }}
-  steps:
-    - uses: aquasecurity/trivy-action@c07df6fec6fa692e6fd1200d50aaa1fdd66f03c8 # master, same pin as docker-build-scan.yml
-      with:
-        image-ref: ${{ matrix.image }}
-        format: json
-        output: result.json
-        severity: HIGH,CRITICAL
-        ignore-unfixed: true
-        exit-code: "0"   # report, don't fail; the summary job decides what to alert on
-    - name: Summarize
-      run: |
-        n=$(jq '[.Results[]?.Vulnerabilities[]?] | length' result.json)
-        echo "${{ matrix.image }} $n" > summary.txt
-    # upload summary.txt as an artifact (actions/upload-artifact, pinned to a SHA like the other actions)
+  scan:
+    needs: images
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJson(needs.images.outputs.list) }}
+    steps:
+      - name: Scan
+        id: trivy
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@c07df6fec6fa692e6fd1200d50aaa1fdd66f03c8 # master, same pin as docker-build-scan.yml
+        with:
+          image-ref: ${{ matrix.image }}
+          format: json
+          output: result.json
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          vuln-type: os,library
+          exit-code: "0" # report rather than fail; notify decides what to post
+      # Always writes a summary, so an image that couldn't be scanned is reported instead of silently missing.
+      - name: Summarize
+        if: always()
+        env:
+          IMAGE: ${{ matrix.image }}
+        run: |
+          if [ "${{ steps.trivy.outcome }}" != "success" ] || [ ! -s result.json ]; then
+            jq -n --arg image "$IMAGE" '{image: $image, error: true}' > summary.json
+            exit 0
+          fi
+          jq -c --arg image "$IMAGE" '{
+            image: $image,
+            critical: ([.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL")] | length),
+            high: ([.Results[]?.Vulnerabilities[]? | select(.Severity == "HIGH")] | length)
+          }' result.json > summary.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          # Image references contain characters artifact names don't allow, so name by matrix index.
+          name: summary-${{ strategy.job-index }}
+          path: summary.json
+          retention-days: 7
 
-notify:
-  needs: scan
-  if: always()
-  runs-on: ubuntu-latest
-  steps:
-    # download all summary.txt artifacts (actions/download-artifact, pinned), then:
-    - name: Post to Slack
-      env:
-        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-        POST_ALL: true # TEMP to test on PR
-      run: |
-        findings=$(cat summaries/*/summary.txt | awk '$2 > 0')
-        [ -z "$findings" ] && exit 0
-         text=$(jq -s -r --arg version "$VERSION" --arg run "$RUN_URL" --argjson all "$POST_ALL" '
-              (map(select(.error != true and .critical + .high > 0)) | sort_by(-.critical, -.high)) as $vulnerable
-              | (map(select(.error != true and .critical + .high == 0))) as $clean
-              | (map(select(.error == true))) as $failed
-              | if ($vulnerable | length) == 0 and ($failed | length) == 0 and ($all | not) then empty else
-                  (if $all then "[test run] " else "" end)
-                  + "*Nightly image scan:* server manifest `\($version)`\n"
-                  + (if ($vulnerable | length) > 0 then "HIGH/CRITICAL CVEs with fixes available:\n"
-                      + ($vulnerable | map("• `\(.image)`: \(.critical) critical, \(.high) high") | join("\n")) + "\n" else "" end)  + (if $all and ($clean | length) > 0 then "No fixable HIGH/CRITICAL CVEs:\n"  + ($clean | map("• `\(.image)`") | join("\n")) + "\n" else "" end)  + (if ($failed | length) > 0 then "Could not be scanned:\n"  + ($failed | map("• `\(.image)`") | join("\n")) + "\n" else "" end)  + "<\($run)|Full results>"  end' summaries/*/summary.json)
-        curl -sf -X POST -H 'Content-Type: application/json' --data "$(jq -n --arg t "$text" '{text: $t}')" "$SLACK_WEBHOOK_URL"
+  notify:
+    needs: [images, scan]
+    if: always() && needs.images.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: summary-*
+          path: summaries
+      - name: "Post to #wb-infra"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.WB_INFRA_SLACK_WEBHOOK_URL }}
+          VERSION: ${{ needs.images.outputs.version }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          # Always the literal true/false: inputs.post_all doesn't exist on schedule or pull_request runs.
+          POST_ALL: ${{ (github.event_name == 'pull_request' || inputs.post_all == true) && 'true' || 'false' }}
+        run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ] && [ "$GITHUB_EVENT_NAME" = "schedule" ]; then
+            echo "::error::WB_INFRA_SLACK_WEBHOOK_URL secret is not set"
+            exit 1
+          fi
+          text=$(jq -s -r --arg version "$VERSION" --arg run "$RUN_URL" --argjson all "$POST_ALL" '
+            (map(select(.error != true and .critical + .high > 0)) | sort_by(-.critical, -.high)) as $vulnerable
+            | (map(select(.error != true and .critical + .high == 0))) as $clean
+            | (map(select(.error == true))) as $failed
+            | if ($vulnerable | length) == 0 and ($failed | length) == 0 and ($all | not) then empty else
+                (if $all then "[test run] " else "" end)
+                + "*Nightly image scan:* server manifest `\($version)`\n"
+                + (if ($vulnerable | length) > 0 then "HIGH/CRITICAL CVEs with fixes available:\n"
+                    + ($vulnerable | map("• `\(.image)`: \(.critical) critical, \(.high) high") | join("\n")) + "\n" else "" end)
+                + (if $all and ($clean | length) > 0 then "No fixable HIGH/CRITICAL CVEs:\n"
+                    + ($clean | map("• `\(.image)`") | join("\n")) + "\n" else "" end)
+                + (if ($failed | length) > 0 then "Could not be scanned:\n"
+                    + ($failed | map("• `\(.image)`") | join("\n")) + "\n" else "" end)
+                + "<\($run)|Full results>"
+              end' summaries/*/summary.json)
+          if [ -z "$text" ]; then
+            echo "No fixable HIGH/CRITICAL CVEs; nothing to post."
+            exit 0
+          fi
+          # Dry run until the webhook exists: show exactly what would be posted.
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "WB_INFRA_SLACK_WEBHOOK_URL is not set; this would be posted to #wb-infra:"
+            echo "$text"
+            { echo "### Would post to #wb-infra"; echo '```'; echo "$text"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          curl -sf -X POST -H 'Content-Type: application/json' --data "$(jq -n --arg t "$text" '{text: $t}')" "$SLACK_WEBHOOK_URL"
