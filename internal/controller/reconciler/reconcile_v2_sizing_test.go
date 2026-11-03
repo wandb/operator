@@ -236,6 +236,69 @@ var _ = Describe("ReconcileV2 Sizing", func() {
 			Expect(res).NotTo(BeNil())
 			Expect(res.Requests.Cpu().String()).To(Equal("100m"))
 		})
+
+		It("should drop all manifest-derived resources for the dev size (BestEffort)", func() {
+			app := serverManifest.Application{
+				Name: "api",
+				Sizing: map[apiv2.Size]serverManifest.SizingConfig{
+					"default": {
+						Resources: &corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("100m")},
+						},
+					},
+					"dev": {
+						Resources: &corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("50m")},
+						},
+					},
+				},
+			}
+			containerRes := &corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("256Mi")},
+				Limits:   corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("1Gi")},
+			}
+			wandb := &apiv2.WeightsAndBiases{
+				Spec: apiv2.WeightsAndBiasesSpec{Size: apiv2.SizeDev, RequireLimits: true},
+			}
+
+			// Neither the sizing tables (default or dev) nor the manifest's
+			// container-level resources survive: the pod is BestEffort.
+			Expect(v2.ResolveResources(app, wandb, containerRes)).To(BeNil())
+		})
+
+		It("should keep explicit legacy overrides for the dev size", func() {
+			app := serverManifest.Application{
+				Name: "api",
+				Sizing: map[apiv2.Size]serverManifest.SizingConfig{
+					"default": {
+						Resources: &corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("100m")},
+						},
+					},
+				},
+			}
+			wandb := &apiv2.WeightsAndBiases{
+				Spec: apiv2.WeightsAndBiasesSpec{
+					Size: apiv2.SizeDev,
+					Wandb: apiv2.WandbAppSpec{
+						LegacyOverrides: map[string]apiv2.LegacyOverrides{
+							"api": {
+								Resources: &corev1.ResourceRequirements{
+									Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2")},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			res := v2.ResolveResources(app, wandb, nil)
+			Expect(res).NotTo(BeNil())
+			// The user's override is the escape hatch; the manifest default is not merged under it.
+			Expect(res.Requests.Cpu().String()).To(Equal("2"))
+			Expect(res.Requests).NotTo(HaveKey(corev1.ResourceMemory))
+			Expect(res.Requests).To(HaveLen(1))
+		})
 	})
 
 	Context("ResolveAutoscaling", func() {

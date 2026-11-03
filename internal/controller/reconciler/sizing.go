@@ -10,18 +10,22 @@ import (
 func ResolveResources(app manifest.Application, wandb *v2.WeightsAndBiases, containerResources *v1.ResourceRequirements) *v1.ResourceRequirements {
 	var resources *v1.ResourceRequirements
 
-	// check if there is "default" in the sizing map and apply those values
-	if defaultConfig, ok := app.Sizing["default"]; ok && defaultConfig.Resources != nil {
-		resources = mergeResources(resources, defaultConfig.Resources, wandb.Spec.RequireLimits)
-	}
+	// Manifest-derived resources (sizing tables and container specs) only apply
+	// outside the BestEffort policy; explicit CR overrides below always do.
+	if !wandb.Spec.BestEffortResources() {
+		// check if there is "default" in the sizing map and apply those values
+		if defaultConfig, ok := app.Sizing["default"]; ok && defaultConfig.Resources != nil {
+			resources = mergeResources(resources, defaultConfig.Resources, wandb.Spec.RequireLimits)
+		}
 
-	// check if there is a sizing config in the map that corresponds to the size in the wandb spec and apply that
-	if sizeConfig, ok := app.Sizing[wandb.Spec.Size]; ok && sizeConfig.Resources != nil {
-		resources = mergeResources(resources, sizeConfig.Resources, wandb.Spec.RequireLimits)
-	}
+		// check if there is a sizing config in the map that corresponds to the size in the wandb spec and apply that
+		if sizeConfig, ok := app.Sizing[wandb.Spec.Size]; ok && sizeConfig.Resources != nil {
+			resources = mergeResources(resources, sizeConfig.Resources, wandb.Spec.RequireLimits)
+		}
 
-	// check if the container has a resource and if so apply those settings
-	resources = mergeResources(resources, containerResources, wandb.Spec.RequireLimits)
+		// check if the container has a resource and if so apply those settings
+		resources = mergeResources(resources, containerResources, wandb.Spec.RequireLimits)
+	}
 
 	// Legacy override wins over sizing/container resources; limits stay gated by requireLimits.
 	if lo, ok := wandb.Spec.Wandb.LegacyOverrides[app.Name]; ok && lo.Resources != nil {
@@ -239,6 +243,9 @@ func infraSizingConfig[T any](m map[string]T, key string) (T, bool) {
 
 func ApplyInfraSizing(wandb *v2.WeightsAndBiases, manifest manifest.Manifest) {
 	size := wandb.Spec.Size
+	// Replicas and volumes always come from the manifest; resources only do
+	// outside the BestEffort policy. Explicit CR config.resources are untouched.
+	applyResources := !wandb.Spec.BestEffortResources()
 
 	// MySQL: size each managed instance, preferring a manifest sizing config
 	// matching the instance key and falling back to the manifest "default".
@@ -258,7 +265,7 @@ func ApplyInfraSizing(wandb *v2.WeightsAndBiases, manifest manifest.Manifest) {
 		if spec.StorageSize == "" && sizing.VolumeSize != "" {
 			spec.StorageSize = sizing.VolumeSize
 		}
-		if sizing.Resources != nil && len(spec.Config.Resources.Requests) == 0 && len(spec.Config.Resources.Limits) == 0 {
+		if applyResources && sizing.Resources != nil && len(spec.Config.Resources.Requests) == 0 && len(spec.Config.Resources.Limits) == 0 {
 			spec.Config.Resources = *sizing.Resources
 		}
 	}
@@ -277,7 +284,7 @@ func ApplyInfraSizing(wandb *v2.WeightsAndBiases, manifest manifest.Manifest) {
 		if spec.StorageSize == "" && sizing.VolumeSize != "" {
 			spec.StorageSize = sizing.VolumeSize
 		}
-		if sizing.Resources != nil && len(spec.Config.Resources.Requests) == 0 && len(spec.Config.Resources.Limits) == 0 {
+		if applyResources && sizing.Resources != nil && len(spec.Config.Resources.Requests) == 0 && len(spec.Config.Resources.Limits) == 0 {
 			spec.Config.Resources = *sizing.Resources
 		}
 	}
@@ -300,7 +307,7 @@ func ApplyInfraSizing(wandb *v2.WeightsAndBiases, manifest manifest.Manifest) {
 			if spec.Keeper.StorageSize == "" && keeperSizing.VolumeSize != "" {
 				spec.Keeper.StorageSize = keeperSizing.VolumeSize
 			}
-			if keeperSizing.Resources != nil && len(spec.Keeper.Config.Resources.Requests) == 0 && len(spec.Keeper.Config.Resources.Limits) == 0 {
+			if applyResources && keeperSizing.Resources != nil && len(spec.Keeper.Config.Resources.Requests) == 0 && len(spec.Keeper.Config.Resources.Limits) == 0 {
 				spec.Keeper.Config.Resources = *keeperSizing.Resources
 			}
 		}
@@ -316,7 +323,7 @@ func ApplyInfraSizing(wandb *v2.WeightsAndBiases, manifest manifest.Manifest) {
 		if spec.StorageSize == "" && sizing.VolumeSize != "" {
 			spec.StorageSize = sizing.VolumeSize
 		}
-		if sizing.Resources != nil && len(spec.Config.Resources.Requests) == 0 && len(spec.Config.Resources.Limits) == 0 {
+		if applyResources && sizing.Resources != nil && len(spec.Config.Resources.Requests) == 0 && len(spec.Config.Resources.Limits) == 0 {
 			spec.Config.Resources = *sizing.Resources
 		}
 	}
@@ -345,7 +352,7 @@ func ApplyInfraSizing(wandb *v2.WeightsAndBiases, manifest manifest.Manifest) {
 		if spec.SeaweedObjectStoreSpec.FilerStorageSize == "" && sizing.MetadataVolumeSize != "" {
 			spec.SeaweedObjectStoreSpec.FilerStorageSize = sizing.MetadataVolumeSize
 		}
-		if sizing.Resources != nil && len(spec.Config.Resources.Requests) == 0 && len(spec.Config.Resources.Limits) == 0 {
+		if applyResources && sizing.Resources != nil && len(spec.Config.Resources.Requests) == 0 && len(spec.Config.Resources.Limits) == 0 {
 			spec.Config.Resources = *sizing.Resources
 		}
 	}
@@ -360,7 +367,7 @@ func ApplyInfraSizing(wandb *v2.WeightsAndBiases, manifest manifest.Manifest) {
 			if spec.StorageSize == "" && sizing.VolumeSize != "" {
 				spec.StorageSize = sizing.VolumeSize
 			}
-			if sizing.Resources != nil && len(spec.Config.Resources.Requests) == 0 && len(spec.Config.Resources.Limits) == 0 {
+			if applyResources && sizing.Resources != nil && len(spec.Config.Resources.Requests) == 0 && len(spec.Config.Resources.Limits) == 0 {
 				spec.Config.Resources = *sizing.Resources
 			}
 			if spec.Config.ReplicationConfig.DefaultReplicationFactor == 0 && sizing.ReplicationFactor != 0 {

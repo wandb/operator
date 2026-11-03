@@ -73,6 +73,22 @@ func TestToEtcdApplication(t *testing.T) {
 	require.Empty(t, etcdResources.Limits)
 }
 
+func TestToEtcdApplicationDevIsBestEffort(t *testing.T) {
+	setOpenShiftMode(t, false)
+	wandb := testWandb()
+	wandb.Spec.Size = apiv2.SizeDev
+	wandb.Spec.RequireLimits = true
+	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
+
+	app, err := ToEtcdApplication(wandb, nsn, testScheme(t), manifest.Manifest{})
+	require.NoError(t, err)
+
+	// dev runs every pod BestEffort; etcd is not special-cased.
+	etcdResources := app.Spec.PodTemplate.Spec.Containers[0].Resources
+	require.Empty(t, etcdResources.Requests)
+	require.Empty(t, etcdResources.Limits)
+}
+
 func TestToEtcdApplicationRequireLimits(t *testing.T) {
 	setOpenShiftMode(t, false)
 	wandb := testWandb()

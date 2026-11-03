@@ -81,6 +81,18 @@ var _ = Describe("Redis vendor specs", func() {
 		expectRedisWritableTmpMount(replication.Spec.Storage.VolumeMount.MountPath)
 	})
 
+	It("leaves sentinels BestEffort for the dev size", func() {
+		wandb := redisWandb(true)
+		wandb.Spec.Size = apiv2.SizeDev
+		wandb.Spec.RequireLimits = true
+
+		sentinel, err := ToRedisSentinelVendorSpec(context.Background(), wandb, wandb.Spec.Redis[apiv2.DefaultInstanceName].ManagedRedis, redisScheme(), manifest.Manifest{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(sentinel.Spec.KubernetesConfig.Resources).NotTo(BeNil())
+		Expect(sentinel.Spec.KubernetesConfig.Resources.Requests).To(BeEmpty())
+		Expect(sentinel.Spec.KubernetesConfig.Resources.Limits).To(BeEmpty())
+	})
+
 	It("sets default sentinel limits only when requireLimits is true", func() {
 		wandb := redisWandb(true)
 		wandb.Spec.RequireLimits = true

@@ -27,17 +27,20 @@ const defaultEtcdStorageSize = "10Gi"
 // footprint (~35 MB / <0.05 CPU per member at the small envelope) with
 // generous headroom while leaving the broker sizing to the manifest.
 //
-// Limits follow the same gate as every other managed workload: they are only
-// set when spec.requireLimits is true, so a requests-only install stays
-// requests-only here too.
-func defaultEtcdResources(requireLimits bool) corev1.ResourceRequirements {
+// The same policies as every other managed workload apply: nothing is set
+// under the BestEffort policy (spec.size dev), and limits are only set when
+// spec.requireLimits is true, so a requests-only install stays requests-only.
+func defaultEtcdResources(spec *apiv2.WeightsAndBiasesSpec) corev1.ResourceRequirements {
+	if spec.BestEffortResources() {
+		return corev1.ResourceRequirements{}
+	}
 	res := corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{
 			corev1.ResourceCPU:    resource.MustParse("250m"),
 			corev1.ResourceMemory: resource.MustParse("512Mi"),
 		},
 	}
-	if requireLimits {
+	if spec.RequireLimits {
 		res.Limits = corev1.ResourceList{
 			corev1.ResourceCPU:    resource.MustParse("1"),
 			corev1.ResourceMemory: resource.MustParse("1Gi"),
@@ -371,7 +374,7 @@ func ToEtcdApplication(
 							Name:            "etcd",
 							Image:           EtcdImage(mfst.Kafka.Images[imageKeyEtcd], wandb.Spec.Global.ImageRegistry),
 							Env:             etcdEnv,
-							Resources:       defaultEtcdResources(wandb.Spec.RequireLimits),
+							Resources:       defaultEtcdResources(&wandb.Spec),
 							SecurityContext: kafkaContainerSecurityContext(),
 							Ports: []corev1.ContainerPort{
 								{Name: "client", ContainerPort: EtcdClientPort},

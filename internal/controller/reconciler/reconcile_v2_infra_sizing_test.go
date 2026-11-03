@@ -124,6 +124,72 @@ var _ = Describe("Infra Sizing", func() {
 			Expect(wandb.Spec.MySQL[apiv2.DefaultInstanceName].ManagedMysql.Config.Resources.Requests.Cpu().String()).To(Equal("2"))
 		})
 
+		It("should apply replicas and volumes but no resources for the dev size (BestEffort)", func() {
+			wandb := &apiv2.WeightsAndBiases{
+				Spec: apiv2.WeightsAndBiasesSpec{
+					Size:  apiv2.SizeDev,
+					MySQL: map[string]apiv2.MySQLSpec{apiv2.DefaultInstanceName: {ManagedMysql: &apiv2.ManagedMysqlSpec{}}},
+					ClickHouse: map[string]apiv2.ClickHouseSpec{
+						apiv2.DefaultInstanceName: {ManagedClickHouse: &apiv2.ManagedClickHouseSpec{}},
+					},
+				},
+			}
+			sized := &corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("500m"), corev1.ResourceMemory: resource.MustParse("1Gi")},
+			}
+			manifest := serverManifest.Manifest{
+				Mysql: map[string]serverManifest.InfraConfig{
+					"default": {Sizing: map[apiv2.Size]serverManifest.SizingConfig{
+						"default": {Replicas: 1, VolumeSize: "10Gi", Resources: sized},
+						"dev":     {Resources: sized},
+					}},
+				},
+				ClickhouseKeeper: map[string]serverManifest.InfraConfig{
+					"default": {Sizing: map[apiv2.Size]serverManifest.SizingConfig{
+						// Mirrors the shipped manifest, where only Keeper carries resources under "default".
+						"default": {Replicas: 1, VolumeSize: "10Gi", Resources: sized},
+					}},
+				},
+			}
+			v2.ApplyInfraSizing(wandb, manifest)
+
+			mysql := wandb.Spec.MySQL[apiv2.DefaultInstanceName].ManagedMysql
+			Expect(mysql.Replicas).To(Equal(int32(1)))
+			Expect(mysql.StorageSize).To(Equal("10Gi"))
+			Expect(mysql.Config.Resources.Requests).To(BeEmpty())
+			Expect(mysql.Config.Resources.Limits).To(BeEmpty())
+
+			keeper := wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse.Keeper
+			Expect(keeper.Replicas).To(Equal(int32(1)))
+			Expect(keeper.Config.Resources.Requests).To(BeEmpty())
+			Expect(keeper.Config.Resources.Limits).To(BeEmpty())
+		})
+
+		It("should keep explicit CR resources for the dev size", func() {
+			explicit := corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")},
+			}
+			wandb := &apiv2.WeightsAndBiases{
+				Spec: apiv2.WeightsAndBiasesSpec{
+					Size: apiv2.SizeDev,
+					MySQL: map[string]apiv2.MySQLSpec{apiv2.DefaultInstanceName: {ManagedMysql: &apiv2.ManagedMysqlSpec{
+						Config: apiv2.MySQLConfig{Resources: explicit},
+					}}},
+				},
+			}
+			manifest := serverManifest.Manifest{
+				Mysql: map[string]serverManifest.InfraConfig{
+					"default": {Sizing: map[apiv2.Size]serverManifest.SizingConfig{
+						"default": {Resources: &corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("500m")},
+						}},
+					}},
+				},
+			}
+			v2.ApplyInfraSizing(wandb, manifest)
+			Expect(wandb.Spec.MySQL[apiv2.DefaultInstanceName].ManagedMysql.Config.Resources.Requests.Cpu().String()).To(Equal("1"))
+		})
+
 		It("should not override user-specified spec fields", func() {
 			wandb := &apiv2.WeightsAndBiases{
 				Spec: apiv2.WeightsAndBiasesSpec{

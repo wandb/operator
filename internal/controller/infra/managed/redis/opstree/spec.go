@@ -71,17 +71,20 @@ func DefaultRedisExporterImage(img manifest.ImageRef, globalImageRegistry string
 // evicted under node pressure. Sized well above the measured ~6 MB / <0.02 CPU
 // per sentinel at the small envelope; an explicit CR value still replaces it.
 //
-// Limits follow the same gate as every other managed workload: they are only
-// set when spec.requireLimits is true, so a requests-only install stays
-// requests-only here too.
-func defaultSentinelResources(requireLimits bool) *corev1.ResourceRequirements {
+// The same policies as every other managed workload apply: nothing is set
+// under the BestEffort policy (spec.size dev), and limits are only set when
+// spec.requireLimits is true, so a requests-only install stays requests-only.
+func defaultSentinelResources(spec *apiv2.WeightsAndBiasesSpec) *corev1.ResourceRequirements {
+	if spec.BestEffortResources() {
+		return &corev1.ResourceRequirements{}
+	}
 	res := &corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{
 			corev1.ResourceCPU:    resource.MustParse("100m"),
 			corev1.ResourceMemory: resource.MustParse("128Mi"),
 		},
 	}
-	if requireLimits {
+	if spec.RequireLimits {
 		res.Limits = corev1.ResourceList{
 			corev1.ResourceCPU:    resource.MustParse("250m"),
 			corev1.ResourceMemory: resource.MustParse("256Mi"),
@@ -336,7 +339,7 @@ func ToRedisSentinelVendorSpec(
 				Image:            RedisSentinelImage(mfst.Redis["default"].Images["sentinel"], wandb.Spec.Global.ImageRegistry),
 				ImagePullPolicy:  corev1.PullIfNotPresent,
 				ImagePullSecrets: pullSecretsPtr(wandb),
-				Resources:        defaultSentinelResources(wandb.Spec.RequireLimits),
+				Resources:        defaultSentinelResources(&wandb.Spec),
 			},
 			PodSecurityContext: redisPodSecurityContext(),
 			SecurityContext:    redisContainerSecurityContext(),
