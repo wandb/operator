@@ -393,6 +393,13 @@ func TestClusterRoleIsListOnly(t *testing.T) {
 	}
 }
 
+func TestClusterRoleReadsStorage(t *testing.T) {
+	rules := ClusterRole(testWandb()).Rules
+	require.True(t, grants(rules, "volumeattachments", "get"))
+	require.True(t, grants(rules, "volumeattachments", "list"))
+	require.False(t, grants(rules, "volumeattachments", "watch"))
+}
+
 func TestServiceAccountCopiesWorkloadIdentityAnnotations(t *testing.T) {
 	wandb := testWandb()
 	wandb.Spec.Wandb.ServiceAccount.Annotations = map[string]string{"eks.amazonaws.com/role-arn": "arn:aws:iam::1:role/wandb"}

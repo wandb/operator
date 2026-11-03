@@ -64,7 +64,7 @@ var dnsSystemRules = []rbacv1.PolicyRule{
 // clusterReadRules are the cluster-scoped lists clusterResources checks before it runs
 var clusterReadRules = []rbacv1.PolicyRule{
 	{APIGroups: []string{""}, Resources: []string{"namespaces", "nodes"}, Verbs: []string{"get", "list"}},
-	{APIGroups: []string{"storage.k8s.io"}, Resources: []string{"storageclasses"}, Verbs: []string{"get", "list"}},
+	{APIGroups: []string{"storage.k8s.io"}, Resources: []string{"storageclasses", "volumeattachments"}, Verbs: []string{"get", "list"}},
 	{APIGroups: []string{"apiextensions.k8s.io"}, Resources: []string{"customresourcedefinitions"}, Verbs: []string{"get", "list"}},
 	{APIGroups: []string{""}, Resources: []string{"persistentvolumes"}, Verbs: []string{"get", "list"}},
 	{APIGroups: []string{"networking.k8s.io"}, Resources: []string{"ingressclasses"}, Verbs: []string{"get", "list"}},

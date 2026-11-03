@@ -26,7 +26,7 @@ import (
 //+kubebuilder:rbac:groups=admissionregistration.k8s.io,resources=validatingadmissionpolicies;validatingadmissionpolicybindings,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=pods,verbs=create;delete
 //+kubebuilder:rbac:groups="",resources=pods/exec,verbs=create
-//+kubebuilder:rbac:groups=storage.k8s.io,resources=storageclasses,verbs=get;list
+//+kubebuilder:rbac:groups=storage.k8s.io,resources=storageclasses;volumeattachments,verbs=get;list
 //+kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list
 //+kubebuilder:rbac:groups="",resources=limitranges;persistentvolumes,verbs=get;list;watch
 //+kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=get;list;watch
