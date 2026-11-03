@@ -25,7 +25,7 @@ import (
 // The operator must hold everything it grants the support-bundle ServiceAccount.
 //+kubebuilder:rbac:groups=admissionregistration.k8s.io,resources=validatingadmissionpolicies;validatingadmissionpolicybindings,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=pods,verbs=create;delete
-//+kubebuilder:rbac:groups="",resources=pods/exec,verbs=create
+//+kubebuilder:rbac:groups="",resources=pods/exec,verbs=create;get
 //+kubebuilder:rbac:groups=storage.k8s.io,resources=storageclasses;volumeattachments,verbs=get;list
 //+kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list
 //+kubebuilder:rbac:groups="",resources=limitranges;persistentvolumes,verbs=get;list;watch
@@ -160,9 +160,28 @@ func applySupportBundlePodPolicy(ctx context.Context, c ctrlClient.Client, wandb
 	}
 	policyBinding := supportbundle.PodAdmissionPolicyBinding(wandb)
 	currentPolicyBinding := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{ObjectMeta: objectKeyMeta(policyBinding)}
-	return upsertSupportBundleObject(ctx, c, wandb, currentPolicyBinding, policyBinding, false, func() {
+	if err := upsertSupportBundleObject(ctx, c, wandb, currentPolicyBinding, policyBinding, false, func() {
 		if !apiequality.Semantic.DeepDerivative(policyBinding.Spec, currentPolicyBinding.Spec) {
 			currentPolicyBinding.Spec = policyBinding.Spec
+		}
+	}); err != nil {
+		return err
+	}
+
+	jobPolicy := supportbundle.WatchtowerJobPolicy(wandb, watchtowerServiceAccountName(wandb))
+	currentJobPolicy := &admissionregistrationv1.ValidatingAdmissionPolicy{ObjectMeta: objectKeyMeta(jobPolicy)}
+	if err := upsertSupportBundleObject(ctx, c, wandb, currentJobPolicy, jobPolicy, false, func() {
+		if !apiequality.Semantic.DeepEqual(jobPolicy.Spec, currentJobPolicy.Spec) {
+			currentJobPolicy.Spec = jobPolicy.Spec
+		}
+	}); err != nil {
+		return err
+	}
+	jobPolicyBinding := supportbundle.WatchtowerJobPolicyBinding(wandb)
+	currentJobPolicyBinding := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{ObjectMeta: objectKeyMeta(jobPolicyBinding)}
+	return upsertSupportBundleObject(ctx, c, wandb, currentJobPolicyBinding, jobPolicyBinding, false, func() {
+		if !apiequality.Semantic.DeepEqual(jobPolicyBinding.Spec, currentJobPolicyBinding.Spec) {
+			currentJobPolicyBinding.Spec = jobPolicyBinding.Spec
 		}
 	})
 }
@@ -255,6 +274,8 @@ func deleteSupportBundle(ctx context.Context, c ctrlClient.Client, wandb *apiv2.
 		&rbacv1.ClusterRole{Name: clusterName},
 		&admissionregistrationv1.ValidatingAdmissionPolicyBinding{Name: clusterName},
 		&admissionregistrationv1.ValidatingAdmissionPolicy{Name: clusterName},
+		&admissionregistrationv1.ValidatingAdmissionPolicyBinding{Name: supportbundle.WatchtowerJobPolicyName(wandb)},
+		&admissionregistrationv1.ValidatingAdmissionPolicy{Name: supportbundle.WatchtowerJobPolicyName(wandb)},
 	} {
 		if err := deleteSupportBundleObject(ctx, c, wandb, obj, false); err != nil {
 			return ctrl.Result{}, err

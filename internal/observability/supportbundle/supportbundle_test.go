@@ -187,6 +187,18 @@ func TestPodAdmissionPolicyTargetsOnlyTheCollector(t *testing.T) {
 	require.Equal(t, []admissionregistrationv1.ValidationAction{admissionregistrationv1.Deny}, binding.Spec.ValidationActions)
 }
 
+func TestWatchtowerJobPolicyTargetsOnlyWatchtower(t *testing.T) {
+	wandb := testWandb()
+	policy := WatchtowerJobPolicy(wandb, "wandb-watchtower")
+	require.Equal(t, "request.userInfo.username == 'system:serviceaccount:wandb-ns:wandb-watchtower'", policy.Spec.MatchConditions[0].Expression)
+	require.Equal(t, []string{"jobs"}, policy.Spec.MatchConstraints.ResourceRules[0].Resources)
+	require.Contains(t, policy.Spec.Validations[2].Expression, "'"+Image(wandb)+"'")
+
+	binding := WatchtowerJobPolicyBinding(wandb)
+	require.Equal(t, policy.Name, binding.Spec.PolicyName)
+	require.Equal(t, []admissionregistrationv1.ValidationAction{admissionregistrationv1.Deny}, binding.Spec.ValidationActions)
+}
+
 func TestConfigMapHasNoCredentials(t *testing.T) {
 	configMap, err := ConfigMap(testWandb(), telemetryOn("telemetry-ns"))
 	require.NoError(t, err)

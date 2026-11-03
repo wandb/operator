@@ -63,6 +63,7 @@ rules:
   - pods/exec
   verbs:
   - create
+  - get
 - apiGroups:
   - admissionregistration.k8s.io
   resources:
