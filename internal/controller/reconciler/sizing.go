@@ -10,8 +10,7 @@ import (
 func ResolveResources(app manifest.Application, wandb *v2.WeightsAndBiases, containerResources *v1.ResourceRequirements) *v1.ResourceRequirements {
 	var resources *v1.ResourceRequirements
 
-	// Manifest-derived resources (sizing tables and container specs) only apply
-	// outside the BestEffort policy; explicit CR overrides below always do.
+	// Manifest-derived resources are skipped for dev; CR overrides still win.
 	if !wandb.Spec.BestEffortResources() {
 		// check if there is "default" in the sizing map and apply those values
 		if defaultConfig, ok := app.Sizing["default"]; ok && defaultConfig.Resources != nil {
@@ -243,8 +242,7 @@ func infraSizingConfig[T any](m map[string]T, key string) (T, bool) {
 
 func ApplyInfraSizing(wandb *v2.WeightsAndBiases, manifest manifest.Manifest) {
 	size := wandb.Spec.Size
-	// Replicas and volumes always come from the manifest; resources only do
-	// outside the BestEffort policy. Explicit CR config.resources are untouched.
+	// Replicas/volumes always apply; manifest resources are skipped for dev.
 	applyResources := !wandb.Spec.BestEffortResources()
 
 	// MySQL: size each managed instance, preferring a manifest sizing config

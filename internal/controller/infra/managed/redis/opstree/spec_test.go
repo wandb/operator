@@ -62,9 +62,7 @@ var _ = Describe("Redis vendor specs", func() {
 			Name:         redisSentinelRunVolumeName,
 			VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}},
 		}))
-		// Sentinels are not sized by the server manifest; they still need
-		// requests so the quorum is schedulable rather than BestEffort. Limits
-		// are gated by spec.requireLimits (false here), like every other workload.
+		// Requests make sentinels schedulable; limits gated by requireLimits.
 		Expect(sentinel.Spec.KubernetesConfig.Resources).NotTo(BeNil())
 		Expect(sentinel.Spec.KubernetesConfig.Resources.Requests.Cpu().String()).To(Equal("100m"))
 		Expect(sentinel.Spec.KubernetesConfig.Resources.Requests.Memory().String()).To(Equal("128Mi"))

@@ -261,8 +261,7 @@ var _ = Describe("ReconcileV2 Sizing", func() {
 				Spec: apiv2.WeightsAndBiasesSpec{Size: apiv2.SizeDev, RequireLimits: true},
 			}
 
-			// Neither the sizing tables (default or dev) nor the manifest's
-			// container-level resources survive: the pod is BestEffort.
+			// Sizing tables and container resources are both dropped.
 			Expect(v2.ResolveResources(app, wandb, containerRes)).To(BeNil())
 		})
 
@@ -294,7 +293,7 @@ var _ = Describe("ReconcileV2 Sizing", func() {
 
 			res := v2.ResolveResources(app, wandb, nil)
 			Expect(res).NotTo(BeNil())
-			// The user's override is the escape hatch; the manifest default is not merged under it.
+			// The override applies alone; manifest default is not merged in.
 			Expect(res.Requests.Cpu().String()).To(Equal("2"))
 			Expect(res.Requests).NotTo(HaveKey(corev1.ResourceMemory))
 			Expect(res.Requests).To(HaveLen(1))

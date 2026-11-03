@@ -146,7 +146,7 @@ var _ = Describe("Infra Sizing", func() {
 				},
 				ClickhouseKeeper: map[string]serverManifest.InfraConfig{
 					"default": {Sizing: map[apiv2.Size]serverManifest.SizingConfig{
-						// Mirrors the shipped manifest, where only Keeper carries resources under "default".
+						// As shipped: only Keeper has "default" resources.
 						"default": {Replicas: 1, VolumeSize: "10Gi", Resources: sized},
 					}},
 				},

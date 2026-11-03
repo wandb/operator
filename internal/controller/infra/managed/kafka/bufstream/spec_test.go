@@ -64,9 +64,7 @@ func TestToEtcdApplication(t *testing.T) {
 	requireKafkaContainerSecurityContext(t, app.Spec.PodTemplate.Spec.Containers[0].SecurityContext)
 	require.NotNil(t, app.Spec.ServiceTemplate)
 
-	// etcd is not sized by the server manifest; it must still carry requests so
-	// the members are schedulable/bin-packed rather than BestEffort. Limits are
-	// gated by spec.requireLimits (false here), matching every other workload.
+	// Requests make etcd schedulable; limits gated by requireLimits (false).
 	etcdResources := app.Spec.PodTemplate.Spec.Containers[0].Resources
 	require.Equal(t, "250m", etcdResources.Requests.Cpu().String())
 	require.Equal(t, "512Mi", etcdResources.Requests.Memory().String())
@@ -83,7 +81,7 @@ func TestToEtcdApplicationDevIsBestEffort(t *testing.T) {
 	app, err := ToEtcdApplication(wandb, nsn, testScheme(t), manifest.Manifest{})
 	require.NoError(t, err)
 
-	// dev runs every pod BestEffort; etcd is not special-cased.
+	// dev runs every pod BestEffort; etcd is no exception.
 	etcdResources := app.Spec.PodTemplate.Spec.Containers[0].Resources
 	require.Empty(t, etcdResources.Requests)
 	require.Empty(t, etcdResources.Limits)

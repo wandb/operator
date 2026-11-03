@@ -64,16 +64,7 @@ func DefaultRedisExporterImage(img manifest.ImageRef, globalImageRegistry string
 	return defaultRedisExporterImage
 }
 
-// defaultSentinelResources gives the sentinel quorum a scheduler-visible
-// footprint. The server manifest sizes only the Redis data pods (and
-// ApplyInfraSizing never populates spec.sentinel.config.resources), so without
-// this sentinels run BestEffort: invisible to bin-packing and the first to be
-// evicted under node pressure. Sized well above the measured ~6 MB / <0.02 CPU
-// per sentinel at the small envelope; an explicit CR value still replaces it.
-//
-// The same policies as every other managed workload apply: nothing is set
-// under the BestEffort policy (spec.size dev), and limits are only set when
-// spec.requireLimits is true, so a requests-only install stays requests-only.
+// defaultSentinelResources: unsized by the manifest; same dev/limits gates.
 func defaultSentinelResources(spec *apiv2.WeightsAndBiasesSpec) *corev1.ResourceRequirements {
 	if spec.BestEffortResources() {
 		return &corev1.ResourceRequirements{}

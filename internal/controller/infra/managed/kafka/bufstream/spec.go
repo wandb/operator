@@ -20,16 +20,7 @@ import (
 
 const defaultEtcdStorageSize = "10Gi"
 
-// defaultEtcdResources gives the Bufstream metadata etcd members a scheduler-
-// visible footprint. The server manifest sizes only the brokers, so without
-// this the etcd pods run BestEffort: invisible to bin-packing and the first
-// to be evicted under node pressure. The numbers cover the measured
-// footprint (~35 MB / <0.05 CPU per member at the small envelope) with
-// generous headroom while leaving the broker sizing to the manifest.
-//
-// The same policies as every other managed workload apply: nothing is set
-// under the BestEffort policy (spec.size dev), and limits are only set when
-// spec.requireLimits is true, so a requests-only install stays requests-only.
+// defaultEtcdResources: unsized by the manifest; dev/limits gates apply.
 func defaultEtcdResources(spec *apiv2.WeightsAndBiasesSpec) corev1.ResourceRequirements {
 	if spec.BestEffortResources() {
 		return corev1.ResourceRequirements{}
