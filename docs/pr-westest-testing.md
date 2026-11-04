@@ -27,7 +27,7 @@ application consistent across the matrix while testing the local operator.
 Each scenario gets an `ubuntu-latest-8-cores` runner, with up to five scenarios
 in parallel. The workflow prepares the amd64 Watchtower binary and Grafana
 plugins required by the operator Dockerfile, then mounts the checkout read-only
-into the public WESTest `0.7.1` container.
+into the public WESTest `0.7.2` container.
 
 The shared [runner action](../.github/actions/westest-run/action.yml) passes
 `--operator-repo /src/operator` to both `westest config` and `westest run` and
@@ -42,7 +42,9 @@ registry. The deployment pulls the PR-built image and chart from that registry.
 The enforce variant also blocks public egress from the Kind nodes. The runner
 uses its bundled WSM executable and mounts the work directory at the same
 absolute path inside and outside the container so the sibling registry can
-read its generated TLS files.
+read its TLS files. It also sets `XDG_CACHE_HOME` to the shared work directory's
+`cache` subdirectory, keeping the targets of Terraform's module symlinks visible
+to the host Docker daemon.
 
 Operator artifacts stay within the test environment; the workflow does not
 publish them to a release registry. The separate

@@ -39,10 +39,12 @@ def docker_args(root, provider, env, operator_repo=None):
             f"type=bind,src={work},dst={container_work}",
             "--env", f"WESTEST_ARTIFACT_ROOT={container_work / 'artifacts'}"]
     if airgap:
-        # The sibling registry bind-mounts generated TLS files. Its Docker daemon
-        # must see the same absolute artifact paths as the WESTest container.
+        # The sibling registry bind-mounts TLS files through Terraform module
+        # symlinks into WESTest's asset cache. Keep both the artifacts and cache
+        # at the same absolute paths for the host Docker daemon and container.
         args += ["--workdir", str(container_work),
-                 "--env", f"WESTEST_WSM_REPO={container_work}"]
+                 "--env", f"WESTEST_WSM_REPO={container_work}",
+                 "--env", f"XDG_CACHE_HOME={container_work / 'cache'}"]
     if provider == "local":
         args += ["--network", "host", "--mount",
                  "type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock"]

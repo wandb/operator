@@ -266,7 +266,7 @@ class RunnerTests(unittest.TestCase):
         checkout = self.prepare_operator_checkout()
         for scenario in ["local-kind-airgap", "local-kind-airgap-enforce"]:
             with self.subTest(scenario=scenario):
-                self.env.update(SCENARIO=scenario, WESTEST_IMAGE_TAG="0.7.1")
+                self.env.update(SCENARIO=scenario, WESTEST_IMAGE_TAG="0.7.2")
                 with patch.object(runner.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as command:
                     self.assertEqual(runner.run(self.env), 0)
                 work = (self.root / f"westest-{scenario}/work").resolve()
@@ -278,6 +278,7 @@ class RunnerTests(unittest.TestCase):
                     self.assertEqual(args[args.index("--workdir") + 1], str(work))
                     self.assertIn(f"WESTEST_ARTIFACT_ROOT={work / 'artifacts'}", args)
                     self.assertIn(f"WESTEST_WSM_REPO={work}", args)
+                    self.assertIn(f"XDG_CACHE_HOME={work / 'cache'}", args)
                     self.assertIn("type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock", args)
                     self.assertIn(f"type=bind,src={checkout.resolve()},dst=/src/operator,readonly", args)
                     self.assertEqual(args[-4:], ["--operator-repo", "/src/operator",
@@ -291,6 +292,7 @@ class RunnerTests(unittest.TestCase):
                 self.assertIn("WESTEST_ARTIFACT_ROOT=/work/artifacts", args)
                 self.assertNotIn("--workdir", args)
                 self.assertFalse(any(arg.startswith("WESTEST_WSM_REPO=") for arg in args))
+                self.assertFalse(any(arg.startswith("XDG_CACHE_HOME=") for arg in args))
 
     def test_checkout_builds_locally_instead_of_using_a_published_version(self):
         checkout = self.prepare_operator_checkout()
