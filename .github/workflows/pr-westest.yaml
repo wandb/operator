@@ -53,8 +53,8 @@ jobs:
           - local-kind-proxy
           - local-kind-proxy-auth
           - local-kind-proxy-tls
-          - local-kind-airgap
-          - local-kind-airgap-enforce
+          # Airgap scenarios are temporarily disabled because dependency
+          # mirroring hits Docker Hub's anonymous pull limits.
     steps:
       - name: Checkout PR merge commit
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4

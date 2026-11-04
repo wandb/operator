@@ -1,6 +1,6 @@
 # PR WESTest testing
 
-[The PR workflow](../.github/workflows/pr-westest.yaml) runs ten local Kind
+[The PR workflow](../.github/workflows/pr-westest.yaml) runs eight local Kind
 scenarios against the PR merge commit's operator checkout:
 
 - `local-kind-ingress`
@@ -11,8 +11,9 @@ scenarios against the PR merge commit's operator checkout:
 - `local-kind-proxy`
 - `local-kind-proxy-auth`
 - `local-kind-proxy-tls`
-- `local-kind-airgap`
-- `local-kind-airgap-enforce`
+
+`local-kind-airgap` and `local-kind-airgap-enforce` are temporarily excluded
+because mirroring their dependencies hits Docker Hub's anonymous pull limits.
 
 Non-draft PRs targeting `main` run when opened, updated, reopened, or
 marked ready for review. New updates or conversion back to draft cancel older
@@ -31,14 +32,15 @@ into the public WESTest `0.7.2` container.
 
 The shared [runner action](../.github/actions/westest-run/action.yml) passes
 `--operator-repo /src/operator` to both `westest config` and `westest run` and
-explicitly enables local builds. For non-airgap scenarios, WESTest builds the
+explicitly enables local builds. For the enabled scenarios, WESTest builds the
 checkout's Dockerfile, loads that image directly into Kind, and installs a
 writable copy of the local chart, including its sibling chart dependencies and
 local CRDs.
 
-For airgap scenarios, WESTest mirrors the published dependencies, then builds
-the checkout's operator image and packages its chart into the temporary test
-registry. The deployment pulls the PR-built image and chart from that registry.
+The shared action retains support for airgap scenarios. WESTest mirrors the
+published dependencies, then builds the checkout's operator image and packages
+its chart into the temporary test registry. The deployment pulls the PR-built
+image and chart from that registry.
 The enforce variant also blocks public egress from the Kind nodes. The runner
 uses its bundled WSM executable and mounts the work directory at the same
 absolute path inside and outside the container so the sibling registry can
