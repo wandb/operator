@@ -5,15 +5,18 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/observability/supportbundle"
 	"github.com/wandb/operator/internal/observability/telemetry"
+	sb "github.com/wandb/operator/pkg/observability/supportbundle"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -118,13 +121,15 @@ type supportBundleObjects struct {
 	clusterRoleBinding *rbacv1.ClusterRoleBinding
 	podPolicy          *admissionregistrationv1.ValidatingAdmissionPolicy
 	podPolicyBinding   *admissionregistrationv1.ValidatingAdmissionPolicyBinding
+	jobPolicy          *admissionregistrationv1.ValidatingAdmissionPolicy
+	jobPolicyBinding   *admissionregistrationv1.ValidatingAdmissionPolicyBinding
 }
 
 func (o supportBundleObjects) all() []ctrlClient.Object {
 	return []ctrlClient.Object{
 		o.application, o.configMap, o.serviceAccount, o.role, o.roleBinding,
 		o.telemetryRole, o.telemetryBinding, o.dnsTestRole, o.dnsTestBinding, o.dnsSystemRole, o.dnsSystemBinding,
-		o.clusterRole, o.clusterRoleBinding, o.podPolicy, o.podPolicyBinding,
+		o.clusterRole, o.clusterRoleBinding, o.podPolicy, o.podPolicyBinding, o.jobPolicy, o.jobPolicyBinding,
 	}
 }
 
@@ -151,6 +156,8 @@ func supportBundleObjectKeys(wandb *apiv2.WeightsAndBiases) supportBundleObjects
 		clusterRoleBinding: &rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: clusterName}},
 		podPolicy:          &admissionregistrationv1.ValidatingAdmissionPolicy{ObjectMeta: metav1.ObjectMeta{Name: clusterName}},
 		podPolicyBinding:   &admissionregistrationv1.ValidatingAdmissionPolicyBinding{ObjectMeta: metav1.ObjectMeta{Name: clusterName}},
+		jobPolicy:          &admissionregistrationv1.ValidatingAdmissionPolicy{ObjectMeta: metav1.ObjectMeta{Name: supportbundle.WatchtowerJobPolicyName(wandb)}},
+		jobPolicyBinding:   &admissionregistrationv1.ValidatingAdmissionPolicyBinding{ObjectMeta: metav1.ObjectMeta{Name: supportbundle.WatchtowerJobPolicyName(wandb)}},
 	}
 }
 
@@ -222,8 +229,8 @@ func TestSupportBundleLifecycle(t *testing.T) {
 		require.NoError(t, c.Get(ctx, ctrlClient.ObjectKeyFromObject(wandb), stored))
 		require.Equal(t, &apiv2.SupportBundleStatusSummary{
 			CronJob: "wandb-support-bundle-collector",
-			Version: "0.4.10",
-			Image:   "us-docker.pkg.dev/wandb-production/public/wandb/lumen:0.4.10",
+			Version: sb.DefaultSupportBundleVersion,
+			Image:   "us-docker.pkg.dev/wandb-production/public/wandb/lumen:" + sb.DefaultSupportBundleVersion,
 		}, stored.Status.SupportBundle)
 
 		simulateApplicationController(t, c, wandb)
@@ -282,7 +289,7 @@ func TestSupportBundleLifecycle(t *testing.T) {
 		require.Equal(t, "0.4.9", cron.Labels["app.kubernetes.io/version"])
 		require.True(t, *cron.Spec.Suspend)
 
-		require.False(t, wandb.Status.SupportBundle.Ready, "the CronJob still runs 0.4.10")
+		require.False(t, wandb.Status.SupportBundle.Ready, "the CronJob still runs the default version")
 		simulateApplicationController(t, c, wandb)
 		reconcileSupportBundle(ctx, c, wandb, supportBundleTelemetry)
 		require.True(t, wandb.Status.SupportBundle.Ready)
@@ -537,6 +544,92 @@ func TestSupportBundlePodAdmissionPolicy(t *testing.T) {
 
 	// Other identities are not affected by the policy.
 	require.NoError(t, c.Create(ctx, helperPod("admin-as-privileged", "privileged")))
+}
+
+func TestSupportBundleWatchtowerJobPolicy(t *testing.T) {
+	ctx := context.Background()
+	c, cfg := supportBundleEnvtestWithConfig(t)
+	wandb := createSupportBundleWandb(t, c, "jobs")
+	reconcileSupportBundle(ctx, c, wandb, supportBundleTelemetry)
+	require.NoError(t, reconcileWatchtowerRBAC(ctx, c, wandb))
+
+	watchtowerCfg := rest.CopyConfig(cfg)
+	watchtowerCfg.Impersonate = rest.ImpersonationConfig{
+		UserName: fmt.Sprintf("system:serviceaccount:%s:%s", wandb.Namespace, watchtowerServiceAccountName(wandb)),
+	}
+	watchtower, err := ctrlClient.New(watchtowerCfg, ctrlClient.Options{Scheme: c.Scheme()})
+	require.NoError(t, err)
+	app := &apiv2.Application{}
+	require.NoError(t, c.Get(ctx, ctrlClient.ObjectKey{Name: supportbundle.Name(wandb), Namespace: wandb.Namespace}, app))
+	collection := &batchv1.Job{Name: "support-bundle-abcdef", Namespace: wandb.Namespace, Spec: *app.Spec.CronJobs[0].Spec.JobTemplate.Spec.DeepCopy()}
+	jobs := []*batchv1.Job{collection}
+	// Mirror WSM's BuildManagerJob without importing its CLI dependencies.
+	for _, op := range []string{"list", "delete"} {
+		manager := collection.DeepCopy()
+		manager.Name = "support-bundle-" + op + "-abcdef"
+		pod := &manager.Spec.Template.Spec
+		pod.Volumes = slices.DeleteFunc(pod.Volumes, func(v corev1.Volume) bool { return v.Name == "collection" || v.Name == "staging" })
+		container := &pod.Containers[0]
+		container.Command, container.Args = []string{"sleep", "300"}, nil
+		container.Env = slices.DeleteFunc(container.Env, func(e corev1.EnvVar) bool {
+			return slices.Contains([]string{"LUMEN_SUPPORT_BUNDLE_RESULT_PATH", "SUPPORT_BUNDLE_ID", "SELF_POD_NAME", "SELF_POD_NAMESPACE"}, e.Name)
+		})
+		container.VolumeMounts = slices.DeleteFunc(container.VolumeMounts, func(m corev1.VolumeMount) bool { return m.Name == "collection" || m.Name == "staging" })
+		jobs = append(jobs, manager)
+	}
+	invalid := collection.DeepCopy()
+	invalid.Spec.Template.Spec.ServiceAccountName = "operator"
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
+		err := watchtower.Create(ctx, invalid.DeepCopy(), ctrlClient.DryRunAll)
+		assert.ErrorContains(t, err, "must run as the support-bundle ServiceAccount")
+	}, 30*time.Second, 500*time.Millisecond)
+
+	for _, job := range jobs {
+		t.Run(job.Name, func(t *testing.T) {
+			require.NoError(t, watchtower.Create(ctx, job.DeepCopy(), ctrlClient.DryRunAll))
+			edits := map[string]func(*corev1.PodSpec){
+				"service account": func(p *corev1.PodSpec) { p.ServiceAccountName = "operator" },
+				"image":           func(p *corev1.PodSpec) { p.Containers[0].Image = "busybox" },
+				"command":         func(p *corev1.PodSpec) { p.Containers[0].Command = []string{"sh", "-c", "id"} },
+				"args":            func(p *corev1.PodSpec) { p.Containers[0].Args = []string{"--help"} },
+				"environment": func(p *corev1.PodSpec) {
+					p.Containers[0].Env = append(p.Containers[0].Env, corev1.EnvVar{Name: "LD_PRELOAD", Value: "/tmp/inject.so"})
+				},
+				"Secret environment": func(p *corev1.PodSpec) { p.Containers[0].Env[0].ValueFrom.SecretKeyRef.Name = "unrelated-credentials" },
+				"envFrom": func(p *corev1.PodSpec) {
+					p.Containers[0].EnvFrom = []corev1.EnvFromSource{{SecretRef: &corev1.SecretEnvSource{LocalObjectReference: corev1.LocalObjectReference{Name: "unrelated"}}}}
+				},
+				"Secret volume": func(p *corev1.PodSpec) {
+					p.Volumes = append(p.Volumes, corev1.Volume{Name: "credentials", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "unrelated"}}})
+					p.Containers[0].VolumeMounts = append(p.Containers[0].VolumeMounts, corev1.VolumeMount{Name: "credentials", MountPath: "/credentials"})
+				},
+				"projected Secret": func(p *corev1.PodSpec) {
+					p.Volumes = append(p.Volumes, corev1.Volume{Name: "credentials", VolumeSource: corev1.VolumeSource{Projected: &corev1.ProjectedVolumeSource{Sources: []corev1.VolumeProjection{{Secret: &corev1.SecretProjection{LocalObjectReference: corev1.LocalObjectReference{Name: "unrelated"}}}}}}})
+				},
+				"init container": func(p *corev1.PodSpec) { p.InitContainers = []corev1.Container{{Name: "init", Image: "busybox"}} },
+				"lifecycle command": func(p *corev1.PodSpec) {
+					p.Containers[0].Lifecycle = &corev1.Lifecycle{PostStart: &corev1.LifecycleHandler{Exec: &corev1.ExecAction{Command: []string{"sh"}}}}
+				},
+				"privileged": func(p *corev1.PodSpec) {
+					p.Containers[0].SecurityContext.Privileged = ptr.To(true)
+					p.Containers[0].SecurityContext.AllowPrivilegeEscalation = ptr.To(true)
+				},
+				"mount path": func(p *corev1.PodSpec) { p.Containers[0].VolumeMounts[0].MountPath = "/app/bin" },
+			}
+			for name, edit := range edits {
+				t.Run(name, func(t *testing.T) {
+					changed := job.DeepCopy()
+					edit(&changed.Spec.Template.Spec)
+					err := watchtower.Create(ctx, changed, ctrlClient.DryRunAll)
+					require.ErrorContains(t, err, "Watchtower jobs")
+				})
+			}
+		})
+	}
+	unrelated := collection.DeepCopy()
+	unrelated.Name = "other"
+	require.ErrorContains(t, watchtower.Create(ctx, unrelated, ctrlClient.DryRunAll), "must use WSM")
+	require.NoError(t, c.Create(ctx, invalid.DeepCopy(), ctrlClient.DryRunAll))
 }
 
 func TestSupportBundleSkipsClustersWithoutAdmissionPolicies(t *testing.T) {

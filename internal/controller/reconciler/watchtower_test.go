@@ -12,12 +12,17 @@ package reconciler
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/observability/supportbundle"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -28,6 +33,7 @@ import (
 	"k8s.io/utils/ptr"
 	ctrlClient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/yaml"
 )
 
 func watchtowerTestClient(t *testing.T, objects ...ctrlClient.Object) ctrlClient.Client {
@@ -36,6 +42,7 @@ func watchtowerTestClient(t *testing.T, objects ...ctrlClient.Object) ctrlClient
 	require.NoError(t, corev1.AddToScheme(scheme))
 	require.NoError(t, networkingv1.AddToScheme(scheme))
 	require.NoError(t, rbacv1.AddToScheme(scheme))
+	require.NoError(t, admissionregistrationv1.AddToScheme(scheme))
 	require.NoError(t, apiv2.AddToScheme(scheme))
 
 	builder := fake.NewClientBuilder().WithScheme(scheme)
@@ -299,6 +306,92 @@ func TestReconcileWatchtowerRBACGrantsActionRunLifecycle(t *testing.T) {
 		Resources: []string{"actionruns"},
 		Verbs:     []string{"get", "list", "watch", "create", "delete"},
 	})
+}
+
+var watchtowerSupportBundleRules = []rbacv1.PolicyRule{
+	{APIGroups: []string{"batch"}, Resources: []string{"jobs"}, Verbs: []string{"create", "delete"}},
+	{APIGroups: []string{""}, Resources: []string{"pods"}, Verbs: []string{"delete"}},
+	{APIGroups: []string{""}, Resources: []string{"pods/exec"}, Verbs: []string{"create", "get"}},
+}
+
+func TestReconcileWatchtowerRBACSupportBundleGrants(t *testing.T) {
+	ctx := context.Background()
+	wandb := watchtowerTestCR("wandb", "wandb")
+	c := watchtowerTestClient(t, wandb)
+	role := func() *rbacv1.Role {
+		t.Helper()
+		require.NoError(t, reconcileWatchtowerRBAC(ctx, c, wandb))
+		role := &rbacv1.Role{}
+		require.NoError(t, c.Get(ctx, types.NamespacedName{Name: watchtowerName(wandb), Namespace: wandb.Namespace}, role))
+		return role
+	}
+	requireNone := func(rules []rbacv1.PolicyRule) {
+		t.Helper()
+		for _, rule := range watchtowerSupportBundleRules {
+			require.NotContains(t, rules, rule)
+		}
+	}
+
+	// A CR the API server has not defaulted yet has no value at all.
+	require.Nil(t, wandb.Spec.SupportBundle.Enabled)
+	requireNone(role().Rules)
+
+	wandb.Spec.SupportBundle.Enabled = ptr.To(true)
+	requireNone(role().Rules)
+	require.NoError(t, c.Create(ctx, supportbundle.WatchtowerJobPolicy(wandb, watchtowerServiceAccountName(wandb))))
+	requireNone(role().Rules)
+	require.NoError(t, c.Create(ctx, supportbundle.WatchtowerJobPolicyBinding(wandb)))
+	before := len(role().Rules)
+	rules := role().Rules
+	require.Len(t, rules, before, "repeated reconciles must not duplicate rules")
+	for _, rule := range watchtowerSupportBundleRules {
+		require.Contains(t, rules, rule)
+	}
+	for _, readOnly := range []string{"configmaps", "cronjobs", "ingresses"} {
+		for _, rule := range rules {
+			if slices.Contains(rule.Resources, readOnly) {
+				require.ElementsMatch(t, []string{"get", "list", "watch"}, rule.Verbs, readOnly)
+			}
+		}
+	}
+
+	binding := &rbacv1.RoleBinding{}
+	require.NoError(t, c.Get(ctx, types.NamespacedName{Name: watchtowerName(wandb), Namespace: wandb.Namespace}, binding))
+	require.Equal(t, []rbacv1.Subject{{Kind: "ServiceAccount", Name: watchtowerServiceAccountName(wandb), Namespace: wandb.Namespace}}, binding.Subjects)
+
+	policyBinding := supportbundle.WatchtowerJobPolicyBinding(wandb)
+	require.NoError(t, c.Get(ctx, ctrlClient.ObjectKeyFromObject(policyBinding), policyBinding))
+	policyBinding.Spec.ValidationActions = []admissionregistrationv1.ValidationAction{admissionregistrationv1.Warn}
+	require.NoError(t, c.Update(ctx, policyBinding))
+	requireNone(role().Rules)
+	policyBinding.Spec.ValidationActions = []admissionregistrationv1.ValidationAction{admissionregistrationv1.Deny}
+	require.NoError(t, c.Update(ctx, policyBinding))
+	require.Contains(t, role().Rules, watchtowerSupportBundleRules[0])
+
+	wandb.Spec.SupportBundle.Enabled = ptr.To(false)
+	requireNone(role().Rules)
+}
+
+// The API server refuses a Role granting verbs the operator does not hold itself.
+func TestOperatorHoldsWatchtowerSupportBundleGrants(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "config", "rbac", "role.yaml"))
+	require.NoError(t, err)
+	operator := &rbacv1.ClusterRole{}
+	require.NoError(t, yaml.Unmarshal(data, operator))
+	held := func(group, resource, verb string) bool {
+		for _, rule := range operator.Rules {
+			if len(rule.ResourceNames) == 0 && slices.Contains(rule.APIGroups, group) &&
+				slices.Contains(rule.Resources, resource) && slices.Contains(rule.Verbs, verb) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, rule := range watchtowerSupportBundleRules {
+		for _, verb := range rule.Verbs {
+			require.True(t, held(rule.APIGroups[0], rule.Resources[0], verb), "%s %s", verb, rule.Resources[0])
+		}
+	}
 }
 
 func TestWatchtowerEnvReferencesThePasswordSecret(t *testing.T) {
