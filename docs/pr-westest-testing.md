@@ -28,7 +28,7 @@ application consistent across the matrix while testing the local operator.
 Each scenario gets an `ubuntu-latest-8-cores` runner, with up to five scenarios
 in parallel. The workflow prepares the amd64 Watchtower binary and Grafana
 plugins required by the operator Dockerfile, then mounts the checkout read-only
-into the public WESTest `0.7.0` container.
+into the public WESTest `0.7.1` container.
 
 The shared [runner action](../.github/actions/westest-run/action.yml) passes
 `--operator-repo /src/operator` to both `westest config` and `westest run` and

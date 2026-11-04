@@ -266,7 +266,7 @@ class RunnerTests(unittest.TestCase):
         checkout = self.prepare_operator_checkout()
         for scenario in ["local-kind-airgap", "local-kind-airgap-enforce"]:
             with self.subTest(scenario=scenario):
-                self.env.update(SCENARIO=scenario, WESTEST_IMAGE_TAG="0.7.0")
+                self.env.update(SCENARIO=scenario, WESTEST_IMAGE_TAG="0.7.1")
                 with patch.object(runner.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as command:
                     self.assertEqual(runner.run(self.env), 0)
                 work = (self.root / f"westest-{scenario}/work").resolve()

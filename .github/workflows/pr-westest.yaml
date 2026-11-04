@@ -81,7 +81,7 @@ jobs:
         uses: ./.github/actions/westest-run
         with:
           scenario: ${{ matrix.scenario }}
-          image-tag: "0.7.0"
+          image-tag: "0.7.1"
           operator-repo: ${{ github.workspace }}
           app-version: ${{ needs.setup.outputs.app_version }}
           app-manifest-digest: ${{ needs.setup.outputs.app_manifest_digest }}
