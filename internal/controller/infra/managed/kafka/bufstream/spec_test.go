@@ -63,6 +63,44 @@ func TestToEtcdApplication(t *testing.T) {
 	requireKafkaPodSecurityContext(t, app.Spec.PodTemplate.Spec.SecurityContext)
 	requireKafkaContainerSecurityContext(t, app.Spec.PodTemplate.Spec.Containers[0].SecurityContext)
 	require.NotNil(t, app.Spec.ServiceTemplate)
+
+	// Requests make etcd schedulable; limits gated by requireLimits (false).
+	etcdResources := app.Spec.PodTemplate.Spec.Containers[0].Resources
+	require.Equal(t, "250m", etcdResources.Requests.Cpu().String())
+	require.Equal(t, "512Mi", etcdResources.Requests.Memory().String())
+	require.Empty(t, etcdResources.Limits)
+}
+
+func TestToEtcdApplicationDevIsBestEffort(t *testing.T) {
+	setOpenShiftMode(t, false)
+	wandb := testWandb()
+	wandb.Spec.Size = apiv2.SizeDev
+	wandb.Spec.RequireLimits = true
+	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
+
+	app, err := ToEtcdApplication(wandb, nsn, testScheme(t), manifest.Manifest{})
+	require.NoError(t, err)
+
+	// dev runs every pod BestEffort; etcd is no exception.
+	etcdResources := app.Spec.PodTemplate.Spec.Containers[0].Resources
+	require.Empty(t, etcdResources.Requests)
+	require.Empty(t, etcdResources.Limits)
+}
+
+func TestToEtcdApplicationRequireLimits(t *testing.T) {
+	setOpenShiftMode(t, false)
+	wandb := testWandb()
+	wandb.Spec.RequireLimits = true
+	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
+
+	app, err := ToEtcdApplication(wandb, nsn, testScheme(t), manifest.Manifest{})
+	require.NoError(t, err)
+
+	etcdResources := app.Spec.PodTemplate.Spec.Containers[0].Resources
+	require.Equal(t, "250m", etcdResources.Requests.Cpu().String())
+	require.Equal(t, "512Mi", etcdResources.Requests.Memory().String())
+	require.Equal(t, "1", etcdResources.Limits.Cpu().String())
+	require.Equal(t, "1Gi", etcdResources.Limits.Memory().String())
 }
 
 func TestToEtcdApplicationHA(t *testing.T) {
