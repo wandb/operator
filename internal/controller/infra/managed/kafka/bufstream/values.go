@@ -19,6 +19,8 @@ const (
 
 	// Kafka-compatible listener exposed by Bufstream.
 	KafkaListenerPort = 9092
+	// Broker-to-broker Connect RPC interface.
+	ConnectPort = 8080
 	// Admin RPC interface.
 	AdminPort = 9089
 	// Debug interface that also serves Prometheus metrics.
