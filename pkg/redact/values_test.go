@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -30,6 +31,36 @@ func TestValues(t *testing.T) {
 			}}},
 		},
 		{
+			name: "DSNs under any key, including passwords with spaces",
+			in: map[string]interface{}{"env": map[string]interface{}{
+				"MYSQL":              "mysql://wandb:pa ss@mysql:3306/wandb",
+				"REDIS":              "redis://:a<b@redis:6379",
+				"GORILLA_EMAIL_SINK": "smtp://u:p q@smtp:587",
+				"GORILLA_FILE_STORE": "s3://bucket/path",
+			}},
+			want: map[string]interface{}{"env": map[string]interface{}{
+				"MYSQL":              Mask,
+				"REDIS":              Mask,
+				"GORILLA_EMAIL_SINK": Mask,
+				"GORILLA_FILE_STORE": "s3://bucket/path",
+			}},
+		},
+		{
+			name: "pass and passphrase keys, key/value entries",
+			in: map[string]interface{}{
+				"env":        map[string]interface{}{"WF_CLICKHOUSE_PASS": "hunter2", "SMTP_PASS": "hunter2"},
+				"lumen":      map[string]interface{}{"bypass": true},
+				"passphrase": "hunter2",
+				"vars":       []interface{}{map[string]interface{}{"key": "MYSQL_PASSWORD", "value": "hunter2"}},
+			},
+			want: map[string]interface{}{
+				"env":        map[string]interface{}{"WF_CLICKHOUSE_PASS": Mask, "SMTP_PASS": Mask},
+				"lumen":      map[string]interface{}{"bypass": true},
+				"passphrase": Mask,
+				"vars":       []interface{}{map[string]interface{}{"key": Mask, "value": Mask}},
+			},
+		},
+		{
 			name: "env list entries",
 			in: map[string]interface{}{"extraEnv": []interface{}{
 				map[string]interface{}{"name": "MYSQL_PASSWORD", "value": "hunter2"},
@@ -50,7 +81,7 @@ func TestValues(t *testing.T) {
 			}},
 			want: map[string]interface{}{"a": []interface{}{
 				[]interface{}{map[string]interface{}{"password": Mask, "user": "wandb"}},
-				"redis://***@redis:6379",
+				Mask,
 			}},
 		},
 		{
@@ -80,15 +111,15 @@ func TestValues(t *testing.T) {
 				"pathAt":   "https://github.com/wandb/operator@v1",
 			},
 			want: map[string]interface{}{
-				"engine":   "clickhouse://***@clickhouse:9000",
-				"unescape": "mysql://***@mysql:3306/wandb",
-				"repo":     "https://***@github.com/wandb/operator",
-				"notes":    "primary mysql://***@db:3306 replica mysql://***@db2:3306",
-				"digits":   "mysql://***@mysql:3306/wandb",
-				"s3":       "s3://***@bucket",
-				"list":     "mysql://***@db2:3306",
-				"query":    "https://***@db:3306",
-				"pathAt":   "https://***@v1",
+				"engine":   Mask,
+				"unescape": Mask,
+				"repo":     Mask,
+				"notes":    Mask,
+				"digits":   Mask,
+				"s3":       Mask,
+				"list":     Mask,
+				"query":    Mask,
+				"pathAt":   Mask,
 			},
 		},
 		{
@@ -119,14 +150,13 @@ func TestValues(t *testing.T) {
 			},
 		},
 		{
-			// A URL list under a key that is not store-like is masked from its first
-			// scheme to its last @.
+			// Any spec value with URL credentials is masked whole, whatever its key.
 			name: "URL list after a path",
 			in: map[string]interface{}{
 				"notes": "http://wandb-parquet:8087/_goRPC_,mysql://wandb:hunter2@mysql:3306/wandb_local",
 			},
 			want: map[string]interface{}{
-				"notes": "http://***@mysql:3306/wandb_local",
+				"notes": Mask,
 			},
 		},
 		{
@@ -137,7 +167,7 @@ func TestValues(t *testing.T) {
 			},
 			want: map[string]interface{}{
 				"plain":  "oci://registry.local:5000/charts/wandb@sha256:" + digest,
-				"authed": "oci://***@registry.local:5000/charts/wandb@sha256:" + digest,
+				"authed": Mask,
 			},
 		},
 		{
@@ -224,6 +254,10 @@ func TestString(t *testing.T) {
 		{"jdbc:mysql://wandb:hunter2@db:3306/wandb", "jdbc:mysql://***@db:3306/wandb"},
 		{"url=jdbc:sqlserver://sa:hunter2@db:1433", "url=jdbc:sqlserver://***@db:1433"},
 		{"grpc://parquet:8088,mysql://u:p@db", "grpc://***@db"},
+		{`parse "oci://robot:pa ss@127.0.0.1:1/charts/wandb": net/url: invalid userinfo`, `parse "oci://***@127.0.0.1:1/charts/wandb": net/url: invalid userinfo`},
+		{`Invalid value: "mysql://u:a<b c@db:3306"`, `Invalid value: "mysql://***@db:3306"`},
+		{"mysql://db:3306/wandb?user=wandb&password=P@ss1", "mysql://db:3306/wandb?user=wandb&password=***"},
+		{"https://api.example.com/v1?token=abc@def&page=2", "https://api.example.com/v1?token=***"},
 		{"clickhouse://user:123,ab://cd@host/db", "clickhouse://***@host/db"},
 		{"clickhouse://user:pw,ab://cd@host/db", "clickhouse://***@host/db"},
 		{"clickhouse://u:p@h/db,clickhouse://v:q@i/db", "clickhouse://***@i/db"},
@@ -266,6 +300,20 @@ func TestErrorMasksApplyErrors(t *testing.T) {
 	for _, tt := range tests {
 		if got := Error(errors.New(tt.in)).Error(); got != tt.want {
 			t.Errorf("Error(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
+func TestURL(t *testing.T) {
+	tests := []struct{ in, want string }{
+		{"oci://robot:pa ss@registry:5000/charts/wandb", "oci://***@registry:5000/charts/wandb"},
+		{"https://u:a<b@charts.example.com/wandb", "https://***@charts.example.com/wandb"},
+		{"https://charts.wandb.ai", "https://charts.wandb.ai"},
+		{"oci://registry/charts/wandb@sha256:" + strings.Repeat("a", 64), "oci://registry/charts/wandb@sha256:" + strings.Repeat("a", 64)},
+	}
+	for _, tt := range tests {
+		if got := URL(tt.in); got != tt.want {
+			t.Errorf("URL(%q) = %q, want %q", tt.in, got, tt.want)
 		}
 	}
 }

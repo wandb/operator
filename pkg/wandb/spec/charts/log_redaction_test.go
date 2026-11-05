@@ -106,11 +106,13 @@ func TestOCIReleaseDoesNotLogURLCredentials(t *testing.T) {
 		"version mismatch":  "oci://robot:oci-pass-1@" + host + "/charts/wandb:2.0.0",
 		"invalid reference": "oci://robot:oci-pass-1@" + host + "/charts/wandb",
 		"pull fails":        "oci://" + host + "/charts/wandb",
+		// url.Parse rejects a space in userinfo and quotes the raw URL.
+		"space in password": "oci://robot:oci-pass-1 oci-pass-1b@" + host + "/charts/wandb",
 	} {
 		t.Run(name, func(t *testing.T) {
 			release := OCIRelease{URL: url, Version: "1.0.0", Username: "robot", Password: "oci-pass-2", PlainHTTP: true, Debug: true}
 			_, err := release.pullChart()
-			assertNoCredentials(t, err, "oci-pass-1", "oci-pass-2")
+			assertNoCredentials(t, err, "oci-pass-1", "oci-pass-1b", "oci-pass-2")
 		})
 	}
 }

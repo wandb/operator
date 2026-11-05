@@ -65,7 +65,7 @@ func (r RepoRelease) deriveRepoName() (string, error) {
 	// Use hostname without dots as the repo name
 	repoName := strings.ReplaceAll(parsedURL.Hostname(), ".", "-")
 	if repoName == "" {
-		return "", fmt.Errorf("could not derive repository name from URL: %s", redact.String(r.URL))
+		return "", fmt.Errorf("could not derive repository name from URL: %s", redact.URL(r.URL))
 	}
 
 	return repoName, nil
@@ -175,12 +175,12 @@ func (r RepoRelease) downloadChart() (string, error) {
 
 	entry.InsecureSkipTLSVerify = parsedURL.Scheme == "http"
 	if entry.InsecureSkipTLSVerify && r.Debug {
-		log.Info("TLS verification disabled for HTTP URL", "url", redact.String(r.URL))
+		log.Info("TLS verification disabled for HTTP URL", "url", redact.URL(r.URL))
 	}
 
 	if r.Debug {
 		log.Info("Setting up chart repository",
-			"url", redact.String(entry.URL),
+			"url", redact.URL(entry.URL),
 			"name", r.Name,
 			"repoName", entry.Name,
 			"username", entry.Username)
@@ -222,13 +222,13 @@ func (r RepoRelease) downloadChart() (string, error) {
 
 	if r.Debug {
 		log.Info("Attempting to download index file",
-			"url", redact.String(entry.URL),
+			"url", redact.URL(entry.URL),
 			"username", entry.Username)
 	}
 	_, err = chartRepo.DownloadIndexFile()
 	if err != nil {
 		log.Error(redact.Error(err), "Failed to download index file")
-		return "", redact.Error(fmt.Errorf("failed to download index file from %s: %w", entry.URL, err))
+		return "", redact.Error(fmt.Errorf("failed to download index file from %s: %w", redact.URL(entry.URL), err))
 	}
 
 	if r.Debug {
@@ -264,7 +264,7 @@ func (r RepoRelease) downloadChart() (string, error) {
 		chartURL = fmt.Sprintf("%s/%s", strings.TrimSuffix(r.URL, "/"), chartURL)
 	}
 	if r.Debug {
-		log.Info("Found chart URL", "url", redact.String(chartURL))
+		log.Info("Found chart URL", "url", redact.URL(chartURL))
 	}
 
 	_, cfg, err := helm.InitConfig("")

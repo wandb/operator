@@ -18,7 +18,7 @@ var (
 	sensitiveSubstrings = []string{
 		"password", "passwd", "secret", "token", "credential", "license",
 		"apikey", "accesskey", "privatekey", "authorization",
-		"dsn", "connstr", "connectionstring",
+		"dsn", "connstr", "connectionstring", "passphrase",
 	}
 	sensitiveSuffixes = []string{"key", "pwd", "connection"}
 	// Address-like keys are masked only when the value contains an @, so a
@@ -60,6 +60,9 @@ func mask(v interface{}, sensitive bool) interface{} {
 	switch v := v.(type) {
 	case map[string]interface{}:
 		envName, _ := v["name"].(string)
+		if envName == "" {
+			envName, _ = v["key"].(string)
+		}
 		out := make(map[string]interface{}, len(v))
 		for key, child := range v {
 			childSensitive := sensitive || isSensitive(key, child) ||
@@ -74,7 +77,7 @@ func mask(v interface{}, sensitive bool) interface{} {
 		}
 		return out
 	case string:
-		if sensitive && v != "" {
+		if sensitive && v != "" || hasURLCredential(v) {
 			return Mask
 		}
 		return String(v)
@@ -107,6 +110,10 @@ func isSensitive(key string, value interface{}) bool {
 			return true
 		}
 	}
+	// WF_CLICKHOUSE_PASS, SMTP_PASS; bypass is a flag, not a password.
+	if strings.HasSuffix(k, "pass") && !strings.HasSuffix(k, "bypass") {
+		return true
+	}
 	if s, ok := value.(string); ok && strings.Contains(s, "@") {
 		for _, suffix := range addressSuffixes {
 			if strings.HasSuffix(k, suffix) {
@@ -123,9 +130,27 @@ func String(s string) string {
 	if strings.Contains(s, "PRIVATE KEY-----") {
 		return Mask
 	}
-	s = maskUserinfo(s)
+	// Assignments go first: password=p@ss would otherwise look like userinfo.
 	s = maskAssignments(s)
+	s = maskUserinfo(s)
 	return jwt.ReplaceAllString(s, Mask)
+}
+
+// URL masks the credentials in a value that is a single URL, such as a chart
+// repository or OCI reference, from its scheme:// to its last @. Unlike
+// String it does not stop at whitespace, so a password containing a space is
+// still covered.
+func URL(u string) string {
+	m := urlScheme.FindStringIndex(u)
+	if m == nil {
+		return String(u)
+	}
+	rest := u[m[1]:]
+	at := credentialAt(rest)
+	if at < 0 {
+		return String(u)
+	}
+	return u[:m[1]] + Mask + rest[at:]
 }
 
 // maskUserinfo masks, in each word that contains a scheme://, everything from
@@ -152,10 +177,7 @@ func maskUserinfo(s string) string {
 			end = start + stop
 		}
 		rest := s[start:end]
-		at := strings.LastIndexByte(rest, '@')
-		if at >= 0 && strings.Contains(rest[:at], "/") && digestRef.MatchString(rest[at+1:]) {
-			at = strings.LastIndexByte(rest[:at], '@')
-		}
+		at := credentialAt(rest)
 		out.WriteString(s[i:start])
 		if at >= 0 {
 			out.WriteString(Mask)
@@ -169,19 +191,43 @@ func maskUserinfo(s string) string {
 	return out.String()
 }
 
-// urlEnd returns the index where a URL ends in s: whitespace, an angle
-// bracket, or the unescaped closing quote when the URL was quoted.
+// urlEnd returns the index where a URL ends in s. A quoted URL ends only at
+// its unescaped closing quote, because Go and Kubernetes errors quote values
+// whose passwords can contain spaces. Otherwise whitespace or an angle
+// bracket ends it.
 func urlEnd(s string, quote byte) int {
 	for i := 0; i < len(s); i++ {
 		c := s[i]
-		if c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == '<' || c == '>' {
-			return i
+		if quote != 0 {
+			if c == quote && (i == 0 || s[i-1] != '\\') {
+				return i
+			}
+			continue
 		}
-		if quote != 0 && c == quote && (i == 0 || s[i-1] != '\\') {
+		if c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == '<' || c == '>' {
 			return i
 		}
 	}
 	return -1
+}
+
+// credentialAt returns the index of the @ that ends the userinfo in rest, the
+// text after a scheme://, or -1. An @ that starts a digest after a path is
+// skipped, so the userinfo ends at the @ before it, if any.
+func credentialAt(rest string) int {
+	at := strings.LastIndexByte(rest, '@')
+	if at >= 0 && strings.Contains(rest[:at], "/") && digestRef.MatchString(rest[at+1:]) {
+		at = strings.LastIndexByte(rest[:at], '@')
+	}
+	return at
+}
+
+// hasURLCredential reports whether a spec value holds URL credentials
+// anywhere after its first scheme://. Such values are masked whole: their
+// passwords are not percent-encoded and can contain any character.
+func hasURLCredential(s string) bool {
+	m := urlScheme.FindStringIndex(s)
+	return m != nil && credentialAt(s[m[1]:]) >= 0
 }
 
 func maskAssignments(s string) string {
