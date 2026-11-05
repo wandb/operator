@@ -113,8 +113,7 @@ func managedKafkaReadState(
 	spec := wandb.Spec.Kafka.ManagedKafka
 
 	specNamespacedName := managedKafkaSpecNamespacedName(spec)
-	onDeleteRule := bufstream.ToKafkaOnDeleteRule(wandb, wandb.GetRetentionPolicy(spec.ManagedInfraSpec))
-	readConditions, newInfraConn := bufstream.ReadState(ctx, client, specNamespacedName, wandb, onDeleteRule)
+	readConditions, newInfraConn := bufstream.ReadState(ctx, client, specNamespacedName, wandb)
 	newConditions = append(newConditions, readConditions...)
 	return newConditions, newInfraConn
 }
