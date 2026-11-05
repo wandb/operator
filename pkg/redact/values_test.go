@@ -92,12 +92,14 @@ func TestValues(t *testing.T) {
 			},
 		},
 		{
-			// The chart's GORILLA_HISTORY_STORE format, where a path-bearing
-			// URL precedes the DSN.
-			name: "URL list after a path",
+			// Store values such as GORILLA_HISTORY_STORE hold unescaped DSNs,
+			// so they are masked whole by name rather than parsed.
+			name: "store values",
 			in: map[string]interface{}{
 				"env": map[string]interface{}{
-					"GORILLA_HISTORY_STORE": "http://wandb-parquet:8087/_goRPC_,mysql://wandb:hunter2@mysql:3306/wandb_local",
+					"GORILLA_HISTORY_STORE":              "http://wandb-parquet:8087/_goRPC_,mysql://wandb:hunter2@mysql:3306/wandb_local",
+					"GORILLA_PARQUET_LIVE_HISTORY_STORE": "clickhouse://wandb:123,ab://cd@clickhouse:9440/history",
+					"GORILLA_FILE_STORE":                 "s3://bucket/path",
 				},
 				"extraEnv": []interface{}{map[string]interface{}{
 					"name":  "GORILLA_HISTORY_STORE",
@@ -106,12 +108,24 @@ func TestValues(t *testing.T) {
 			},
 			want: map[string]interface{}{
 				"env": map[string]interface{}{
-					"GORILLA_HISTORY_STORE": "http://wandb-parquet:8087/_goRPC_,mysql://***@mysql:3306/wandb_local",
+					"GORILLA_HISTORY_STORE":              Mask,
+					"GORILLA_PARQUET_LIVE_HISTORY_STORE": Mask,
+					"GORILLA_FILE_STORE":                 "s3://bucket/path",
 				},
 				"extraEnv": []interface{}{map[string]interface{}{
 					"name":  "GORILLA_HISTORY_STORE",
-					"value": "grpc://wandb-parquet-grpc:8088,http://wandb-parquet:8087/_goRPC_,mysql://***@mysql:3306/wandb_local",
+					"value": Mask,
 				}},
+			},
+		},
+		{
+			// A URL list under a key that is not store-like is still parsed.
+			name: "URL list after a path",
+			in: map[string]interface{}{
+				"notes": "http://wandb-parquet:8087/_goRPC_,mysql://wandb:hunter2@mysql:3306/wandb_local",
+			},
+			want: map[string]interface{}{
+				"notes": "http://wandb-parquet:8087/_goRPC_,mysql://***@mysql:3306/wandb_local",
 			},
 		},
 		{

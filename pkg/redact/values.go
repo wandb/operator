@@ -23,7 +23,7 @@ var (
 	sensitiveSuffixes = []string{"key", "pwd", "connection"}
 	// Address-like keys are masked only when the value contains an @, so a
 	// plain host stays readable but user:pass@host does not.
-	addressSuffixes = []string{"address", "addr", "url", "uri", "endpoint", "host"}
+	addressSuffixes = []string{"address", "addr", "url", "uri", "endpoint", "host", "store"}
 )
 
 var (
