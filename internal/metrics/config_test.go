@@ -18,15 +18,23 @@ var configMetricNames = []string{
 }
 
 func TestRegisterConfig(t *testing.T) {
-	for _, userSpec := range []bool{true, false} {
-		for _, managedSpec := range []bool{true, false} {
-			t.Run(fmt.Sprintf("user=%t,managed=%t", userSpec, managedSpec), func(t *testing.T) {
-				reg := prometheus.NewRegistry()
-				if err := RegisterConfig(reg, userSpec, managedSpec); err != nil {
-					t.Fatalf("RegisterConfig() error = %v", err)
-				}
+	tests := []struct {
+		userSpec, managedSpec bool
+		wantUser, wantManaged int
+	}{
+		{userSpec: true, managedSpec: true, wantUser: 1, wantManaged: 1},
+		{userSpec: true, managedSpec: false, wantUser: 1, wantManaged: 0},
+		{userSpec: false, managedSpec: true, wantUser: 0, wantManaged: 1},
+		{userSpec: false, managedSpec: false, wantUser: 0, wantManaged: 0},
+	}
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("user=%t,managed=%t", tt.userSpec, tt.managedSpec), func(t *testing.T) {
+			reg := prometheus.NewRegistry()
+			if err := RegisterConfig(reg, tt.userSpec, tt.managedSpec); err != nil {
+				t.Fatalf("RegisterConfig() error = %v", err)
+			}
 
-				want := fmt.Sprintf(`
+			want := fmt.Sprintf(`
 # HELP wandb_operator_config_info Always 1, labeled with the operator's configuration switches.
 # TYPE wandb_operator_config_info gauge
 wandb_operator_config_info{managed_spec_enabled="%t",user_spec_enabled="%t"} 1
@@ -36,13 +44,12 @@ wandb_operator_managed_spec_enabled %d
 # HELP wandb_operator_user_spec_enabled 1 when the operator reads and applies the instance user spec, otherwise 0.
 # TYPE wandb_operator_user_spec_enabled gauge
 wandb_operator_user_spec_enabled %d
-`, managedSpec, userSpec, int(gaugeValue(managedSpec)), int(gaugeValue(userSpec)))
+`, tt.managedSpec, tt.userSpec, tt.wantManaged, tt.wantUser)
 
-				if err := testutil.GatherAndCompare(reg, strings.NewReader(want)); err != nil {
-					t.Fatal(err)
-				}
-			})
-		}
+			if err := testutil.GatherAndCompare(reg, strings.NewReader(want)); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
 
