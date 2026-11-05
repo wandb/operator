@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Bug fixes
 
-* Mask credentials in every logged spec, spec diff and chart error. Masking now covers chart passwords, env lists, nested lists, sensitive key names in any case such as `MYSQL_PASSWORD`, and userinfo in any URL, so values such as a ClickHouse DSN in `GORILLA_HISTORY_STORAGE_ENGINE_ADDRESS` no longer reach controller logs in clear text. The raw CR spec is no longer logged.
+* Mask credentials in every logged spec, spec diff and chart error. Masking now covers chart passwords, env lists, nested lists, sensitive key names in any case such as `MYSQL_PASSWORD`, the userinfo of each `scheme://` URL in a string, including lists such as `GORILLA_HISTORY_STORE`, and quoted `password:` values in embedded config, so values such as a ClickHouse DSN in `GORILLA_HISTORY_STORAGE_ENGINE_ADDRESS` no longer reach controller logs in clear text. The raw CR spec is no longer logged.
 
 ## [1.23.3](https://github.com/wandb/operator/compare/v1.23.2...v1.23.3) (Unreleased)
 

@@ -26,7 +26,11 @@ func TestReconcileDoesNotLogCredentials(t *testing.T) {
 			"url": "https://charts.example.invalid", "name": "operator-wandb", "version": "1.0.0",
 			"username": "chart-user", "password": "chart-pass-1",
 		}}
-		wandb.Spec.Values.Object["global"].(map[string]interface{})["mysql"] = map[string]interface{}{"password": dbPassword}
+		global := wandb.Spec.Values.Object["global"].(map[string]interface{})
+		global["mysql"] = map[string]interface{}{"password": dbPassword}
+		global["extraEnv"] = map[string]interface{}{
+			"GORILLA_HISTORY_STORE": "http://wandb-parquet:8087/_goRPC_,mysql://wandb:store-pass-1@mysql:3306/wandb_local",
+		}
 		wandb.Spec.Values.Object["parquet"] = map[string]interface{}{"env": map[string]interface{}{
 			"GORILLA_HISTORY_STORAGE_ENGINE_ADDRESS": "clickhouse://wandb:dsn-pass-1@clickhouse:9000",
 		}}
@@ -56,7 +60,7 @@ func TestReconcileDoesNotLogCredentials(t *testing.T) {
 			t.Errorf("logs do not contain %q", want)
 		}
 	}
-	for _, secret := range []string{"chart-pass-1", "db-pass-1", "db-pass-2", "dsn-pass-1", "env-pass-1", "url-pass-1"} {
+	for _, secret := range []string{"chart-pass-1", "db-pass-1", "db-pass-2", "dsn-pass-1", "env-pass-1", "url-pass-1", "store-pass-1"} {
 		if strings.Contains(out, secret) {
 			t.Errorf("logs contain credential %q", secret)
 		}

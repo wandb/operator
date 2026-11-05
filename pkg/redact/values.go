@@ -27,12 +27,14 @@ var (
 )
 
 var (
-	// Greedy up to the last @ in the token, so an unescaped @ or / in a
-	// password is still covered.
-	urlUserinfo = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.\-]*://[^\s"'<>]*@`)
+	urlScheme = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.\-]*://`)
+	// An OCI digest after a path, as in oci://host/charts/wandb@sha256:<hex>.
+	digestRef = regexp.MustCompile(`^[a-z0-9]+(?:[+._-][a-z0-9]+)*:[0-9a-fA-F]{32,}`)
 	// password=..., "token": "...", Authorization: Bearer ... in free text
-	// such as CLI flags or embedded config files.
-	inlineAssignment = regexp.MustCompile(`(?i)((?:password|passwd|secret|token|credential|license|api[_-]?key|access[_-]?key|private[_-]?key|authorization)\w*["']?[ \t]*[:=][ \t]*["']?)(?:(?:bearer|basic)[ \t]+)?[^\s"'&,;]+`)
+	// such as CLI flags or embedded config files. assignmentValue finds where
+	// the value ends.
+	inlineAssignment = regexp.MustCompile(`(?i)(?:password|passwd|secret|token|credential|license|api[_-]?key|access[_-]?key|private[_-]?key|authorization)\w*["']?[ \t]*([:=])[ \t]*`)
+	authScheme       = regexp.MustCompile(`(?i)^(?:bearer|basic)[ \t]+`)
 	jwt              = regexp.MustCompile(`eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+`)
 )
 
@@ -121,35 +123,105 @@ func String(s string) string {
 	if strings.Contains(s, "PRIVATE KEY-----") {
 		return Mask
 	}
-	s = urlUserinfo.ReplaceAllStringFunc(s, maskUserinfo)
-	s = inlineAssignment.ReplaceAllString(s, "${1}"+Mask)
+	s = maskUserinfo(s)
+	s = maskAssignments(s)
 	return jwt.ReplaceAllString(s, Mask)
 }
 
-func maskUserinfo(match string) string {
-	start := strings.Index(match, "://") + len("://")
-	userinfo := match[start : len(match)-1]
-	if slash := strings.IndexByte(userinfo, '/'); slash >= 0 {
-		authority := userinfo[:slash]
-		_, port, hasColon := strings.Cut(authority, ":")
-		if !strings.Contains(authority, "@") && (!hasColon || isPort(port)) {
-			// host[:port]/path@ref: the @ is in the path, e.g. a digest.
-			return match
+// maskUserinfo masks from each scheme:// to the last @ before whitespace, a
+// quote or the next scheme://. Each URL in a list is masked on its own, and an
+// unescaped @ or / in a password is still covered. An @ that starts a digest is
+// skipped, so the userinfo is the part before the previous @, if any.
+func maskUserinfo(s string) string {
+	schemes := urlScheme.FindAllStringIndex(s, -1)
+	var out strings.Builder
+	last := 0
+	for i, m := range schemes {
+		start, end := m[1], len(s)
+		if i+1 < len(schemes) {
+			end = schemes[i+1][0]
 		}
+		if stop := strings.IndexFunc(s[start:end], isURLDelimiter); stop >= 0 {
+			end = start + stop
+		}
+		rest := s[start:end]
+		at := strings.LastIndexByte(rest, '@')
+		if at >= 0 && strings.Contains(rest[:at], "/") && digestRef.MatchString(rest[at+1:]) {
+			at = strings.LastIndexByte(rest[:at], '@')
+		}
+		if at < 0 {
+			continue
+		}
+		out.WriteString(s[last:start])
+		out.WriteString(Mask)
+		last = start + at
 	}
-	return match[:start] + Mask + "@"
+	out.WriteString(s[last:])
+	return out.String()
 }
 
-func isPort(s string) bool {
-	if s == "" {
-		return false
-	}
-	for _, r := range s {
-		if r < '0' || r > '9' {
-			return false
+func isURLDelimiter(r rune) bool {
+	return unicode.IsSpace(r) || strings.ContainsRune(`"'<>`, r)
+}
+
+func maskAssignments(s string) string {
+	var out strings.Builder
+	last := 0
+	for _, m := range inlineAssignment.FindAllStringSubmatchIndex(s, -1) {
+		if m[1] < last {
+			// The match is inside a value that is already masked.
+			continue
 		}
+		from, to := assignmentValue(s[m[1]:], s[m[2]])
+		if from == to {
+			continue
+		}
+		out.WriteString(s[last : m[1]+from])
+		out.WriteString(Mask)
+		last = m[1] + to
 	}
-	return true
+	out.WriteString(s[last:])
+	return out.String()
+}
+
+// assignmentValue returns the span of the value at the start of v. A quoted
+// value runs to its closing quote, or to the end of v if there is none. An
+// unquoted value runs to the end of the line after a colon, as in YAML, and to
+// whitespace or a quote after =, as in flags and query strings.
+func assignmentValue(v string, sep byte) (int, int) {
+	if v == "" {
+		return 0, 0
+	}
+	if q := v[0]; q == '"' || q == '\'' {
+		for i := 1; i < len(v); i++ {
+			switch {
+			case q == '"' && v[i] == '\\':
+				i++
+			case v[i] == q && q == '\'' && i+1 < len(v) && v[i+1] == q:
+				// YAML escapes a single quote by doubling it.
+				i++
+			case v[i] == q:
+				return 1, i
+			}
+		}
+		return 1, len(v)
+	}
+	if sep == ':' {
+		if eol := strings.IndexAny(v, "\r\n"); eol >= 0 {
+			return 0, eol
+		}
+		return 0, len(v)
+	}
+	skip := 0
+	if m := authScheme.FindStringIndex(v); m != nil {
+		skip = m[1]
+	}
+	if end := strings.IndexFunc(v[skip:], func(r rune) bool {
+		return unicode.IsSpace(r) || r == '"' || r == '\''
+	}); end >= 0 {
+		return 0, skip + end
+	}
+	return 0, len(v)
 }
 
 // Error returns err with String applied to its message, for logging errors

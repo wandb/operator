@@ -10,6 +10,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+const digest = "c6841b3a895f1444a6738b5d04564a57e860ce42f8519c3be807fb6d9bee7888"
+
 func TestValues(t *testing.T) {
 	tests := []struct {
 		name string
@@ -71,12 +73,56 @@ func TestValues(t *testing.T) {
 				"unescape": "mysql://wandb:hun@ter/2@mysql:3306/wandb",
 				"repo":     "https://ghp_abc@github.com/wandb/operator",
 				"notes":    "primary mysql://u:hunter2@db:3306 replica mysql://u:hunter2@db2:3306",
+				"digits":   "mysql://wandb:2024/hunter2@mysql:3306/wandb",
+				"s3":       "s3://AKIA:123/456@bucket",
+				"list":     "mysql://u:hunter1@db1:3306,mysql://u:hunter2@db2:3306",
+				"query":    "https://proxy.local/connect?target=mysql://u:hunter2@db:3306",
+				"pathAt":   "https://github.com/wandb/operator@v1",
 			},
 			want: map[string]interface{}{
 				"engine":   "clickhouse://***@clickhouse:9000",
 				"unescape": "mysql://***@mysql:3306/wandb",
 				"repo":     "https://***@github.com/wandb/operator",
 				"notes":    "primary mysql://***@db:3306 replica mysql://***@db2:3306",
+				"digits":   "mysql://***@mysql:3306/wandb",
+				"s3":       "s3://***@bucket",
+				"list":     "mysql://***@db1:3306,mysql://***@db2:3306",
+				"query":    "https://proxy.local/connect?target=mysql://***@db:3306",
+				"pathAt":   "https://***@v1",
+			},
+		},
+		{
+			// The chart's GORILLA_HISTORY_STORE format, where a path-bearing
+			// URL precedes the DSN.
+			name: "URL list after a path",
+			in: map[string]interface{}{
+				"env": map[string]interface{}{
+					"GORILLA_HISTORY_STORE": "http://wandb-parquet:8087/_goRPC_,mysql://wandb:hunter2@mysql:3306/wandb_local",
+				},
+				"extraEnv": []interface{}{map[string]interface{}{
+					"name":  "GORILLA_HISTORY_STORE",
+					"value": "grpc://wandb-parquet-grpc:8088,http://wandb-parquet:8087/_goRPC_,mysql://wandb:hunter2@mysql:3306/wandb_local",
+				}},
+			},
+			want: map[string]interface{}{
+				"env": map[string]interface{}{
+					"GORILLA_HISTORY_STORE": "http://wandb-parquet:8087/_goRPC_,mysql://***@mysql:3306/wandb_local",
+				},
+				"extraEnv": []interface{}{map[string]interface{}{
+					"name":  "GORILLA_HISTORY_STORE",
+					"value": "grpc://wandb-parquet-grpc:8088,http://wandb-parquet:8087/_goRPC_,mysql://***@mysql:3306/wandb_local",
+				}},
+			},
+		},
+		{
+			name: "digest refs",
+			in: map[string]interface{}{
+				"plain":  "oci://registry.local:5000/charts/wandb@sha256:" + digest,
+				"authed": "oci://robot:hunter2@registry.local:5000/charts/wandb@sha256:" + digest,
+			},
+			want: map[string]interface{}{
+				"plain":  "oci://registry.local:5000/charts/wandb@sha256:" + digest,
+				"authed": "oci://***@registry.local:5000/charts/wandb@sha256:" + digest,
 			},
 		},
 		{
@@ -88,8 +134,7 @@ func TestValues(t *testing.T) {
 				"unset":    nil,
 				"password": "",
 				"image":    map[string]interface{}{"repository": "wandb/local", "tag": "0.70.0"},
-				"chart":    "oci://registry.local:5000/charts/wandb@sha256:abc",
-				"source":   "https://github.com/wandb/operator@v1",
+				"chart":    "oci://registry.local:5000/charts/wandb:1.0.0",
 			}},
 			want: map[string]interface{}{"global": map[string]interface{}{
 				"host":     "https://wandb.example.com",
@@ -98,8 +143,7 @@ func TestValues(t *testing.T) {
 				"unset":    nil,
 				"password": "",
 				"image":    map[string]interface{}{"repository": "wandb/local", "tag": "0.70.0"},
-				"chart":    "oci://registry.local:5000/charts/wandb@sha256:abc",
-				"source":   "https://github.com/wandb/operator@v1",
+				"chart":    "oci://registry.local:5000/charts/wandb:1.0.0",
 			}},
 		},
 		{
@@ -145,7 +189,16 @@ func TestString(t *testing.T) {
 		{"password: hunter2\nhost: db", "password: ***\nhost: db"},
 		{`{"apiKey":"hunter2"}`, `{"apiKey":"***"}`},
 		{"Authorization=Bearer hunter2", "Authorization=***"},
-		{"https://api.example.com/v1?token=hunter2&page=2", "https://api.example.com/v1?token=***&page=2"},
+		{"https://api.example.com/v1?token=hunter2&page=2", "https://api.example.com/v1?token=***"},
+		{"password=pa&ss,wo;rd --verbose", "password=*** --verbose"},
+		{"Server=db;Password=pa;ss;Database=wandb", "Server=db;Password=***"},
+		{"token: 'pa ss' # note", "token: '***' # note"},
+		{`password: "pa \"ss\" word"`, `password: "***"`},
+		{"password: 'it''s a secret'", "password: '***'"},
+		{"auth:\n  password: pa ss, word\n  user: wandb", "auth:\n  password: ***\n  user: wandb"},
+		{`{"password": "pa ss", "user": "wandb"}`, `{"password": "***", "user": "wandb"}`},
+		{`password: "unterminated pa ss`, `password: "***`},
+		{"password: \"\"", "password: \"\""},
 		{"license eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ3YW5kYiJ9.c2lnbmF0dXJl", "license ***"},
 		{"-----BEGIN RSA PRIVATE KEY-----\nMIIE\n-----END RSA PRIVATE KEY-----", Mask},
 		{"https://charts.wandb.ai", "https://charts.wandb.ai"},
@@ -168,5 +221,25 @@ func TestError(t *testing.T) {
 	}
 	if Error(nil) != nil {
 		t.Fatal("Error(nil) != nil")
+	}
+}
+
+// Helm apply and prune errors can quote rendered values; the controller logs
+// them through Error.
+func TestErrorMasksApplyErrors(t *testing.T) {
+	tests := []struct{ in, want string }{
+		{
+			`UPGRADE FAILED: Deployment.apps "wandb-app" is invalid: spec.template.spec.containers[0].env[3].value: Invalid value: "http://wandb-parquet:8087/_goRPC_,mysql://wandb:hunter2@mysql:3306/wandb_local"`,
+			`UPGRADE FAILED: Deployment.apps "wandb-app" is invalid: spec.template.spec.containers[0].env[3].value: Invalid value: "http://wandb-parquet:8087/_goRPC_,mysql://***@mysql:3306/wandb_local"`,
+		},
+		{
+			"template: operator-wandb/templates/secret.yaml:7:12: executing \"secret.yaml\": error converting YAML to JSON: password: \"pa ss\"\n",
+			"template: operator-wandb/templates/secret.yaml:7:12: executing \"secret.yaml\": error converting YAML to JSON: password: \"***\"\n",
+		},
+	}
+	for _, tt := range tests {
+		if got := Error(errors.New(tt.in)).Error(); got != tt.want {
+			t.Errorf("Error(%q) = %q, want %q", tt.in, got, tt.want)
+		}
 	}
 }
