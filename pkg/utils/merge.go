@@ -88,5 +88,5 @@ func MergeMapString(a, b map[string]interface{}) (map[string]interface{}, error)
 		return m, nil
 	}
 
-	return nil, fmt.Errorf("failed to merge map[string]interface{}: %v", mr)
+	return nil, fmt.Errorf("failed to merge map[string]interface{}: got %T", mr)
 }

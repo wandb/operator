@@ -42,6 +42,7 @@ import (
 
 	apiv1 "github.com/wandb/operator/api/v1"
 	"github.com/wandb/operator/internal/controller/ctrlqueue"
+	"github.com/wandb/operator/pkg/redact"
 	"github.com/wandb/operator/pkg/wandb/spec"
 	"github.com/wandb/operator/pkg/wandb/spec/channel/deployer"
 	"github.com/wandb/operator/pkg/wandb/spec/operator"
@@ -108,10 +109,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrlqueue.RequeueWithError(err)
 	}
 
-	log.Info(
-		"Found Weights & Biases instance, processing the spec...",
-		"Spec", wandb.Spec,
-	)
+	log.Info("Found Weights & Biases instance, processing the spec...")
 
 	r.Recorder.Event(wandb, corev1.EventTypeNormal, "Reconciling", "Reconciling")
 
@@ -248,7 +246,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				return ctrlqueue.Requeue(desiredSpec)
 			} else {
 				diff := currentActiveSpec.DiffValues(desiredSpec)
-				log.Info("Changes found", "diff", diff)
+				log.Info("Changes found", "diff", redact.Values(diff))
 			}
 		}
 
@@ -278,7 +276,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			if err := desiredSpec.Apply(ctx, r.Client, wandb, r.Scheme); err != nil {
 				statusManager.Set(status.InvalidConfig)
 				r.Recorder.Event(wandb, corev1.EventTypeNormal, "ApplyFailed", "Invalid config for apply")
-				log.Error(err, "Failed to apply config changes.")
+				log.Error(redact.Error(err), "Failed to apply config changes.")
 				return ctrlqueue.Requeue(desiredSpec)
 			}
 		}
@@ -309,7 +307,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			log.Info("Deprovisioning", "release", reflect.TypeOf(desiredSpec.Chart))
 			if !r.DryRun {
 				if err := desiredSpec.Prune(ctx, r.Client, wandb, r.Scheme); err != nil {
-					log.Error(err, "Failed to cleanup deployment.")
+					log.Error(redact.Error(err), "Failed to cleanup deployment.")
 					return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 				} else {
 					log.Info("Successfully cleaned up resources")
