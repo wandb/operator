@@ -77,6 +77,14 @@ func TestRegisterConfigOnControllerRuntimeRegistry(t *testing.T) {
 	if err := RegisterConfig(ctrlmetrics.Registry, false, true); err != nil {
 		t.Fatalf("RegisterConfig() error = %v", err)
 	}
+	// Unregister matches collectors by metric name, so bare gauges suffice.
+	t.Cleanup(func() {
+		for _, name := range configMetricNames {
+			if !ctrlmetrics.Registry.Unregister(prometheus.NewGauge(prometheus.GaugeOpts{Name: name})) {
+				t.Errorf("Unregister(%q) = false", name)
+			}
+		}
+	})
 	if n, err := testutil.GatherAndCount(ctrlmetrics.Registry, configMetricNames...); err != nil || n != len(configMetricNames) {
 		t.Fatalf("GatherAndCount() = %d, %v; want %d, nil", n, err, len(configMetricNames))
 	}
