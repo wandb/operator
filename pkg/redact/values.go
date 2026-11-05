@@ -131,18 +131,33 @@ func String(s string) string {
 // maskUserinfo masks from each scheme:// to the last @ before whitespace, a
 // quote or the next scheme://. Each URL in a list is masked on its own, and an
 // unescaped @ or / in a password is still covered. An @ that starts a digest is
-// skipped, so the userinfo is the part before the previous @, if any.
+// skipped, so the userinfo is the part before the previous @, if any. A
+// scheme:// counts as the start of another URL only after a separator, and a
+// URL whose authority is still open (user:pa,ab://cd@host) keeps going past
+// it, so a password containing one is masked whole. A quote ends a URL only
+// when the same quote opened it.
 func maskUserinfo(s string) string {
-	schemes := urlScheme.FindAllStringIndex(s, -1)
+	var schemes [][]int
+	for _, m := range urlScheme.FindAllStringIndex(s, -1) {
+		if m[0] == 0 || strings.ContainsRune(urlSeparators, rune(s[m[0]-1])) {
+			schemes = append(schemes, m)
+		}
+	}
 	var out strings.Builder
-	last := 0
+	last, pending := 0, -1
 	for i, m := range schemes {
 		start, end := m[1], len(s)
 		if i+1 < len(schemes) {
 			end = schemes[i+1][0]
 		}
-		if stop := strings.IndexFunc(s[start:end], isURLDelimiter); stop >= 0 {
+		var quote byte
+		if m[0] > 0 && (s[m[0]-1] == '"' || s[m[0]-1] == '\'') {
+			quote = s[m[0]-1]
+		}
+		closed := false
+		if stop := urlEnd(s[start:end], quote); stop >= 0 {
 			end = start + stop
+			closed = true
 		}
 		rest := s[start:end]
 		at := strings.LastIndexByte(rest, '@')
@@ -150,9 +165,20 @@ func maskUserinfo(s string) string {
 			at = strings.LastIndexByte(rest[:at], '@')
 		}
 		if at < 0 {
+			if !closed && strings.Contains(rest, ":") && !strings.Contains(rest, "/") {
+				if pending < 0 {
+					pending = start
+				}
+			} else {
+				pending = -1
+			}
 			continue
 		}
-		out.WriteString(s[last:start])
+		from := start
+		if pending >= 0 {
+			from, pending = pending, -1
+		}
+		out.WriteString(s[last:from])
 		out.WriteString(Mask)
 		last = start + at
 	}
@@ -160,8 +186,23 @@ func maskUserinfo(s string) string {
 	return out.String()
 }
 
-func isURLDelimiter(r rune) bool {
-	return unicode.IsSpace(r) || strings.ContainsRune(`"'<>`, r)
+// urlSeparators can precede a URL that follows another one in a list, query or
+// sentence.
+const urlSeparators = ",;=|([{<\"' \t\r\n"
+
+// urlEnd returns the index where a URL ends in s: whitespace, an angle
+// bracket, or the unescaped closing quote when the URL was quoted.
+func urlEnd(s string, quote byte) int {
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == '<' || c == '>' {
+			return i
+		}
+		if quote != 0 && c == quote && (i == 0 || s[i-1] != '\\') {
+			return i
+		}
+	}
+	return -1
 }
 
 func maskAssignments(s string) string {

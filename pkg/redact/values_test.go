@@ -202,6 +202,12 @@ func TestString(t *testing.T) {
 		{"license eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ3YW5kYiJ9.c2lnbmF0dXJl", "license ***"},
 		{"-----BEGIN RSA PRIVATE KEY-----\nMIIE\n-----END RSA PRIVATE KEY-----", Mask},
 		{"https://charts.wandb.ai", "https://charts.wandb.ai"},
+		{"clickhouse://user:ab://cd@host:9440/db", "clickhouse://***@host:9440/db"},
+		{"clickhouse://user:a://b://c@host/db", "clickhouse://***@host/db"},
+		{"https://charts.wandb.ai,clickhouse://u:p@h/db", "https://charts.wandb.ai,clickhouse://***@h/db"},
+		{"clickhouse://user:p/q://r@host/db", "clickhouse://***@host/db"},
+		{"clickhouse://u:p@h/db,clickhouse://v:q@i/db", "clickhouse://***@h/db,clickhouse://***@i/db"},
+		{"see https://charts.wandb.ai then clickhouse://u:p@h/db", "see https://charts.wandb.ai then clickhouse://***@h/db"},
 	}
 	for _, tt := range tests {
 		if got := String(tt.in); got != tt.want {
