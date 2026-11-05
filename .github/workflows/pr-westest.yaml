@@ -47,6 +47,7 @@ jobs:
         scenario:
           - local-kind-ingress
           - local-kind-gateway
+          - local-kind-external
           - local-kind-oidc-pkce
           - local-kind-oidc-implicit
           - local-kind-proxy
@@ -54,7 +55,6 @@ jobs:
           - local-kind-proxy-tls
           # Airgap scenarios are temporarily disabled because dependency
           # mirroring hits Docker Hub's anonymous pull limits.
-          # External datastores are disabled pending a separate investigation.
     steps:
       - name: Checkout PR merge commit
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -82,7 +82,7 @@ jobs:
         uses: ./.github/actions/westest-run
         with:
           scenario: ${{ matrix.scenario }}
-          image-tag: "0.7.2"
+          image-tag: "0.8.0"
           operator-repo: ${{ github.workspace }}
           app-version: ${{ needs.setup.outputs.app_version }}
           app-manifest-digest: ${{ needs.setup.outputs.app_manifest_digest }}

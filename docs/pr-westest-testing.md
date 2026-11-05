@@ -1,10 +1,11 @@
 # PR WESTest testing
 
-[The PR workflow](../.github/workflows/pr-westest.yaml) runs seven local Kind
+[The PR workflow](../.github/workflows/pr-westest.yaml) runs eight local Kind
 scenarios against the PR merge commit's operator checkout:
 
 - `local-kind-ingress`
 - `local-kind-gateway`
+- `local-kind-external`
 - `local-kind-oidc-pkce`
 - `local-kind-oidc-implicit`
 - `local-kind-proxy`
@@ -13,8 +14,6 @@ scenarios against the PR merge commit's operator checkout:
 
 `local-kind-airgap` and `local-kind-airgap-enforce` are temporarily excluded
 because mirroring their dependencies hits Docker Hub's anonymous pull limits.
-`local-kind-external` is also temporarily excluded while its provisioning
-failure is investigated separately.
 
 Non-draft PRs targeting `main` run when opened, updated, reopened, or
 marked ready for review. New updates or conversion back to draft cancel older
@@ -29,7 +28,7 @@ application consistent across the matrix while testing the local operator.
 Each scenario gets an `ubuntu-latest-8-cores` runner, with up to five scenarios
 in parallel. The workflow prepares the amd64 Watchtower binary and Grafana
 plugins required by the operator Dockerfile, then mounts the checkout read-only
-into the public WESTest `0.7.2` container.
+into the public WESTest `0.8.0` container.
 
 The shared [runner action](../.github/actions/westest-run/action.yml) passes
 `--operator-repo /src/operator` to both `westest config` and `westest run` and
