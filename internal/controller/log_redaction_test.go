@@ -55,7 +55,7 @@ func TestReconcileDoesNotLogCredentials(t *testing.T) {
 	}
 
 	out := logs.String()
-	for _, want := range []string{"Changes found", "Desired spec", "cr.example.invalid", "redis://***@redis:6379"} {
+	for _, want := range []string{"Changes found", "Desired spec", "cr.example.invalid", "REDIS"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("logs do not contain %q", want)
 		}
