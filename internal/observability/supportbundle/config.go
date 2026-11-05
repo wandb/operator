@@ -3,16 +3,14 @@ package supportbundle
 import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
-	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
+	sb "github.com/wandb/operator/pkg/observability/supportbundle"
 	"k8s.io/utils/ptr"
 )
 
 const (
-	supportBundleImageRepository = "us-docker.pkg.dev/wandb-production/public/wandb/lumen"
-	DefaultSupportBundleVersion  = "0.4.10"
-	Component                    = "support-bundle"
-	supportBundleNameSuffix      = "-support-bundle"
-	collectorCronJobSuffix       = "-support-bundle-collector"
+	Component               = "support-bundle"
+	supportBundleNameSuffix = "-support-bundle"
+	collectorCronJobSuffix  = "-support-bundle-collector"
 
 	supportBundleCronJobNameBudget = 52
 
@@ -28,16 +26,12 @@ func Enabled(wandb *apiv2.WeightsAndBiases) bool {
 }
 
 func Version(wandb *apiv2.WeightsAndBiases) string {
-	if v := wandb.Spec.SupportBundle.Version; v != "" {
-		return v
-	}
-	return DefaultSupportBundleVersion
+	return sb.Version(wandb)
 }
 
 // Image retrieves the image with a given repo and version
 func Image(wandb *apiv2.WeightsAndBiases) string {
-	ref := serverManifest.ImageRef{Repository: supportBundleImageRepository, Tag: Version(wandb)}
-	return ref.GetImage(wandb.Spec.Global.ImageRegistry)
+	return sb.Image(wandb)
 }
 
 // Name creates the shared namespaced resource name
