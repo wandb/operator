@@ -1,4 +1,4 @@
-"""Offline regression tests for nightly selection and the Docker credential boundary."""
+"""Offline regression tests for WESTest sources, selection, and Docker credentials."""
 
 import hashlib
 import importlib.util
@@ -253,6 +253,123 @@ class RunnerTests(unittest.TestCase):
         self.assertIn("type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock", args)
         self.assertNotIn("WESTEST_CLOUD_OPT_IN=1", args)
         self.assertFalse((self.root / "auth").exists())
+
+    def prepare_operator_checkout(self):
+        checkout = self.root / "operator checkout"
+        (checkout / "deploy/operator").mkdir(parents=True)
+        (checkout / "Dockerfile").write_text("FROM scratch\n")
+        (checkout / "deploy/operator/Chart.yaml").write_text("name: operator\n")
+        self.env.update(OPERATOR_VERSION="", OPERATOR_REPO=str(checkout), GITHUB_SHA="abc123")
+        return checkout
+
+    def test_airgap_shares_host_paths_with_the_sibling_registry(self):
+        checkout = self.prepare_operator_checkout()
+        for scenario in ["local-kind-airgap", "local-kind-airgap-enforce"]:
+            with self.subTest(scenario=scenario):
+                self.env.update(SCENARIO=scenario, WESTEST_IMAGE_TAG="0.7.2")
+                with patch.object(runner.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as command:
+                    self.assertEqual(runner.run(self.env), 0)
+                work = (self.root / f"westest-{scenario}/work").resolve()
+                calls = [call.args[0] for call in command.call_args_list]
+                config = next(args for args in calls if "config" in args)
+                run = next(args for args in calls if args[0] == "timeout")
+                for args in [config, run]:
+                    self.assertIn(f"type=bind,src={work},dst={work}", args)
+                    self.assertEqual(args[args.index("--workdir") + 1], str(work))
+                    self.assertIn(f"WESTEST_ARTIFACT_ROOT={work / 'artifacts'}", args)
+                    self.assertIn(f"WESTEST_WSM_REPO={work}", args)
+                    self.assertIn(f"XDG_CACHE_HOME={work / 'cache'}", args)
+                    self.assertIn("type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock", args)
+                    self.assertIn(f"type=bind,src={checkout.resolve()},dst=/src/operator,readonly", args)
+                    self.assertEqual(args[-4:], ["--operator-repo", "/src/operator",
+                                                 "--param", f"appVersion={self.env['APP_VERSION']}"])
+
+    def test_non_airgap_scenarios_keep_the_existing_work_mount(self):
+        for provider in ["local", "aws"]:
+            with self.subTest(provider=provider):
+                args = runner.docker_args(self.root, provider, self.env)
+                self.assertIn(f"type=bind,src={self.root / 'work'},dst=/work", args)
+                self.assertIn("WESTEST_ARTIFACT_ROOT=/work/artifacts", args)
+                self.assertNotIn("--workdir", args)
+                self.assertFalse(any(arg.startswith("WESTEST_WSM_REPO=") for arg in args))
+                self.assertFalse(any(arg.startswith("XDG_CACHE_HOME=") for arg in args))
+
+    def test_checkout_builds_locally_instead_of_using_a_published_version(self):
+        checkout = self.prepare_operator_checkout()
+        with patch.object(runner.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as command:
+            self.assertEqual(runner.run(self.env), 0)
+        calls = [call.args[0] for call in command.call_args_list]
+        config = next(args for args in calls if "config" in args)
+        run = next(args for args in calls if args[0] == "timeout")
+        for args in [config, run]:
+            self.assertEqual(args[-4:], ["--operator-repo", "/src/operator",
+                                         "--param", f"appVersion={self.env['APP_VERSION']}"])
+            self.assertIn(f"type=bind,src={checkout.resolve()},dst=/src/operator,readonly", args)
+            self.assertIn("WESTEST_OPERATOR_BUILD_LOCAL=true", args)
+            self.assertFalse(any("operatorVersion=" in arg for arg in args))
+        self.assertEqual(run[:4], ["timeout", "--signal=INT", "--kill-after=11m", "60m"])
+
+        root = self.root / "westest-local-kind-ingress"
+        step_summary = self.root / "step-summary"
+        with patch.dict(os.environ, {"GITHUB_STEP_SUMMARY": str(step_summary)}):
+            with patch.object(runner.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)):
+                runner.collect(root)
+        summary = json.loads((root / "public/summary.json").read_text())
+        self.assertEqual(summary["operator_source"], "checkout")
+        self.assertEqual(summary["operator_revision"], "abc123")
+        self.assertEqual(summary["operator_version"], "")
+        self.assertEqual(summary["app_version"], self.env["APP_VERSION"])
+        self.assertEqual(summary["app_manifest_digest"], self.env["APP_MANIFEST_DIGEST"])
+        self.assertIn("Operator: checkout abc123", step_summary.read_text())
+        self.assertNotIn(str(checkout), json.dumps(summary))
+
+    def test_checkout_mode_rejects_operator_upgrades(self):
+        self.prepare_operator_checkout()
+        self.env["SCENARIO"] = "local-kind-operator-upgrade"
+        with patch.object(runner.subprocess, "run") as command:
+            with self.assertRaisesRegex(ValueError, "require published chart versions"):
+                runner.run(self.env)
+            command.assert_not_called()
+
+    def test_operator_source_must_be_unambiguous(self):
+        for version, repo in [("", ""), ("2.0.0", "/operator")]:
+            with self.subTest(version=version, repo=repo):
+                self.env.update(OPERATOR_VERSION=version, OPERATOR_REPO=repo)
+                with patch.object(runner.subprocess, "run") as command:
+                    with self.assertRaisesRegex(ValueError, "exactly one"):
+                        runner.run(self.env)
+                    command.assert_not_called()
+                self.assertFalse((self.root / "westest-local-kind-ingress").exists())
+
+    def test_checkout_mode_rejects_cloud_before_preparing_credentials(self):
+        self.prepare_operator_checkout()
+        for provider, scenario in [("aws", "aws-eks-s3-irsa"), ("gcp", "gcp-gke-gcs-hmac")]:
+            with self.subTest(provider=provider):
+                self.env.update(PROVIDER=provider, SCENARIO=scenario)
+                with patch.object(runner.subprocess, "run") as command:
+                    with self.assertRaisesRegex(ValueError, "only run with local scenarios"):
+                        runner.run(self.env)
+                    command.assert_not_called()
+                self.assertFalse((self.root / f"westest-{scenario}").exists())
+
+    def test_invalid_checkout_fails_before_docker_or_credentials(self):
+        checkout = self.prepare_operator_checkout()
+        for required in ["Dockerfile", "deploy/operator/Chart.yaml"]:
+            with self.subTest(required=required):
+                path = checkout / required
+                original = path.read_text()
+                path.unlink()
+                with patch.object(runner.subprocess, "run") as command:
+                    with self.assertRaisesRegex(ValueError, "checkout is missing"):
+                        runner.run(self.env)
+                    command.assert_not_called()
+                path.write_text(original)
+        self.env["OPERATOR_REPO"] = str(self.root / "operator,readonly")
+        with patch.object(runner.subprocess, "run") as command:
+            with self.assertRaisesRegex(ValueError, "cannot contain commas"):
+                runner.run(self.env)
+            command.assert_not_called()
+        self.assertFalse((self.root / "westest-local-kind-ingress").exists())
 
     def test_aws_uses_private_profile_with_session_token_and_boundary(self):
         args = runner.docker_args(self.root, "aws", self.env)
