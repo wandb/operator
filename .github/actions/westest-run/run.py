@@ -208,7 +208,7 @@ def redact_diagnostic(text):
 
 
 def stage_external_diagnostics(root, public):
-    # Exact WESTest 0.7.2 capture names, plus the four datastore pod log names.
+    # Exact WESTest 0.8.0 capture names, plus the four datastore pod log names.
     # Never recursively copy the artifact tree: it also contains credentials.
     patterns = [f"*/cluster/{name}" for name in (
         "nodes.txt", "nodes.describe.txt", "pods.txt", "pvc.txt", "events.txt",

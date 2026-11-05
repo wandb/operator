@@ -19,7 +19,7 @@ application consistent across the matrix while testing the local operator.
 Each scenario gets an `ubuntu-latest-8-cores` runner, with up to five scenarios
 in parallel. The workflow prepares the amd64 Watchtower binary and Grafana
 plugins required by the operator Dockerfile, then mounts the checkout read-only
-into the public WESTest `0.7.2` container.
+into the public WESTest `0.8.0` container.
 
 The shared [runner action](../.github/actions/westest-run/action.yml) passes
 `--operator-repo /src/operator` to both `westest config` and `westest run` and
@@ -48,7 +48,7 @@ cleanup, within a 90-minute job limit. Failures do not cancel sibling scenarios.
 The action retains automatic teardown and uploads `summary.json`, identifying
 the operator checkout by commit SHA. This branch enables the action's
 `include-external-diagnostics` input, which also stages the following WESTest
-0.7.2 captures under `diagnostics/<run-id>/` in the `westest-local-kind-external`
+0.8.0 captures under `diagnostics/<run-id>/` in the `westest-local-kind-external`
 artifact, including after a provisioning failure:
 
 - Cluster node status/descriptions, pod and PVC lists, and events.
