@@ -2,16 +2,13 @@ name: Nightly WESTest
 
 # End-to-end testing of the operator via wandb/westest. Builds an operator
 # image+chart and runs local Kind scenarios, plus all seven GCP end-to-end scenarios on main.
-#   - schedule                    -> nightly build (2.0.0-nightly-<timestamp>)
+#   - schedule + new commit       -> nightly build (2.0.0-nightly-<timestamp>)
 #   - manual (workflow_dispatch)  -> dev build (2.0.0-dev-[<tag>-]<timestamp>),
 #                                    builds the dispatched branch; set `dev_tag`
 #                                    to label it.
 #   - manual + `operator_version` -> skip the build and test that already-published
 #                                    chart version.
 # See docs/nightly-westest-testing.md for setup and first-run validation.
-#
-# Do NOT enable the schedule trigger until the prerequisites in
-# docs/nightly-westest-testing.md are met and cloud cleanup is validated.
 
 on:
   workflow_dispatch:
@@ -49,8 +46,8 @@ on:
         type: string
         required: false
         default: ""
-  # schedule:
-  #   - cron: "0 7 * * *" # 07:00 UTC daily
+  schedule:
+    - cron: "0 7 * * *" # 07:00 UTC daily; unchanged operator commits skip paid work.
 
 concurrency:
   # Serialize per ref so dev builds on different branches don't block each other;
@@ -65,9 +62,30 @@ env:
   OPERATOR_UPGRADE_FROM_VERSION: "2.0.0-beta.8"
 
 jobs:
+  changes:
+    # This name is also used by nightly-westest-changes.py to read past decisions.
+    name: Check nightly changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      should_run: ${{ steps.changes.outputs.should_run }}
+      reason: ${{ steps.changes.outputs.reason }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Compare with the previous scheduled decision
+        id: changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 hack/scripts/nightly-westest-changes.py
+
   build:
     # Skip the build when testing an already-published chart version.
-    if: ${{ inputs.operator_version == '' }}
+    needs: changes
+    if: ${{ needs.changes.outputs.should_run == 'true' && inputs.operator_version == '' }}
     uses: ./.github/workflows/nightly-build.yaml
     permissions:
       contents: read
@@ -80,9 +98,9 @@ jobs:
 
   setup:
     name: Resolve version & matrix
-    needs: build
+    needs: [changes, build]
     # Run when the build succeeded OR was skipped (published-version mode).
-    if: ${{ always() && needs.build.result != 'failure' && needs.build.result != 'cancelled' }}
+    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.should_run == 'true' && (needs.build.result == 'success' || (needs.build.result == 'skipped' && inputs.operator_version != '')) }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -200,8 +218,9 @@ jobs:
           app-manifest-digest: ${{ needs.setup.outputs.app_manifest_digest }}
 
   report:
-    needs: [build, setup, local-test, cloud-test]
-    if: always()
+    needs: [changes, build, setup, local-test, cloud-test]
+    # No extra report runner or notifications on an unchanged scheduled night.
+    if: ${{ always() && (needs.changes.result == 'failure' || needs.changes.outputs.should_run == 'true') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -209,9 +228,10 @@ jobs:
       - name: Summarize
         run: |
           echo "build=${{ needs.build.result }} chart=${{ needs.setup.outputs.chart_version }}"
+          echo "change-check=${{ needs.changes.result }}"
           echo "local=${{ needs.local-test.result }} cloud=${{ needs.cloud-test.result }}"
       - name: Notify on failure
-        if: ${{ needs.build.result == 'failure' || needs.setup.result == 'failure' || needs.local-test.result == 'failure' || needs.cloud-test.result == 'failure' }}
+        if: ${{ needs.changes.result == 'failure' || needs.build.result == 'failure' || needs.setup.result == 'failure' || needs.local-test.result == 'failure' || needs.cloud-test.result == 'failure' }}
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.WESTEST_SLACK_WEBHOOK }}
         run: |
