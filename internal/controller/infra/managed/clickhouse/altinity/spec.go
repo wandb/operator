@@ -9,7 +9,6 @@ import (
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/infra/managed/clickhouse/altinity/keeper"
 	"github.com/wandb/operator/internal/controller/infra/objectstore"
-	"github.com/wandb/operator/internal/logx"
 	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
 	chtypes "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/common/types"
@@ -20,7 +19,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
-	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 const (
@@ -156,11 +154,6 @@ func ToServiceAccount(
 		// token; static access keys don't, so only automount when creds are ambient.
 		AutomountServiceAccountToken: ptr.To(!objStorage.HasStaticCredentials()),
 	}
-	if wandb.Namespace == spec.Namespace {
-		if err := ctrl.SetControllerReference(wandb, serviceAccount, scheme); err != nil {
-			return nil, fmt.Errorf("failed to set owner reference on ClickHouse ServiceAccount: %w", err)
-		}
-	}
 	return serviceAccount, nil
 }
 
@@ -186,7 +179,6 @@ func ToClickHouseVendorSpec(
 	waitForObjectStore bool,
 	mfst manifest.Manifest,
 ) (*v1.ClickHouseInstallation, error) {
-	_, log := logx.WithSlog(ctx, logx.ClickHouse)
 
 	if spec == nil {
 		return nil, nil
@@ -240,10 +232,8 @@ func ToClickHouseVendorSpec(
 		serverSettings.Set("prometheus/status_info", v1.NewSettingScalar("true"))
 	}
 
-	reclaimPolicy := v1.PVCReclaimPolicyUnspecified
-	if wandb.GetRetentionPolicy(spec.ManagedInfraSpec).OnDelete == apiv2.PurgeOnDelete {
-		reclaimPolicy = v1.PVCReclaimPolicyDelete
-	}
+	// The retention lifecycle deletes verified claims after workloads stop.
+	reclaimPolicy := v1.PVCReclaimPolicyRetain
 
 	clickHouseImage := ClickHouseImage(mfst.Clickhouse["default"].Images["server"], wandb.Spec.Global.ImageRegistry)
 	podSpec := corev1.PodSpec{
@@ -346,10 +336,6 @@ func ToClickHouseVendorSpec(
 	}
 
 	// Set owner reference
-	if err := ctrl.SetControllerReference(wandb, chi, scheme); err != nil {
-		log.Error("failed to set owner reference on CHI CR", logx.ErrAttr(err))
-		return nil, fmt.Errorf("failed to set owner reference: %w", err)
-	}
 
 	return chi, nil
 }

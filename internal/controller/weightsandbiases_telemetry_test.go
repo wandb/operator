@@ -40,9 +40,7 @@ spec:
 		obj := &unstructured.Unstructured{}
 		Expect(yaml.Unmarshal([]byte(doc), &obj.Object)).To(Succeed())
 		Expect(k8sClient.Create(ctx, obj)).Should(Succeed())
-		DeferCleanup(func() {
-			Expect(k8sClient.Delete(ctx, obj)).Should(Succeed())
-		})
+		// Suite shutdown cleans up admission-only objects without migrated inventory.
 
 		admitted := &apiv2.WeightsAndBiases{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, admitted)).Should(Succeed())

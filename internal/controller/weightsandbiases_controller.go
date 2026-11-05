@@ -24,6 +24,7 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
 	v2 "github.com/wandb/operator/internal/controller/reconciler"
+	"github.com/wandb/operator/internal/controller/retention"
 	"github.com/wandb/operator/internal/observability/supportbundle"
 	"github.com/wandb/operator/internal/observability/telemetry"
 	"github.com/wandb/operator/pkg/utils"
@@ -48,6 +49,7 @@ import (
 // WeightsAndBiasesReconciler reconciles a WeightsAndBiases object
 type WeightsAndBiasesReconciler struct {
 	client.Client
+	APIReader          client.Reader
 	IsAirgapped        bool
 	DeployerClient     deployer.DeployerInterface
 	Scheme             *runtime.Scheme
@@ -58,7 +60,7 @@ type WeightsAndBiasesReconciler struct {
 	TelemetryConfigRef types.NamespacedName
 }
 
-//+kubebuilder:rbac:groups="",resources=configmaps;events;persistentvolumeclaims;secrets;serviceaccounts;services,verbs=update;delete;get;list;create;patch;watch
+//+kubebuilder:rbac:groups="",resources=configmaps;events;persistentvolumeclaims;secrets;serviceaccounts;services;pods,verbs=update;delete;get;list;create;patch;watch
 //+kubebuilder:rbac:groups="",resources=endpoints;nodes;nodes/spec;nodes/stats;nodes/metrics;nodes/proxy;namespaces;namespaces/status;replicationcontrollers;replicationcontrollers/status;resourcequotas;pods;pods/log;pods/status,verbs=get;list;watch
 //+kubebuilder:rbac:groups=metrics.k8s.io,resources=pods,verbs=get;list
 //+kubebuilder:rbac:groups=apps,resources=deployments/status;daemonsets/status;replicasets/status;statefulsets/status,verbs=get
@@ -80,6 +82,7 @@ type WeightsAndBiasesReconciler struct {
 //+kubebuilder:rbac:groups=seaweed.seaweedfs.com,resources=seaweeds/status,verbs=get
 //+kubebuilder:rbac:groups=moco.cybozu.com,resources=mysqlclusters,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=moco.cybozu.com,resources=mysqlclusters/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=minio.min.io,resources=tenants,verbs=get;list;watch;update;patch;delete
 //+kubebuilder:rbac:groups=operator.victoriametrics.com,resources=vmagents;vmalerts;vmnodescrapes;vmpodscrapes;vmrules;vmservicescrapes;vmsingles;vlsingles;vtsingles,verbs=get;list;watch
 //+kubebuilder:rbac:groups=operator.victoriametrics.com,resources=vmagents/status;vmalerts/status;vmsingles/status;vlsingles/status;vtsingles/status,verbs=get
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways;httproutes;backendtlspolicies,verbs=get;list;watch;create;update;patch;delete
@@ -128,7 +131,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, err
 	}
 
-	return v2.Reconcile(ctx, r.Client, r.Recorder, wandb, telemetryConfig)
+	return v2.Reconcile(ctx, r.Client, r.Recorder, wandb, telemetryConfig, r.APIReader)
 }
 
 // Delete was taken from original v1 reconciler
@@ -138,6 +141,7 @@ func (r *WeightsAndBiasesReconciler) Delete(e event.DeleteEvent) bool {
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.APIReader = mgr.GetAPIReader()
 	var b = ctrl.NewControllerManagedBy(mgr).
 		For(&apiv2.WeightsAndBiases{}).
 		// Applications carry plain (non-controller) owner refs; without
@@ -163,8 +167,31 @@ func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			builder.WithPredicates(predicate.NewPredicateFuncs(r.isTelemetryConfig)),
 		)
 	}
+	for _, gvk := range retention.WatchedKinds() {
+		obj, err := r.Scheme.New(gvk)
+		if err != nil {
+			continue
+		}
+		if resource, ok := obj.(client.Object); ok {
+			b = b.Watches(resource, handler.EnqueueRequestsFromMapFunc(r.mapRetainedResourceToWandb))
+		}
+	}
 
 	return b.Complete(r)
+}
+
+func (r *WeightsAndBiasesReconciler) mapRetainedResourceToWandb(ctx context.Context, obj client.Object) []ctrl.Request {
+	labels := obj.GetLabels()
+	uid := labels[retention.UIDLabel]
+	key := types.NamespacedName{Namespace: labels[common.WandbNamespaceLabel], Name: labels[common.WandbNameLabel]}
+	if uid == "" || key.Name == "" || key.Namespace == "" {
+		return nil
+	}
+	w := &apiv2.WeightsAndBiases{}
+	if err := r.Get(ctx, key, w); err != nil || string(w.UID) != uid {
+		return nil
+	}
+	return []ctrl.Request{{NamespacedName: key}}
 }
 
 func (r *WeightsAndBiasesReconciler) loadTelemetryConfig(ctx context.Context) (telemetry.TelemetryRuntimeConfig, error) {

@@ -17,6 +17,17 @@ import (
 )
 
 var _ = Describe("SeaweedFS vendor specs", func() {
+	It("builds infrastructure without WandB ownership in either namespace", func() {
+		w := seaweedWandb()
+		for _, namespace := range []string{w.Namespace, "retention-other"} {
+			spec := w.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore
+			spec.Namespace = namespace
+			root, err := ToObjectStoreVendorSpec(context.Background(), w, spec, seaweedScheme(), manifest.Manifest{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(root.OwnerReferences).To(BeEmpty())
+			Expect(root.Namespace).To(Equal(namespace))
+		}
+	})
 	BeforeEach(func() {
 		previousMode := utils.IsOpenShift()
 		DeferCleanup(utils.SetOpenShiftMode, previousMode)

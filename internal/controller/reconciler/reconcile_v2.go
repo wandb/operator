@@ -30,6 +30,7 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/ctrlqueue"
+	"github.com/wandb/operator/internal/controller/retention"
 	"github.com/wandb/operator/internal/logx"
 	wmetrics "github.com/wandb/operator/internal/observability/metrics"
 	"github.com/wandb/operator/internal/observability/telemetry"
@@ -39,6 +40,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -49,29 +51,10 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
-const CleanupFinalizer = "wandb.apps.wandb.com/cleanup"
+const CleanupFinalizer = retention.Finalizer
 
 var defaultRequeueMinutes = 1
 var defaultRequeueDuration = time.Duration(defaultRequeueMinutes) * time.Minute
-
-type finalizerFunc func(context.Context, ctrlClient.Client, *apiv2.WeightsAndBiases) error
-
-func runRetentionFinalizer(
-	ctx context.Context,
-	client ctrlClient.Client,
-	wandb *apiv2.WeightsAndBiases,
-	infraSpec apiv2.ManagedInfraSpec,
-	purgeFn finalizerFunc,
-	detachFn finalizerFunc,
-) error {
-	switch wandb.GetRetentionPolicy(infraSpec).OnDelete {
-	case apiv2.PurgeOnDelete:
-		return purgeFn(ctx, client, wandb)
-	case apiv2.DetachOnDelete:
-		return detachFn(ctx, client, wandb)
-	}
-	return nil
-}
 
 // Reconcile for V2 of WandB as the assumed object
 func Reconcile(
@@ -80,6 +63,7 @@ func Reconcile(
 	recorder record.EventRecorder,
 	wandb *apiv2.WeightsAndBiases,
 	telemetryConfig telemetry.TelemetryRuntimeConfig,
+	readers ...ctrlClient.Reader,
 ) (ctrl.Result, error) {
 	ctx, log := logx.WithSlog(ctx, logx.ReconcileInfraV2)
 
@@ -103,43 +87,33 @@ func Reconcile(
 		}
 	}
 
+	var reader ctrlClient.Reader = client
+	if len(readers) > 0 && readers[0] != nil {
+		reader = readers[0]
+	}
+	lifecycle, lifecycleErr := retention.Open(ctx, client, reader, wandb)
+	if lifecycleErr != nil {
+		return ctrl.Result{}, reportRetention(ctx, client, wandb, lifecycleErr)
+	}
+	if !isFlaggedForDeletion {
+		lifecycleErr = lifecycle.Reconcile(ctx)
+		if err := reportRetention(ctx, client, wandb, lifecycleErr); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
 	// if deleting and handle cleanup or preservation of config and data
 	if isFlaggedForDeletion && !wandb.GetDeletionTimestamp().IsZero() {
 		if ctrlqueue.ContainsString(wandb.GetFinalizers(), CleanupFinalizer) {
 
+			done, err := lifecycle.Finalize(ctx)
+			if err != nil {
+				return ctrl.Result{}, reportRetention(ctx, client, wandb, err)
+			}
+			if !done {
+				return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
+			}
 			if err := finalizeManifestSecrets(ctx, client, wandb); err != nil {
-				return ctrl.Result{}, err
-			}
-
-			// Multi-instance infra: the per-type retention dispatcher applies the
-			// configured policy to each managed or external instance.
-			for key, spec := range wandb.Spec.ObjectStore {
-				if err = runObjectStoreRetentionFinalizer(ctx, client, wandb, key, spec); err != nil {
-					return ctrl.Result{}, err
-				}
-			}
-			for key, spec := range wandb.Spec.MySQL {
-				if err = runMysqlRetentionFinalizer(ctx, client, wandb, key, spec); err != nil {
-					return ctrl.Result{}, err
-				}
-			}
-			for key, spec := range wandb.Spec.Redis {
-				if err = runRedisRetentionFinalizer(ctx, client, wandb, key, spec); err != nil {
-					return ctrl.Result{}, err
-				}
-			}
-			for key, spec := range wandb.Spec.ClickHouse {
-				if err = runClickHouseRetentionFinalizer(ctx, client, wandb, key, spec); err != nil {
-					return ctrl.Result{}, err
-				}
-			}
-			// Kafka remains single-instance.
-			if wandb.Spec.Kafka.ManagedKafka != nil {
-				if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.Kafka.ManagedKafka.ManagedInfraSpec, kafkaPurgeFinalizer, kafkaDetachFinalizer); err != nil {
-					return ctrl.Result{}, err
-				}
-			}
-			if err = deleteInfraHTTPRoutes(ctx, client, wandb); err != nil {
 				return ctrl.Result{}, err
 			}
 			if err = deleteWatchtower(ctx, client, wandb); err != nil {
@@ -216,19 +190,23 @@ func Reconcile(
 
 	/////////////////////////
 	// Write Infra State
-	redisConditions := redisWriteState(ctx, client, wandb, manifest)
-	mysqlConditions := mysqlWriteState(ctx, client, wandb, manifest)
-	objectStoreConditions, objectStoreConnection := objectStoreWriteState(ctx, client, wandb, manifest)
-	kafkaConditions := kafkaWriteState(ctx, client, wandb, manifest)
-	clickHouseConditions := clickHouseWriteState(ctx, client, wandb, manifest)
+	redisConditions := redisWriteState(ctx, lifecycle, wandb, manifest)
+	mysqlConditions := mysqlWriteState(ctx, lifecycle, wandb, manifest)
+	objectStoreConditions, objectStoreConnection := objectStoreWriteState(ctx, lifecycle, wandb, manifest)
+	kafkaConditions := kafkaWriteState(ctx, lifecycle, wandb, manifest)
+	clickHouseConditions := clickHouseWriteState(ctx, lifecycle, wandb, manifest)
 
 	/////////////////////////
 	// Read Infra State
-	redisConditions, redisInfraConn := redisReadState(ctx, client, wandb, redisConditions)
-	mysqlConditions, mysqlInfraConn := mysqlReadState(ctx, client, wandb, mysqlConditions)
-	kafkaConditions, kafkaInfraConn := kafkaReadState(ctx, client, wandb, kafkaConditions)
-	objectStoreConditions = objectStoreReadState(ctx, client, wandb, objectStoreConditions)
-	clickHouseConditions, clickHouseInfraConn := clickHouseReadState(ctx, client, wandb, clickHouseConditions)
+	redisConditions, redisInfraConn := redisReadState(ctx, lifecycle, wandb, redisConditions)
+	mysqlConditions, mysqlInfraConn := mysqlReadState(ctx, lifecycle, wandb, mysqlConditions)
+	kafkaConditions, kafkaInfraConn := kafkaReadState(ctx, lifecycle, wandb, kafkaConditions)
+	objectStoreConditions = objectStoreReadState(ctx, lifecycle, wandb, objectStoreConditions)
+	clickHouseConditions, clickHouseInfraConn := clickHouseReadState(ctx, lifecycle, wandb, clickHouseConditions)
+
+	if err := reportRetention(ctx, client, wandb, lifecycle.Reconcile(ctx)); err != nil {
+		return ctrl.Result{}, err
+	}
 
 	/////////////////////////
 	// WandB Status Inference
@@ -275,11 +253,14 @@ func Reconcile(
 		return ctrl.Result{}, err
 	}
 
-	res, err = ReconcileNetworkingAndWatchtower(ctx, client, wandb, manifest)
+	res, err = ReconcileNetworkingAndWatchtower(ctx, client, wandb, manifest, lifecycle)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 	ctrlResults = append(ctrlResults, res)
+	if err := reportRetention(ctx, client, wandb, lifecycle.Reconcile(ctx)); err != nil {
+		return ctrl.Result{}, err
+	}
 
 	ctrlResults = append(ctrlResults, supportBundleResult)
 
@@ -304,6 +285,21 @@ func Reconcile(
 	ctrlResults = append(ctrlResults, res)
 
 	return consolidateResults(ctrlResults), nil
+}
+
+func reportRetention(ctx context.Context, c ctrlClient.Client, w *apiv2.WeightsAndBiases, retentionErr error) error {
+	before := w.DeepCopy().Status
+	condition := metav1.Condition{Type: retention.ReadyCondition, Status: metav1.ConditionTrue, Reason: "InventoryVerified", Message: "Infrastructure retention inventory and ownership verified", ObservedGeneration: w.Generation}
+	if retentionErr != nil {
+		condition.Status = metav1.ConditionFalse
+		condition.Reason = "RetentionBlocked"
+		condition.Message = retentionErr.Error()
+	}
+	meta.SetStatusCondition(&w.Status.Conditions, condition)
+	if err := updateWandbStatusIfChanged(ctx, c, w, before); err != nil {
+		return err
+	}
+	return retentionErr
 }
 
 func consolidateResults(results []ctrl.Result) ctrl.Result {
@@ -341,6 +337,7 @@ func ReconcileNetworkingAndWatchtower(
 	client ctrlClient.Client,
 	wandb *apiv2.WeightsAndBiases,
 	manifest serverManifest.Manifest,
+	lifecycles ...*retention.Session,
 ) (ctrl.Result, error) {
 	ctx, log := logx.WithSlog(ctx, logx.ReconcileInfraV2)
 
@@ -359,11 +356,15 @@ func ReconcileNetworkingAndWatchtower(
 	switch wandb.Spec.Networking.Mode {
 	case apiv2.NetworkingModeGatewayAPI:
 		wandb.Status.GatewayStatus = nil
-		if err := reconcileGateway(ctx, client, wandb); err != nil {
+		gatewayClient := client
+		if len(lifecycles) > 0 && lifecycles[0] != nil {
+			gatewayClient = lifecycles[0]
+		}
+		if err := reconcileGateway(ctx, gatewayClient, wandb); err != nil {
 			log.Error("Failed to reconcile Gateway", logx.ErrAttr(err))
 			return ctrl.Result{}, err
 		}
-		if err := reconcileInfraHTTPRoutes(ctx, client, wandb, manifest); err != nil {
+		if err := reconcileInfraHTTPRoutes(ctx, client, wandb, manifest, lifecycles...); err != nil {
 			log.Error("Failed to reconcile infra HTTPRoutes", logx.ErrAttr(err))
 			return ctrl.Result{}, err
 		}

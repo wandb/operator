@@ -6,7 +6,6 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
-	"github.com/wandb/operator/internal/logx"
 	"github.com/wandb/operator/pkg/utils"
 	chkv1 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse-keeper.altinity.com/v1"
 	chiv1 "github.com/wandb/operator/pkg/vendored/altinity-clickhouse/clickhouse.altinity.com/v1"
@@ -17,7 +16,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
-	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 func KeeperImage(img manifest.ImageRef, globalImageRegistry string) string {
@@ -39,7 +37,6 @@ func ToKeeperVendorSpec(
 	nsName types.NamespacedName,
 	mfst manifest.Manifest,
 ) (*chkv1.ClickHouseKeeperInstallation, error) {
-	_, log := logx.WithSlog(ctx, logx.ClickHouse)
 	if spec == nil {
 		return nil, nil
 	}
@@ -122,8 +119,9 @@ func ToKeeperVendorSpec(
 				},
 				VolumeClaimTemplates: []chiv1.VolumeClaimTemplate{
 					{
-						Name:       volumeTemplateName,
-						ObjectMeta: metav1.ObjectMeta{Labels: labels},
+						PVCReclaimPolicy: chiv1.PVCReclaimPolicyRetain,
+						Name:             volumeTemplateName,
+						ObjectMeta:       metav1.ObjectMeta{Labels: labels},
 						Spec: corev1.PersistentVolumeClaimSpec{
 							AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
 							Resources: corev1.VolumeResourceRequirements{
@@ -134,11 +132,6 @@ func ToKeeperVendorSpec(
 				},
 			},
 		},
-	}
-
-	if err := ctrl.SetControllerReference(wandb, chk, scheme); err != nil {
-		log.Error("failed to set owner reference on CHK CR", logx.ErrAttr(err))
-		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}
 
 	return chk, nil

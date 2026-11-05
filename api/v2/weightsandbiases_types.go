@@ -97,15 +97,16 @@ const (
 type OnDeletePolicy string
 
 const (
-	// DetachOnDelete removes ownership of infrastructure CRs so they survive WandB CR deletion
+	// DetachOnDelete preserves infrastructure, configuration, credentials, and storage.
 	DetachOnDelete OnDeletePolicy = "detach"
-	// PurgeOnDelete will delete all associated resources upon deletion
+	// PurgeOnDelete explicitly deletes the verified infrastructure inventory.
 	PurgeOnDelete OnDeletePolicy = "purge"
 )
 
 type RetentionPolicy struct {
 	// +kubebuilder:default="detach"
-	OnDelete OnDeletePolicy `json:"onDelete" default:"detach"`
+	// +kubebuilder:validation:Enum=detach;purge
+	OnDelete OnDeletePolicy `json:"onDelete,omitempty" default:"detach"`
 }
 
 // WeightsAndBiasesSpec defines the desired state of WeightsAndBiases.

@@ -18,7 +18,7 @@ inputs:
     description: Local operator checkout to build and load into Kind. Mutually exclusive with operator-version; local scenarios only.
     default: ""
   upgrade-from-version:
-    description: Starting chart version, required only for local-kind-operator-upgrade.
+    description: Starting chart version for local-kind-operator-upgrade and local-kind-retention-upgrade.
     default: ""
   app-version:
     description: Published stable server-manifest version resolved once by workflow setup.

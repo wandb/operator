@@ -102,6 +102,25 @@ func (src *WeightsAndBiases) ConvertTo(dstRaw conversion.Hub) error {
 	)
 
 	dst.ObjectMeta = src.ObjectMeta
+	// DELETE through v1 must preserve the canonical v2 spec while the API server
+	// writes deletionTimestamp/finalizers. Native v2 objects have no v1 values.
+	if src.UID != "" && (!src.DeletionTimestamp.IsZero() || (len(src.Spec.Values.Object) == 0 && len(src.Spec.Chart.Object) == 0)) {
+		if conversionReader == nil {
+			return fmt.Errorf("deleting v1 installation requires the canonical API reader")
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), conversionLookupTimeout)
+		defer cancel()
+		canonical := &appsv2.WeightsAndBiases{}
+		if err := conversionReader.Get(ctx, ctrlclient.ObjectKeyFromObject(src), canonical); err != nil {
+			return err
+		}
+		if canonical.UID != src.UID {
+			return fmt.Errorf("installation changed during deletion conversion")
+		}
+		dst.Spec = canonical.Spec
+		dst.Status = canonical.Status
+		return nil
+	}
 
 	if err := applyValueMappings(src, dst); err != nil {
 		return err

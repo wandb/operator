@@ -9,7 +9,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -33,21 +32,6 @@ func ResolveSecretKey(ctx context.Context, c client.Client, namespace string, se
 		return "", fmt.Errorf("key %q not found in secret %s/%s", sel.Key, namespace, sel.Name)
 	}
 	return string(val), nil
-}
-
-func BuildWandbOwnerRef(c client.Client, wandb *apiv2.WeightsAndBiases) (metav1.OwnerReference, error) {
-	gvk, err := c.GroupVersionKindFor(wandb)
-	if err != nil {
-		return metav1.OwnerReference{}, fmt.Errorf("could not get GVK for wandb owner: %w", err)
-	}
-	return metav1.OwnerReference{
-		APIVersion:         gvk.GroupVersion().String(),
-		Kind:               gvk.Kind,
-		Name:               wandb.GetName(),
-		UID:                wandb.GetUID(),
-		Controller:         ptr.To(false),
-		BlockOwnerDeletion: ptr.To(false),
-	}, nil
 }
 
 func DeleteConnectionSecret(ctx context.Context, c client.Client, nsName types.NamespacedName) error {
@@ -82,20 +66,10 @@ func WriteConnectionSecret(
 		actual = nil
 	}
 
-	ownerRef, err := BuildWandbOwnerRef(c, wandb)
-	if err != nil {
-		return []metav1.Condition{{
-			Type:   common.ReconciledType,
-			Status: metav1.ConditionFalse,
-			Reason: common.ControllerErrorReason,
-		}}
-	}
-
 	desired := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            nsName.Name,
-			Namespace:       nsName.Namespace,
-			OwnerReferences: []metav1.OwnerReference{ownerRef},
+			Name:      nsName.Name,
+			Namespace: nsName.Namespace,
 		},
 		Type:       corev1.SecretTypeOpaque,
 		StringData: data,

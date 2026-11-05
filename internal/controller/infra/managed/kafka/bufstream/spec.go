@@ -15,7 +15,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
-	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 const defaultEtcdStorageSize = "10Gi"
@@ -133,22 +132,6 @@ func kafkaRuntimeDefaultSeccompProfile() *corev1.SeccompProfile {
 	return &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault}
 }
 
-// sameNamespace reports whether the managed Kafka resources live in the same
-// namespace as the owning WeightsAndBiases CR. Owner references are only valid
-// within a single namespace.
-func sameNamespace(wandb *apiv2.WeightsAndBiases, nsnBuilder *NsNameBuilder) bool {
-	return wandb.Namespace == nsnBuilder.Namespace()
-}
-
-// setOwner sets the WeightsAndBiases controller reference on obj, but only when
-// it shares the CR's namespace, since owner references are namespace-scoped.
-func setOwner(wandb *apiv2.WeightsAndBiases, obj metav1.Object, nsnBuilder *NsNameBuilder, scheme *runtime.Scheme) error {
-	if !sameNamespace(wandb, nsnBuilder) {
-		return nil
-	}
-	return ctrl.SetControllerReference(wandb, obj, scheme)
-}
-
 // intstrFromInt converts a port number to an IntOrString for service/probe specs.
 func intstrFromInt(port int) intstr.IntOrString {
 	return intstr.FromInt32(int32(port))
@@ -183,9 +166,6 @@ func ToCredentialsSecret(
 			EnvStorageSecretAccessKey: storage.SecretKey,
 		},
 	}
-	if err := setOwner(wandb, secret, nsnBuilder, scheme); err != nil {
-		return nil, err
-	}
 	return secret, nil
 }
 
@@ -214,9 +194,6 @@ func ToConfigMap(
 		},
 		Data: map[string]string{ConfigFileName: rendered},
 	}
-	if err := setOwner(wandb, cm, nsnBuilder, scheme); err != nil {
-		return nil, err
-	}
 	return cm, nil
 }
 
@@ -240,9 +217,6 @@ func ToServiceAccount(
 			Annotations: spec.ServiceAccount.Annotations,
 		},
 		AutomountServiceAccountToken: ptr.To(!storage.HasStaticCredentials()),
-	}
-	if err := setOwner(wandb, sa, nsnBuilder, scheme); err != nil {
-		return nil, err
 	}
 	return sa, nil
 }
@@ -271,9 +245,6 @@ func ToSccRoleBinding(
 				Namespace: nsnBuilder.Namespace(),
 			},
 		},
-	}
-	if err := setOwner(wandb, rb, nsnBuilder, scheme); err != nil {
-		return nil, err
 	}
 	return rb, nil
 }
@@ -386,9 +357,6 @@ func ToEtcdApplication(
 		},
 	}
 
-	if err := setOwner(wandb, app, nsnBuilder, scheme); err != nil {
-		return nil, err
-	}
 	return app, nil
 }
 
@@ -631,9 +599,6 @@ func ToBufstreamApplication(
 		},
 	}
 
-	if err := setOwner(wandb, app, nsnBuilder, scheme); err != nil {
-		return nil, err
-	}
 	return app, nil
 }
 

@@ -6,7 +6,6 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
-	"github.com/wandb/operator/internal/logx"
 	seaweedv1 "github.com/wandb/operator/pkg/vendored/seaweedfs-operator/seaweed.seaweedfs.com/v1"
 	"github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
@@ -14,7 +13,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
-	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 const (
@@ -111,7 +109,6 @@ func ToObjectStoreVendorSpec(
 	scheme *runtime.Scheme,
 	mfst manifest.Manifest,
 ) (*seaweedv1.Seaweed, error) {
-	_, log := logx.WithSlog(ctx, logx.ObjectStore)
 	if infraSpec == nil {
 		return nil, nil
 	}
@@ -244,11 +241,6 @@ func ToObjectStoreVendorSpec(
 			Affinity:    wandb.GetAffinity(infraSpec.ManagedInfraSpec),
 			Tolerations: *wandb.GetTolerations(infraSpec.ManagedInfraSpec),
 		},
-	}
-
-	if err := ctrl.SetControllerReference(wandb, seaweedCR, scheme); err != nil {
-		log.Error("failed to set owner reference on Seaweed CR", logx.ErrAttr(err))
-		return nil, fmt.Errorf("failed to set owner reference: %w", err)
 	}
 
 	return seaweedCR, nil

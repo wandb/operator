@@ -22,6 +22,20 @@ var _ = Describe("Keeper vendor spec", func() {
 		utils.SetOpenShiftMode(false)
 	})
 
+	It("builds Keeper without WandB ownership in either namespace", func() {
+		for _, namespace := range []string{"wandb", "infrastructure"} {
+			wandb := keeperWandb()
+			spec := wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse
+			spec.Namespace = namespace
+			nsn := keeperNsName()
+			nsn.Namespace = namespace
+			chk, err := ToKeeperVendorSpec(context.Background(), wandb, spec, keeperScheme(), nsn, manifest.Manifest{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(chk.Namespace).To(Equal(namespace))
+			Expect(chk.OwnerReferences).To(BeEmpty())
+		}
+	})
+
 	It("builds a CHK with explicit replicas, storage, and a hardened pod", func() {
 		wandb := keeperWandb()
 		wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse.Keeper = apiv2.ClickHouseKeeperSpec{

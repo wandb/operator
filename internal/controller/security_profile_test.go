@@ -28,7 +28,7 @@ var _ = Describe("Workload security profile CR", func() {
 			},
 		}
 		Expect(k8sClient.Create(ctx, wandb)).To(Succeed())
-		DeferCleanup(func() { Expect(k8sClient.Delete(ctx, wandb)).To(Succeed()) })
+		// The suite API server owns cleanup of this admission-only fixture.
 		actual := &apiv2.WeightsAndBiases{}
 		key := client.ObjectKeyFromObject(wandb)
 		Expect(k8sClient.Get(ctx, key, actual)).To(Succeed())

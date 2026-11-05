@@ -10,6 +10,7 @@ import (
 	"github.com/wandb/operator/internal/controller/common"
 	seaweedv1 "github.com/wandb/operator/pkg/vendored/seaweedfs-operator/seaweed.seaweedfs.com/v1"
 	"github.com/wandb/operator/pkg/wandb/manifest"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -55,6 +56,25 @@ var _ = Describe("SeaweedFS WriteState", func() {
 		Expect(desired).NotTo(BeNil())
 		envCfg = SeaweedS3Config{AccessKey: "admin"}
 		specNsn = types.NamespacedName{Namespace: "wandb", Name: "object-store"}
+	})
+
+	It("preserves Seaweed ownership of S3 configuration without owning its connection Secret", func() {
+		cl := fake.NewClientBuilder().WithScheme(writeScheme()).Build()
+		desired.UID = "seaweed-instance"
+		wandb.UID = "wandb-installation"
+		nsn := CreateNsNameBuilder(specNsn)
+		conn, err := writeSeaweedS3Config(ctx, cl, desired, nsn, envCfg)
+		Expect(err).NotTo(HaveOccurred())
+		var config corev1.Secret
+		Expect(cl.Get(ctx, nsn.ConfigNsName(), &config)).To(Succeed())
+		Expect(config.OwnerReferences).To(HaveLen(1))
+		Expect(config.OwnerReferences[0].UID).To(Equal(desired.UID))
+		Expect(config.OwnerReferences[0].Kind).To(Equal("Seaweed"))
+		_, err = writeWandbConnInfo(ctx, cl, wandb, nsn, conn)
+		Expect(err).NotTo(HaveOccurred())
+		var output corev1.Secret
+		Expect(cl.Get(ctx, nsn.ConnectionNsName(), &output)).To(Succeed())
+		Expect(output.OwnerReferences).To(BeEmpty())
 	})
 
 	It("returns early and never reports a healthy connection when the CR write fails", func() {

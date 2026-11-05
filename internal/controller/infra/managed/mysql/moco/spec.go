@@ -15,7 +15,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	corev1ac "k8s.io/client-go/applyconfigurations/core/v1"
 	"k8s.io/utils/ptr"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 const (
@@ -68,9 +67,6 @@ func ToMocoMySQLClusterSpec(
 			"local_infile":                   "ON",
 		},
 	}
-	if err := controllerutil.SetControllerReference(wandb, cm, scheme); err != nil {
-		return nil, nil, err
-	}
 
 	cluster := &mocov1beta2.MySQLCluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -98,9 +94,6 @@ func ToMocoMySQLClusterSpec(
 		cluster.Spec.Collectors = []string{"engine_innodb_status", "info_schema.innodb_metrics"}
 	}
 
-	if err := controllerutil.SetControllerReference(wandb, cluster, scheme); err != nil {
-		return nil, nil, err
-	}
 	return cluster, cm, nil
 }
 

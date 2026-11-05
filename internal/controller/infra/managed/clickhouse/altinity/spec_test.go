@@ -22,6 +22,22 @@ var _ = Describe("ClickHouse vendor specs", func() {
 		utils.SetOpenShiftMode(false)
 	})
 
+	It("builds infrastructure without WandB ownership in either namespace", func() {
+		for _, namespace := range []string{"wandb", "infrastructure"} {
+			wandb := clickHouseWandb()
+			spec := wandb.Spec.ClickHouse[apiv2.DefaultInstanceName].ManagedClickHouse
+			spec.Namespace = namespace
+			chi, err := ToClickHouseVendorSpec(context.Background(), wandb, spec, clickHouseScheme(), testObjectStorageConn(), testObjectStorageEndpoint, true, manifest.Manifest{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(chi.Namespace).To(Equal(namespace))
+			Expect(chi.OwnerReferences).To(BeEmpty())
+			sa, err := ToServiceAccount(wandb, spec, testObjectStorageConn(), clickHouseScheme())
+			Expect(err).NotTo(HaveOccurred())
+			Expect(sa.Namespace).To(Equal(namespace))
+			Expect(sa.OwnerReferences).To(BeEmpty())
+		}
+	})
+
 	It("renders hardened pod templates with writable runtime mounts", func() {
 		wandb := clickHouseWandb()
 

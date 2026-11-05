@@ -1,0 +1,131 @@
+name: Retention acceptance
+
+on:
+  pull_request:
+    branches: [main, v2]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+    paths:
+      - 'api/**'
+      - 'internal/controller/**'
+      - 'internal/webhook/**'
+      - 'deploy/operator/**'
+      - '.github/workflows/retention.yaml'
+      - '.github/actions/westest-run/**'
+  workflow_dispatch:
+    inputs:
+      profile:
+        type: choice
+        options: [pr, full]
+        default: full
+      operator_version:
+        description: Published candidate chart; blank builds the checked-out source.
+        type: string
+        default: ''
+      westest_image_tag:
+        description: Published WESTest image tag containing the retention scenarios; defaults to WESTEST_RETENTION_IMAGE_TAG.
+        type: string
+        default: ''
+  workflow_call:
+    inputs:
+      profile:
+        type: string
+        default: full
+      operator_version:
+        type: string
+        default: ''
+      westest_image_tag:
+        type: string
+        default: ''
+      app_version:
+        type: string
+        default: ''
+    secrets:
+      WESTEST_APP_ID:
+        required: true
+      WESTEST_APP_PRIVATE_KEY:
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: retention-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  setup:
+    # Match PR WESTest's private Watchtower access requirements.
+    if: >-
+      ${{ github.event_name != 'pull_request' ||
+          (!github.event.pull_request.draft &&
+           github.event.pull_request.head.repo.full_name == github.repository &&
+           github.actor != 'dependabot[bot]') }}
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      app_version: ${{ steps.application.outputs.app_version }}
+      app_digest: ${{ steps.application.outputs.app_manifest_digest }}
+      westest_image_tag: ${{ steps.westest.outputs.image_tag }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - name: Validate WESTest workflow helpers
+        run: python3 -B -m unittest discover -s hack/scripts -p 'test_*westest.py'
+      - name: Resolve published WESTest image
+        id: westest
+        env:
+          WESTEST_IMAGE_TAG: ${{ inputs.westest_image_tag || vars.WESTEST_RETENTION_IMAGE_TAG }}
+        run: |
+          if [[ ! "$WESTEST_IMAGE_TAG" =~ ^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}$ ]]; then
+            echo '::error::Set WESTEST_RETENTION_IMAGE_TAG (or westest_image_tag) to a published WESTest tag containing the retention scenarios.'
+            exit 1
+          fi
+          echo "image_tag=$WESTEST_IMAGE_TAG" >> "$GITHUB_OUTPUT"
+      - id: matrix
+        env:
+          RETENTION_PROFILE: ${{ inputs.profile || 'pr' }}
+        run: python3 hack/scripts/retention-westest-matrix.py
+      - id: application
+        env:
+          APP_VERSION: ${{ inputs.app_version }}
+        run: python3 hack/scripts/nightly-westest-app-version.py
+
+  scenario:
+    needs: setup
+    runs-on: ubuntu-latest-8-cores
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - name: Mint a token to read Watchtower releases
+        id: token
+        if: inputs.operator_version == ''
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        with:
+          app-id: ${{ secrets.WESTEST_APP_ID }}
+          private-key: ${{ secrets.WESTEST_APP_PRIVATE_KEY }}
+          owner: wandb
+          repositories: watchtower
+          permission-contents: read
+      - name: Prepare local operator image assets
+        if: inputs.operator_version == ''
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+        run: |
+          make download-watchtower WATCHTOWER_ARCH=amd64
+          make download-grafana-plugins
+      - name: Run the isolated Kind scenario
+        uses: ./.github/actions/westest-run
+        with:
+          scenario: ${{ matrix.scenario }}
+          provider: local
+          image-tag: ${{ needs.setup.outputs.westest_image_tag }}
+          operator-repo: ${{ inputs.operator_version == '' && github.workspace || '' }}
+          operator-version: ${{ inputs.operator_version }}
+          upgrade-from-version: '2.0.0-beta.9'
+          app-version: ${{ needs.setup.outputs.app_version }}
+          app-manifest-digest: ${{ needs.setup.outputs.app_digest }}

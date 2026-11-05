@@ -7,11 +7,8 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
-	"github.com/wandb/operator/internal/logx"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -38,11 +35,8 @@ func writeKafkaConnInfo(
 	nsnBuilder *NsNameBuilder,
 	connInfo *kafkaConnInfo,
 ) (*apiv2.KafkaConnection, error) {
-	log := logx.GetSlog(ctx)
-
 	var err error
 	var found bool
-	var gvk schema.GroupVersionKind
 	var actual = &corev1.Secret{}
 
 	nsName := nsnBuilder.ConnectionNsName()
@@ -55,27 +49,10 @@ func writeKafkaConnInfo(
 		actual = nil
 	}
 
-	var ownerRefs []metav1.OwnerReference
-	if owner.GetNamespace() == nsName.Namespace {
-		if gvk, err = cl.GroupVersionKindFor(owner); err != nil {
-			log.Error(fmt.Sprintf("Error getting GVK for %s", owner.GetName()), logx.ErrAttr(err))
-			return nil, fmt.Errorf("could not get GVK for owner: %w", err)
-		}
-		ownerRefs = []metav1.OwnerReference{{
-			APIVersion:         gvk.GroupVersion().String(),
-			Kind:               gvk.Kind,
-			Name:               owner.GetName(),
-			UID:                owner.GetUID(),
-			Controller:         ptr.To(false),
-			BlockOwnerDeletion: ptr.To(false),
-		}}
-	}
-
 	desired := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            nsName.Name,
-			Namespace:       nsName.Namespace,
-			OwnerReferences: ownerRefs,
+			Name:      nsName.Name,
+			Namespace: nsName.Namespace,
 		},
 		Type: corev1.SecretTypeOpaque,
 		StringData: map[string]string{
