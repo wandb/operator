@@ -396,6 +396,7 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(target.stat().st_mode & 0o777, 0o600)
         self.assertIn("GOOGLE_APPLICATION_CREDENTIALS=/credentials/google.json", args)
         self.assertIn("CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE=/credentials/google.json", args)
+        self.assertIn("WESTEST_GCP_REGION=us-west1", args)
         self.assertNotIn("test-token", " ".join(args))
         self.assertNotIn("docker.sock", " ".join(args))
 

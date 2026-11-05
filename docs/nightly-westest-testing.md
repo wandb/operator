@@ -199,14 +199,16 @@ Docker action copies it to a private, read-only mount and sets both
 `GOOGLE_APPLICATION_CREDENTIALS` and `CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE` to
 the container path. This supports Terraform, gcloud and GKE authentication
 throughout provisioning and teardown without passing a short-lived standalone
-access token. Tests target `playground-111` in `us-central1` with
+access token. Tests target `playground-111` in `us-west1` with
 `WESTEST_CLOUD_OPT_IN=1`.
 
 The managed-certificate Ingress and both managed-certificate Gateway scenarios
 use WESTest's default Cloud DNS zone `westest-gcp` (`westest-gcp.wandb.ml`) in
 `playground-111`. That zone must be publicly delegated. The CI identity needs
-the existing DNS and Certificate Manager permissions, and the provider-services
-scenario also needs Cloud SQL and Memorystore permissions. These are declared in
+the existing DNS and Certificate Manager permissions. The Gateway scenarios also
+need project IAM read access and permission to grant ExternalDNS `roles/dns.reader`.
+The provider-services scenario needs Cloud SQL and Memorystore permissions.
+These are declared in
 [core's WESTest provisioning permissions](https://github.com/wandb/core/blob/master/terraform/terraform-workspaces/modules/westest-ci/provisioning-permissions.md).
 No additional workflow secrets or DNS inputs are required for the default zone.
 
