@@ -74,12 +74,12 @@ func (r OCIRelease) Chart() (*chart.Chart, error) {
 func (r OCIRelease) pullReference(registryClient *registry.Client) (string, error) {
 	parsedURL, err := url.Parse(r.URL)
 	if err != nil {
-		return "", fmt.Errorf("invalid OCI URL %q: %w", redact.String(r.URL), err)
+		return "", redact.Error(fmt.Errorf("invalid OCI URL %q: %w", r.URL, err))
 	}
 
 	_, normalizedRef, err := registryClient.ValidateReference(r.URL, r.Version, parsedURL)
 	if err != nil {
-		return "", fmt.Errorf("failed to validate OCI reference %s: %w", redact.String(r.URL), err)
+		return "", redact.Error(fmt.Errorf("failed to validate OCI reference %s: %w", r.URL, err))
 	}
 
 	return normalizedRef.String(), nil
@@ -123,7 +123,7 @@ func (r OCIRelease) pullChart() (*chart.Chart, error) {
 	result, err := registryClient.Pull(ref)
 	if err != nil {
 		log.Error(redact.Error(err), "Failed to pull chart", "ref", redact.String(ref))
-		return nil, fmt.Errorf("failed to pull chart from %s: %w", redact.String(r.URL), err)
+		return nil, redact.Error(fmt.Errorf("failed to pull chart from %s: %w", r.URL, err))
 	}
 
 	if result.Chart == nil {

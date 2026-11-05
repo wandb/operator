@@ -59,7 +59,7 @@ func (r RepoRelease) deriveRepoName() (string, error) {
 
 	parsedURL, err := url.Parse(r.URL)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse URL: %w", err)
+		return "", redact.Error(fmt.Errorf("failed to parse URL: %w", err))
 	}
 
 	// Use hostname without dots as the repo name
@@ -168,7 +168,8 @@ func (r RepoRelease) downloadChart() (string, error) {
 
 	parsedURL, err := url.Parse(r.URL)
 	if err != nil {
-		log.Error(redact.Error(err), "Failed to parse URL for TLS verification check")
+		err = redact.Error(err)
+		log.Error(err, "Failed to parse URL for TLS verification check")
 		return "", err
 	}
 
@@ -214,7 +215,8 @@ func (r RepoRelease) downloadChart() (string, error) {
 
 	chartRepo, err := repo.NewChartRepository(entry, providers)
 	if err != nil {
-		log.Error(redact.Error(err), "Failed to create chart repository")
+		err = redact.Error(err)
+		log.Error(err, "Failed to create chart repository")
 		return "", err
 	}
 
@@ -226,7 +228,7 @@ func (r RepoRelease) downloadChart() (string, error) {
 	_, err = chartRepo.DownloadIndexFile()
 	if err != nil {
 		log.Error(redact.Error(err), "Failed to download index file")
-		return "", fmt.Errorf("failed to download index file from %s: %w", redact.String(entry.URL), err)
+		return "", redact.Error(fmt.Errorf("failed to download index file from %s: %w", entry.URL, err))
 	}
 
 	if r.Debug {
@@ -295,7 +297,8 @@ func (r RepoRelease) downloadChart() (string, error) {
 	}
 	saved, _, err := client.DownloadTo(chartURL, r.Version, dest)
 	if err != nil {
-		log.Error(redact.Error(err), "Failed to download chart")
+		err = redact.Error(err)
+		log.Error(err, "Failed to download chart")
 		return "", err
 	}
 
