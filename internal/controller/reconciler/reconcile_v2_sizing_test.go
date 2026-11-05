@@ -14,6 +14,31 @@ import (
 
 var _ = Describe("ReconcileV2 Sizing", func() {
 	Context("resolveResources", func() {
+		It("uses 2xlarge sizing for the legacy xxlarge spelling", func() {
+			app := serverManifest.Application{
+				Sizing: map[apiv2.Size]serverManifest.SizingConfig{
+					apiv2.Size2XLarge: {
+						Resources: &corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceCPU: resource.MustParse("2"),
+							},
+						},
+					},
+				},
+			}
+			wandb := &apiv2.WeightsAndBiases{
+				Spec: apiv2.WeightsAndBiasesSpec{
+					Size:          apiv2.SizeXXLarge,
+					RequireLimits: true,
+				},
+			}
+
+			res := v2.ResolveResources(app, wandb, nil)
+
+			Expect(res).NotTo(BeNil())
+			Expect(res.Requests.Cpu().String()).To(Equal("2"))
+		})
+
 		It("should apply resources from the 'default' key if present", func() {
 			app := serverManifest.Application{
 				Sizing: map[apiv2.Size]serverManifest.SizingConfig{

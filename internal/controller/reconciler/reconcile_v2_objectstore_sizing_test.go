@@ -97,7 +97,7 @@ var _ = Describe("ObjectStore sizing per tier", func() {
 		Entry("medium", apiv2.Size("medium"), int32(3), "100Gi", "001", "4", "20Gi"),
 		Entry("large", apiv2.Size("large"), int32(3), "200Gi", "001", "8", "40Gi"),
 		Entry("xlarge", apiv2.Size("xlarge"), int32(3), "200Gi", "001", "8", "20Gi"),
-		Entry("2xlarge", apiv2.Size("2xlarge"), int32(3), "200Gi", "001", "8", "20Gi"),
+		Entry("2xlarge", apiv2.Size2XLarge, int32(3), "200Gi", "001", "8", "20Gi"),
 	)
 
 	It("lets a CR filer size override the manifest metadataVolumeSize", func() {
