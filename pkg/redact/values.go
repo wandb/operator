@@ -27,8 +27,7 @@ var (
 )
 
 var (
-	// Compound schemes such as jdbc:mysql:// match as one scheme.
-	urlScheme = regexp.MustCompile(`(?:[A-Za-z][A-Za-z0-9+.\-]*:)*[A-Za-z][A-Za-z0-9+.\-]*://`)
+	urlScheme = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.\-]*://`)
 	// An OCI digest after a path, as in oci://host/charts/wandb@sha256:<hex>.
 	digestRef = regexp.MustCompile(`^[a-z0-9]+(?:[+._-][a-z0-9]+)*:[0-9a-fA-F]{32,}`)
 	// password=..., "token": "...", Authorization: Bearer ... in free text
@@ -129,86 +128,45 @@ func String(s string) string {
 	return jwt.ReplaceAllString(s, Mask)
 }
 
-// maskUserinfo masks from each scheme:// to the last @ before whitespace, a
-// quote or the next scheme://. Each URL in a list is masked on its own, and an
-// unescaped @ or / in a password is still covered. An @ that starts a digest is
-// skipped, so the userinfo is the part before the previous @, if any. A
-// scheme:// counts as the start of another URL only after a separator, and a
-// URL whose authority is still open (user:pa,ab://cd@host) keeps going past
-// it, so a password containing one is masked whole. A quote ends a URL only
-// when the same quote opened it.
+// maskUserinfo masks, in each word that contains a scheme://, everything from
+// the first scheme:// to the last @. Passwords in these values are not
+// percent-encoded and can contain any character, so the span is not parsed:
+// every userinfo in the word is inside it. An @ that starts a digest is
+// skipped, so the span ends at the @ before it, if any. A quote ends the word
+// only when the same quote opened the URL.
 func maskUserinfo(s string) string {
-	var schemes [][]int
-	for _, m := range urlScheme.FindAllStringIndex(s, -1) {
-		if m[0] == 0 || strings.ContainsRune(urlSeparators, rune(s[m[0]-1])) {
-			schemes = append(schemes, m)
-		}
-	}
 	var out strings.Builder
-	last, pending := 0, -1
-	for i, m := range schemes {
-		start, end := m[1], len(s)
-		if i+1 < len(schemes) {
-			end = schemes[i+1][0]
+	i := 0
+	for i < len(s) {
+		m := urlScheme.FindStringIndex(s[i:])
+		if m == nil {
+			break
 		}
+		schemeAt, start := i+m[0], i+m[1]
 		var quote byte
-		if m[0] > 0 && (s[m[0]-1] == '"' || s[m[0]-1] == '\'') {
-			quote = s[m[0]-1]
+		if schemeAt > 0 && (s[schemeAt-1] == '"' || s[schemeAt-1] == '\'') {
+			quote = s[schemeAt-1]
 		}
-		closed := false
-		if stop := urlEnd(s[start:end], quote); stop >= 0 {
+		end := len(s)
+		if stop := urlEnd(s[start:], quote); stop >= 0 {
 			end = start + stop
-			closed = true
 		}
 		rest := s[start:end]
 		at := strings.LastIndexByte(rest, '@')
 		if at >= 0 && strings.Contains(rest[:at], "/") && digestRef.MatchString(rest[at+1:]) {
 			at = strings.LastIndexByte(rest[:at], '@')
 		}
-		if at < 0 {
-			if !closed && openAuthority(rest) {
-				if pending < 0 {
-					pending = start
-				}
-			} else {
-				pending = -1
-			}
-			continue
+		out.WriteString(s[i:start])
+		if at >= 0 {
+			out.WriteString(Mask)
+			out.WriteString(rest[at:])
+		} else {
+			out.WriteString(rest)
 		}
-		from := start
-		if pending >= 0 {
-			from, pending = pending, -1
-		}
-		out.WriteString(s[last:from])
-		out.WriteString(Mask)
-		last = start + at
+		i = end
 	}
-	out.WriteString(s[last:])
+	out.WriteString(s[i:])
 	return out.String()
-}
-
-// urlSeparators can precede a URL that follows another one in a list, query or
-// sentence.
-const urlSeparators = ",;=|([{<\"' \t\r\n"
-
-// openAuthority reports whether s, the text after a scheme:// up to the next
-// one, may be unfinished userinfo: it has a colon and no path, and the part
-// after its last colon is not just a port (host:8088,).
-func openAuthority(s string) bool {
-	colon := strings.LastIndexByte(s, ':')
-	if colon < 0 || strings.Contains(s, "/") {
-		return false
-	}
-	port := strings.TrimRight(s[colon+1:], urlSeparators)
-	if port == "" {
-		return true
-	}
-	for _, r := range port {
-		if r < '0' || r > '9' {
-			return true
-		}
-	}
-	return false
 }
 
 // urlEnd returns the index where a URL ends in s: whitespace, an angle

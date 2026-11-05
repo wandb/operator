@@ -86,8 +86,8 @@ func TestValues(t *testing.T) {
 				"notes":    "primary mysql://***@db:3306 replica mysql://***@db2:3306",
 				"digits":   "mysql://***@mysql:3306/wandb",
 				"s3":       "s3://***@bucket",
-				"list":     "mysql://***@db1:3306,mysql://***@db2:3306",
-				"query":    "https://proxy.local/connect?target=mysql://***@db:3306",
+				"list":     "mysql://***@db2:3306",
+				"query":    "https://***@db:3306",
 				"pathAt":   "https://***@v1",
 			},
 		},
@@ -119,13 +119,14 @@ func TestValues(t *testing.T) {
 			},
 		},
 		{
-			// A URL list under a key that is not store-like is still parsed.
+			// A URL list under a key that is not store-like is masked from its first
+			// scheme to its last @.
 			name: "URL list after a path",
 			in: map[string]interface{}{
 				"notes": "http://wandb-parquet:8087/_goRPC_,mysql://wandb:hunter2@mysql:3306/wandb_local",
 			},
 			want: map[string]interface{}{
-				"notes": "http://wandb-parquet:8087/_goRPC_,mysql://***@mysql:3306/wandb_local",
+				"notes": "http://***@mysql:3306/wandb_local",
 			},
 		},
 		{
@@ -218,13 +219,14 @@ func TestString(t *testing.T) {
 		{"https://charts.wandb.ai", "https://charts.wandb.ai"},
 		{"clickhouse://user:ab://cd@host:9440/db", "clickhouse://***@host:9440/db"},
 		{"clickhouse://user:a://b://c@host/db", "clickhouse://***@host/db"},
-		{"https://charts.wandb.ai,clickhouse://u:p@h/db", "https://charts.wandb.ai,clickhouse://***@h/db"},
+		{"https://charts.wandb.ai,clickhouse://u:p@h/db", "https://***@h/db"},
 		{"clickhouse://user:p/q://r@host/db", "clickhouse://***@host/db"},
 		{"jdbc:mysql://wandb:hunter2@db:3306/wandb", "jdbc:mysql://***@db:3306/wandb"},
 		{"url=jdbc:sqlserver://sa:hunter2@db:1433", "url=jdbc:sqlserver://***@db:1433"},
-		{"grpc://parquet:8088,mysql://u:p@db", "grpc://parquet:8088,mysql://***@db"},
+		{"grpc://parquet:8088,mysql://u:p@db", "grpc://***@db"},
+		{"clickhouse://user:123,ab://cd@host/db", "clickhouse://***@host/db"},
 		{"clickhouse://user:pw,ab://cd@host/db", "clickhouse://***@host/db"},
-		{"clickhouse://u:p@h/db,clickhouse://v:q@i/db", "clickhouse://***@h/db,clickhouse://***@i/db"},
+		{"clickhouse://u:p@h/db,clickhouse://v:q@i/db", "clickhouse://***@i/db"},
 		{"see https://charts.wandb.ai then clickhouse://u:p@h/db", "see https://charts.wandb.ai then clickhouse://***@h/db"},
 	}
 	for _, tt := range tests {
@@ -254,7 +256,7 @@ func TestErrorMasksApplyErrors(t *testing.T) {
 	tests := []struct{ in, want string }{
 		{
 			`UPGRADE FAILED: Deployment.apps "wandb-app" is invalid: spec.template.spec.containers[0].env[3].value: Invalid value: "http://wandb-parquet:8087/_goRPC_,mysql://wandb:hunter2@mysql:3306/wandb_local"`,
-			`UPGRADE FAILED: Deployment.apps "wandb-app" is invalid: spec.template.spec.containers[0].env[3].value: Invalid value: "http://wandb-parquet:8087/_goRPC_,mysql://***@mysql:3306/wandb_local"`,
+			`UPGRADE FAILED: Deployment.apps "wandb-app" is invalid: spec.template.spec.containers[0].env[3].value: Invalid value: "http://***@mysql:3306/wandb_local"`,
 		},
 		{
 			"template: operator-wandb/templates/secret.yaml:7:12: executing \"secret.yaml\": error converting YAML to JSON: password: \"pa ss\"\n",
