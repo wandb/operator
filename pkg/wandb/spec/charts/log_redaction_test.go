@@ -87,11 +87,12 @@ func TestRepoReleaseDoesNotLogURLCredentials(t *testing.T) {
 		"index unreachable":    withCredentials(closed.URL),
 		"index not found":      withCredentials(notFound.URL),
 		"chart download fails": withCredentials(index.URL),
+		"query token":          withCredentials(notFound.URL) + "/?token=repo-token-1",
 	} {
 		t.Run(name, func(t *testing.T) {
 			release := RepoRelease{URL: url, Name: "wandb", Version: "1.0.0", Debug: true}
 			_, err := release.downloadChart()
-			assertNoCredentials(t, err, "repo-pass-1")
+			assertNoCredentials(t, err, "repo-pass-1", "repo-token-1")
 		})
 	}
 }

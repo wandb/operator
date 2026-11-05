@@ -150,7 +150,8 @@ func URL(u string) string {
 	if at < 0 {
 		return String(u)
 	}
-	return u[:m[1]] + Mask + rest[at:]
+	// The rest can still hold credentials, such as ?token=.
+	return u[:m[1]] + Mask + String(rest[at:])
 }
 
 // maskUserinfo masks, in each word that contains a scheme://, everything from

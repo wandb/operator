@@ -309,6 +309,8 @@ func TestURL(t *testing.T) {
 		{"oci://robot:pa ss@registry:5000/charts/wandb", "oci://***@registry:5000/charts/wandb"},
 		{"https://u:a<b@charts.example.com/wandb", "https://***@charts.example.com/wandb"},
 		{"https://charts.wandb.ai", "https://charts.wandb.ai"},
+		{"https://u:p@charts.example.com/index.yaml?token=hunter2", "https://***@charts.example.com/index.yaml?token=***"},
+		{"https://charts.example.com/index.yaml?token=hunter2", "https://charts.example.com/index.yaml?token=***"},
 		{"oci://registry/charts/wandb@sha256:" + strings.Repeat("a", 64), "oci://registry/charts/wandb@sha256:" + strings.Repeat("a", 64)},
 	}
 	for _, tt := range tests {
