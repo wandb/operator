@@ -206,6 +206,10 @@ func TestString(t *testing.T) {
 		{"clickhouse://user:a://b://c@host/db", "clickhouse://***@host/db"},
 		{"https://charts.wandb.ai,clickhouse://u:p@h/db", "https://charts.wandb.ai,clickhouse://***@h/db"},
 		{"clickhouse://user:p/q://r@host/db", "clickhouse://***@host/db"},
+		{"jdbc:mysql://wandb:hunter2@db:3306/wandb", "jdbc:mysql://***@db:3306/wandb"},
+		{"url=jdbc:sqlserver://sa:hunter2@db:1433", "url=jdbc:sqlserver://***@db:1433"},
+		{"grpc://parquet:8088,mysql://u:p@db", "grpc://parquet:8088,mysql://***@db"},
+		{"clickhouse://user:pw,ab://cd@host/db", "clickhouse://***@host/db"},
 		{"clickhouse://u:p@h/db,clickhouse://v:q@i/db", "clickhouse://***@h/db,clickhouse://***@i/db"},
 		{"see https://charts.wandb.ai then clickhouse://u:p@h/db", "see https://charts.wandb.ai then clickhouse://***@h/db"},
 	}

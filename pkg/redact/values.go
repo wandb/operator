@@ -27,7 +27,8 @@ var (
 )
 
 var (
-	urlScheme = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.\-]*://`)
+	// Compound schemes such as jdbc:mysql:// match as one scheme.
+	urlScheme = regexp.MustCompile(`(?:[A-Za-z][A-Za-z0-9+.\-]*:)*[A-Za-z][A-Za-z0-9+.\-]*://`)
 	// An OCI digest after a path, as in oci://host/charts/wandb@sha256:<hex>.
 	digestRef = regexp.MustCompile(`^[a-z0-9]+(?:[+._-][a-z0-9]+)*:[0-9a-fA-F]{32,}`)
 	// password=..., "token": "...", Authorization: Bearer ... in free text
@@ -165,7 +166,7 @@ func maskUserinfo(s string) string {
 			at = strings.LastIndexByte(rest[:at], '@')
 		}
 		if at < 0 {
-			if !closed && strings.Contains(rest, ":") && !strings.Contains(rest, "/") {
+			if !closed && openAuthority(rest) {
 				if pending < 0 {
 					pending = start
 				}
@@ -189,6 +190,26 @@ func maskUserinfo(s string) string {
 // urlSeparators can precede a URL that follows another one in a list, query or
 // sentence.
 const urlSeparators = ",;=|([{<\"' \t\r\n"
+
+// openAuthority reports whether s, the text after a scheme:// up to the next
+// one, may be unfinished userinfo: it has a colon and no path, and the part
+// after its last colon is not just a port (host:8088,).
+func openAuthority(s string) bool {
+	colon := strings.LastIndexByte(s, ':')
+	if colon < 0 || strings.Contains(s, "/") {
+		return false
+	}
+	port := strings.TrimRight(s[colon+1:], urlSeparators)
+	if port == "" {
+		return true
+	}
+	for _, r := range port {
+		if r < '0' || r > '9' {
+			return true
+		}
+	}
+	return false
+}
 
 // urlEnd returns the index where a URL ends in s: whitespace, an angle
 // bracket, or the unescaped closing quote when the URL was quoted.
