@@ -1,4 +1,4 @@
-"""Run the published WESTest image; only allowlisted metadata becomes an artifact."""
+"""Run WESTest and stage allowlisted metadata and opt-in external diagnostics."""
 
 import json
 import os
@@ -180,8 +180,68 @@ def run(env):
             output.write("result=" + ("passed" if summary["exit_code"] == 0 else "failed") + "\n")
 
 
-def collect(root):
+def redact_diagnostic(text):
+    # kubectl describe prints literal environment values and may include
+    # multiline commands or last-applied annotations. Omit those sections.
+    lines = []
+    section_indent = None
+    for line in text.splitlines(keepends=True):
+        indent = len(line) - len(line.lstrip())
+        if section_indent is not None:
+            if not line.strip() or indent > section_indent:
+                continue
+            section_indent = None
+        match = re.match(r"^(\s*)(Environment(?: Variables from)?|Annotations|Command|Args):", line)
+        if match:
+            lines.append(f"{match[1]}{match[2]}: [REDACTED]\n")
+            section_indent = indent
+        else:
+            lines.append(line)
+    text = "".join(lines)
+    text = re.sub(r"-----BEGIN ([A-Z ]*PRIVATE KEY)-----.*?-----END \1-----",
+                  "[REDACTED PRIVATE KEY]", text, flags=re.DOTALL)
+    text = re.sub(r"(://)[^/\s@]+@", r"\1[REDACTED]@", text)
+    return re.sub(
+        r'''(?i)(\b(?:[a-z0-9_]*password|passwd|secret(?:[_-]?key)?|token|authorization|api[_-]?key|access[_-]?key)\s*[:=]\s*)(?:(?:Bearer|Basic)\s+[^\s,;]+|"[^"]*"|'[^']*'|[^\s,;]+)''',
+        r"\1[REDACTED]", text,
+    )
+
+
+def stage_external_diagnostics(root, public):
+    # Exact WESTest 0.7.2 capture names, plus the four datastore pod log names.
+    # Never recursively copy the artifact tree: it also contains credentials.
+    patterns = [f"*/cluster/{name}" for name in (
+        "nodes.txt", "nodes.describe.txt", "pods.txt", "pvc.txt", "events.txt",
+    )]
+    patterns += [f"*/external-datastores/{name}" for name in (
+        "resources.txt", "pods.describe.txt", "pvc.describe.txt", "events.txt",
+        "mysql-external-*.logs.txt", "redis-external-*.logs.txt",
+        "clickhouse-external-*.logs.txt", "seaweedfs-external-*.logs.txt",
+    )]
+    source = root / "work/artifacts/local-kind-external"
+    count = 0
+    for pattern in patterns:
+        for path in sorted(source.glob(pattern)):
+            # Reject symlinked files and directories, including the source root.
+            relative = path.relative_to(root)
+            if any((root / Path(*relative.parts[:i])).is_symlink()
+                   for i in range(1, len(relative.parts) + 1)) or not path.is_file():
+                continue
+            target = public / "diagnostics" / path.relative_to(source)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(redact_diagnostic(path.read_text(errors="replace")))
+            target.chmod(0o644)
+            count += 1
+    if not count:
+        print("::warning::No external Kubernetes diagnostics were collected; "
+              "the cluster may not have been reachable.", file=sys.stderr)
+    return count
+
+
+def collect(root, external_diagnostics=False):
     summary = json.loads((root / "summary.json").read_text())
+    if external_diagnostics and (summary["provider"], summary["scenario"]) != ("local", "local-kind-external"):
+        raise ValueError("External diagnostics are only supported for local-kind-external")
     # Usually already removed by --rm. If the docker client was interrupted,
     # allow the still-running container to perform its normal teardown.
     grace = "660" if summary["provider"] == "local" else "2760"
@@ -192,9 +252,10 @@ def collect(root):
         print("::warning::Docker CLI is unavailable; cannot stop the WESTest container.", file=sys.stderr)
     summary["cleanup_checkpoint_count"] = len(list((root / "work/artifacts/_state").glob("*/*.json")))
     public = root / "public"
-    public.mkdir(exist_ok=True)
-    # No recursive artifact copy: state, checkpoints, kubeconfigs, logs and
-    # run.env can contain credentials in this public repository.
+    shutil.rmtree(public, ignore_errors=True)
+    public.mkdir()
+    if external_diagnostics:
+        summary["diagnostic_file_count"] = stage_external_diagnostics(root, public)
     (public / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     operator = ("checkout " + summary["operator_revision"] if summary.get("operator_source") == "checkout"
                 else summary["operator_version"])
@@ -207,6 +268,8 @@ def collect(root):
                      f"Cleanup checkpoints remaining: {summary['cleanup_checkpoint_count']}\n\n")
         if summary.get("operator_from_version"):
             output.write(f"Operator upgrade: {summary['operator_from_version']} -> {summary['operator_version']}\n\n")
+        if external_diagnostics:
+            output.write(f"External diagnostic files: {summary['diagnostic_file_count']}\n\n")
         if summary["cleanup_checkpoint_count"]:
             output.write("Cleanup needs investigation in the cloud account. Recovery bundles are a follow-up; "
                          "runner-local state is lost when the runner is deleted.\n")
@@ -215,6 +278,6 @@ def collect(root):
 
 if __name__ == "__main__":
     if sys.argv[1:] and sys.argv[1] == "collect":
-        collect(Path(sys.argv[2]))
+        collect(Path(sys.argv[2]), external_diagnostics=os.environ.get("INCLUDE_EXTERNAL_DIAGNOSTICS") == "true")
     else:
         sys.exit(run(os.environ))

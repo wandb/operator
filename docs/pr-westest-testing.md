@@ -1,20 +1,10 @@
 # PR WESTest testing
 
-[The PR workflow](../.github/workflows/pr-westest.yaml) runs seven local Kind
-scenarios against the PR merge commit's operator checkout:
-
-- `local-kind-ingress`
-- `local-kind-gateway`
-- `local-kind-oidc-pkce`
-- `local-kind-oidc-implicit`
-- `local-kind-proxy`
-- `local-kind-proxy-auth`
-- `local-kind-proxy-tls`
-
-`local-kind-airgap` and `local-kind-airgap-enforce` are temporarily excluded
-because mirroring their dependencies hits Docker Hub's anonymous pull limits.
-`local-kind-external` is also temporarily excluded while its provisioning
-failure is investigated separately.
+[The PR workflow](../.github/workflows/pr-westest.yaml) runs only
+`local-kind-external` on this diagnostic branch, against the PR merge commit's
+operator checkout. The branch starts from [PR #438](https://github.com/wandb/operator/pull/438)
+and disables its other scenarios to isolate the external datastore provisioning
+failure. The airgap scenarios also remain disabled.
 
 Non-draft PRs targeting `main` run when opened, updated, reopened, or
 marked ready for review. New updates or conversion back to draft cancel older
@@ -55,6 +45,20 @@ publish them to a release registry. The separate
 
 Each scenario has a 60-minute execution budget plus 11 minutes for cancellation
 cleanup, within a 90-minute job limit. Failures do not cancel sibling scenarios.
-The action retains the usual automatic teardown and uploads only an allowlisted
-`summary.json`, identifying the operator checkout by commit SHA. Full logs remain
-in Actions; credentials, Terraform state, and kubeconfigs are not uploaded.
+The action retains automatic teardown and uploads `summary.json`, identifying
+the operator checkout by commit SHA. This branch enables the action's
+`include-external-diagnostics` input, which also stages the following WESTest
+0.7.2 captures under `diagnostics/<run-id>/` in the `westest-local-kind-external`
+artifact, including after a provisioning failure:
+
+- Cluster node status/descriptions, pod and PVC lists, and events.
+- External datastore resource lists, pod/PVC descriptions, and events.
+- Current and previous logs from the MySQL, Redis, ClickHouse, and SeaweedFS pods.
+
+The exporter omits environment, command, argument, and annotation sections from
+descriptions and redacts credential assignments, URL credentials, and private
+key blocks. It uses explicit file patterns and rejects symlinks; raw Terraform
+state, checkpoints, kubeconfigs, run environment files, and application logs are
+not uploaded. Missing diagnostics produce a warning and retain the summary.
+The summary reports the number of diagnostic files. Uploads are retained for
+14 days. Other action callers retain summary-only uploads by default.

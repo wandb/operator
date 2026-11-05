@@ -1,5 +1,5 @@
 name: Run WESTest scenario
-description: Run WESTest against a published operator chart or a local checkout, with a public-safe summary.
+description: Run WESTest against a published operator chart or a local checkout, with a summary and optional external datastore diagnostics.
 
 inputs:
   scenario:
@@ -29,13 +29,16 @@ inputs:
   license:
     description: Optional W&B license file contents.
     default: ""
+  include-external-diagnostics:
+    description: Upload selected, redacted Kubernetes diagnostics for local-kind-external. Other scenarios must leave this disabled.
+    default: "false"
 
 outputs:
   result:
     description: passed or failed.
     value: ${{ steps.run.outputs.result }}
   artifact-dir:
-    description: Absolute path to the public-safe summary directory.
+    description: Absolute path to the staged summary and optional diagnostics directory.
     value: ${{ steps.run.outputs.artifact-dir }}
 
 runs:
@@ -57,20 +60,21 @@ runs:
         WESTEST_LICENSE: ${{ inputs.license }}
       run: python3 "$ACTION_PATH/run.py"
 
-    - name: Collect summary
+    - name: Collect artifacts
       if: ${{ always() && steps.run.outputs.work-root != '' }}
       shell: bash
       env:
         ACTION_PATH: ${{ github.action_path }}
         WORK_ROOT: ${{ steps.run.outputs.work-root }}
+        INCLUDE_EXTERNAL_DIAGNOSTICS: ${{ inputs.include-external-diagnostics }}
       # WESTest writes root-owned files inside the mounted work directory.
-      run: sudo --preserve-env=GITHUB_STEP_SUMMARY python3 "$ACTION_PATH/run.py" collect "$WORK_ROOT"
+      run: sudo --preserve-env=GITHUB_STEP_SUMMARY,INCLUDE_EXTERNAL_DIAGNOSTICS python3 "$ACTION_PATH/run.py" collect "$WORK_ROOT"
 
-    - name: Upload summary
+    - name: Upload artifacts
       if: ${{ always() && steps.run.outputs.artifact-dir != '' }}
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
         name: westest-${{ inputs.scenario }}
-        path: ${{ steps.run.outputs.artifact-dir }}/summary.json
+        path: ${{ steps.run.outputs.artifact-dir }}/
         if-no-files-found: warn
         retention-days: 14

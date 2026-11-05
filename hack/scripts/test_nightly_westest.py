@@ -520,6 +520,109 @@ class RunnerTests(unittest.TestCase):
         self.assertFalse((root / "auth").exists())
         self.assertTrue(state.exists())
 
+    def prepare_external_failure(self):
+        self.env.update(SCENARIO="local-kind-external")
+        with patch.object(runner.subprocess, "run", return_value=subprocess.CompletedProcess([], 1)):
+            self.assertEqual(runner.run(self.env), 1)
+        root = self.root / "westest-local-kind-external"
+        artifacts = root / "work/artifacts/local-kind-external/20261105T120000Z-6"
+        artifacts.mkdir(parents=True)
+        return root, artifacts
+
+    def collect_external(self, root, enabled=True):
+        with patch.dict(os.environ, {"GITHUB_STEP_SUMMARY": str(self.root / "step-summary")}):
+            with patch.object(runner.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)):
+                runner.collect(root, external_diagnostics=enabled)
+
+    def test_external_failure_exports_diagnostics_without_raw_state_or_environment(self):
+        root, artifacts = self.prepare_external_failure()
+        captures = {
+            "cluster/nodes.describe.txt": "Conditions:\n  DiskPressure False\n",
+            "cluster/pods.txt": "westest-external mysql-external-abc Pending\n",
+            "cluster/events.txt": "Failed pull: 429 Too Many Requests\n",
+            "external-datastores/pods.describe.txt": (
+                "Name: mysql-external-abc\n"
+                "Annotations: last-applied-secret\n"
+                "  annotation continuation\n"
+                "Containers:\n  mysql:\n"
+                "    State: Waiting\n      Reason: ImagePullBackOff\n"
+                "    Environment:\n      MYSQL_ROOT_PASSWORD: private-password\n"
+                "      MULTILINE: first-secret-line\n        second-secret-line\n"
+                "    Mounts:\n      /var/lib/mysql from data\n"
+                "Events:\n  Failed pull: 429 Too Many Requests\n"
+            ),
+            "external-datastores/pvc.describe.txt": "Status: Bound\n",
+            "external-datastores/mysql-external-abc.logs.txt": "mysql startup failed\n",
+            "external-datastores/mysql-external-abc.previous.logs.txt": "previous container is unavailable\n",
+        }
+        excluded = ["run.env", "kubeconfig", "terraform/terraform.tfstate",
+                    "external-datastores/secrets.yaml", "cluster/wandb-cr.describe.txt",
+                    "workloads/wandb.logs.txt", "external-datastores/unrelated.logs.txt"]
+        for name, contents in {**captures, **dict.fromkeys(excluded, "private-raw-data")}.items():
+            path = artifacts / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(contents)
+        self.collect_external(root)
+        destination = root / "public/diagnostics" / artifacts.name
+        actual = {str(path.relative_to(destination)) for path in destination.rglob("*") if path.is_file()}
+        self.assertEqual(actual, set(captures))
+        combined = "".join(path.read_text() for path in destination.rglob("*") if path.is_file())
+        for secret in ["private-password", "first-secret-line", "second-secret-line",
+                       "last-applied-secret", "annotation continuation", "private-raw-data"]:
+            self.assertNotIn(secret, combined)
+        for evidence in ["ImagePullBackOff", "429 Too Many Requests", "Status: Bound",
+                         "/var/lib/mysql", "previous container is unavailable"]:
+            self.assertIn(evidence, combined)
+        summary = json.loads((root / "public/summary.json").read_text())
+        self.assertEqual(summary["exit_code"], 1)
+        self.assertEqual(summary["diagnostic_file_count"], len(captures))
+
+    def test_external_diagnostics_require_opt_in_and_clear_stale_exports(self):
+        root, artifacts = self.prepare_external_failure()
+        (artifacts / "cluster").mkdir()
+        (artifacts / "cluster/events.txt").write_text("Failed pull: 429\n")
+        self.collect_external(root)
+        self.assertTrue((root / "public/diagnostics").exists())
+        self.collect_external(root, enabled=False)
+        self.assertEqual([path.name for path in (root / "public").iterdir()], ["summary.json"])
+
+    def test_external_diagnostics_handle_missing_files_and_reject_symlinks(self):
+        root, artifacts = self.prepare_external_failure()
+        (artifacts / "cluster").mkdir()
+        sensitive = root / "private"
+        sensitive.mkdir()
+        (sensitive / "events.txt").write_text("do-not-upload")
+        (artifacts / "cluster/events.txt").symlink_to(sensitive / "events.txt")
+        (artifacts / "external-datastores").symlink_to(sensitive, target_is_directory=True)
+        linked_run = artifacts.parent / "linked-run"
+        linked_run.symlink_to(artifacts, target_is_directory=True)
+        with patch("sys.stderr", new_callable=io.StringIO) as stderr:
+            self.collect_external(root)
+        self.assertIn("No external Kubernetes diagnostics", stderr.getvalue())
+        summary = json.loads((root / "public/summary.json").read_text())
+        self.assertEqual(summary["diagnostic_file_count"], 0)
+        self.assertFalse((root / "public/diagnostics").exists())
+
+    def test_diagnostic_redaction_preserves_errors_and_removes_inline_credentials(self):
+        contents = (
+            'Connection failed mysql://user:url-secret@mysql:3306/wandb\n'
+            'password="quoted secret" token=inline-secret\n'
+            'Authorization: Bearer bearer-secret\n'
+            '-----BEGIN RSA PRIVATE KEY-----\nprivate-key-data\n-----END RSA PRIVATE KEY-----\n'
+            'Back-off pulling image mysql:8.4: 429 Too Many Requests\n'
+        )
+        redacted = runner.redact_diagnostic(contents)
+        for secret in ["url-secret", "quoted secret", "inline-secret", "bearer-secret", "private-key-data"]:
+            self.assertNotIn(secret, redacted)
+        self.assertIn("mysql:3306/wandb", redacted)
+        self.assertIn("Back-off pulling image mysql:8.4: 429 Too Many Requests", redacted)
+
+    def test_external_diagnostics_reject_other_scenarios(self):
+        with patch.object(runner.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)):
+            runner.run(self.env)
+        with self.assertRaisesRegex(ValueError, "only supported for local-kind-external"):
+            self.collect_external(self.root / "westest-local-kind-ingress")
+
 
 if __name__ == "__main__":
     unittest.main()

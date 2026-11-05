@@ -32,11 +32,9 @@ cloud scenarios. A named scenario selects only that scenario. Unsupported names
 and attempts to select a cloud scenario on another ref fail during setup. There
 is no pull-request trigger for these provisioning tests.
 
-The separate [PR WESTest workflow](pr-westest-testing.md) runs seven local
-Kind scenarios against the PR's operator checkout. Its airgap scenarios are
-temporarily excluded because dependency mirroring hits Docker Hub's anonymous
-pull limits. The external datastore scenario is also excluded from PR runs
-pending a separate investigation into its provisioning failure.
+On this diagnostic branch, the separate [PR WESTest workflow](pr-westest-testing.md)
+runs only `local-kind-external` against the PR's operator checkout and uploads
+selected Kubernetes diagnostics to investigate its provisioning failure.
 
 The nightly local matrix covers external datastores, authenticated proxy egress, and
 TLS-intercepting proxy CA trust alongside the baseline routing and OIDC checks.
