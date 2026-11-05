@@ -35,6 +35,12 @@ seaweedfs-operator:
     runAsGroup: null
     fsGroup: null
 
+# OpenShift ships the monitoring.coreos.com CRDs (owned by its
+# cluster-version-operator), so installing the bundled copies fails helm's
+# ownership import and conflicts with CVO's server-side-apply field manager.
+prometheus-operator-crds:
+  enabled: false
+
 # Disable moco's injected fixed 10000 IDs so restricted-v2 admits MySQL pods.
 moco:
   extraArgs:

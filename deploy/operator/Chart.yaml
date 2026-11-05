@@ -30,7 +30,9 @@ dependencies:
   - name: prometheus-operator-crds
     version: 29.0.0
     repository: https://prometheus-community.github.io/helm-charts
-    condition: seaweedfs-operator.enabled
+    # First valid path wins: unset by default, so seaweedfs-operator.enabled
+    # decides; profiles/openshift.yaml disables it (platform ships the CRDs).
+    condition: prometheus-operator-crds.enabled,seaweedfs-operator.enabled
   - name: altinity-clickhouse-operator
     version: 0.26.3
     repository: https://helm.altinity.com
