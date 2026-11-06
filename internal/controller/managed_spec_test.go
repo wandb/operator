@@ -148,6 +148,17 @@ func TestSelectBaseSpecAirgappedRequiresManagedSpec(t *testing.T) {
 	}
 }
 
+func TestSelectBaseSpecWithoutDeployerChannelRequiresManagedSpec(t *testing.T) {
+	r := testManagedSpecReconciler(t)
+	r.DeployerChannelEnabled = false
+	selected, err := r.selectBaseSpec(context.Background(), "default", func() (*spec.Spec, error) {
+		return nil, nil
+	})
+	if selected != nil || !errors.Is(err, errManagedSpecUnavailable) {
+		t.Fatalf("got %v, %v; want errManagedSpecUnavailable", selected, err)
+	}
+}
+
 func TestSelectBaseSpecAirgappedUsesValidManagedSpec(t *testing.T) {
 	r := testManagedSpecReconciler(t, testManagedSpecConfigMap("default", testManagedValues(true)))
 	r.IsAirgapped = true
@@ -210,9 +221,10 @@ func testManagedSpecReconciler(t *testing.T, objects ...client.Object) *WeightsA
 		t.Fatalf("could not register core Kubernetes types: %v", err)
 	}
 	return &WeightsAndBiasesReconciler{
-		Client:             fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build(),
-		Scheme:             scheme,
-		ManagedSpecEnabled: true,
+		Client:                 fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build(),
+		Scheme:                 scheme,
+		ManagedSpecEnabled:     true,
+		DeployerChannelEnabled: true,
 	}
 }
 

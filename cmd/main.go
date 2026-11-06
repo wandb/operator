@@ -71,7 +71,7 @@ func main() {
 	var enableHTTP2 bool
 	var tlsOpts []func(*tls.Config)
 	var deployerAPI, isolationNamespaces string
-	var debug, airgapped, managedSpecEnabled, userSpecEnabled bool
+	var debug, airgapped, managedSpecEnabled, userSpecEnabled, deployerChannelEnabled bool
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -96,8 +96,9 @@ func main() {
 	flag.StringVar(&isolationNamespaces, "isolation-namespaces", "", "Specify namespaces (as a comma separated string) that the controller should monitor when operating in namespace isolation mode.")
 
 	flag.BoolVar(&debug, "debug", false, "Enable debug mode")
-	flag.BoolVar(&managedSpecEnabled, "managed-spec-enabled", false, "Use managed spec when available, falling back to Deployer; with --airgapped, wait for it instead")
+	flag.BoolVar(&managedSpecEnabled, "managed-spec-enabled", false, "Use managed spec when available, falling back to Deployer; without the Deployer channel, wait for it instead")
 	flag.BoolVar(&userSpecEnabled, "user-spec-enabled", true, "Read and apply the instance user spec")
+	flag.BoolVar(&deployerChannelEnabled, "deployer-channel-enabled", true, "Fetch the Deployer channel spec; when disabled or airgapped, managed spec has no Deployer fallback")
 
 	opts := zap.Options{
 		Development: true,
@@ -108,7 +109,7 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
-	if err := operatormetrics.RegisterConfig(ctrlmetrics.Registry, userSpecEnabled, managedSpecEnabled); err != nil {
+	if err := operatormetrics.RegisterConfig(ctrlmetrics.Registry, userSpecEnabled, managedSpecEnabled, deployerChannelEnabled && !airgapped); err != nil {
 		setupLog.Error(err, "unable to register config metrics")
 		os.Exit(1)
 	}
@@ -238,14 +239,15 @@ func main() {
 	}
 
 	if err = (&controller.WeightsAndBiasesReconciler{
-		IsAirgapped:        airgapped,
-		Recorder:           mgr.GetEventRecorderFor("weightsandbiases"),
-		Client:             mgr.GetClient(),
-		Scheme:             mgr.GetScheme(),
-		DeployerClient:     &deployer.DeployerClient{DeployerAPI: deployerAPI},
-		Debug:              debug,
-		ManagedSpecEnabled: managedSpecEnabled,
-		UserSpecEnabled:    userSpecEnabled,
+		IsAirgapped:            airgapped,
+		DeployerChannelEnabled: deployerChannelEnabled,
+		Recorder:               mgr.GetEventRecorderFor("weightsandbiases"),
+		Client:                 mgr.GetClient(),
+		Scheme:                 mgr.GetScheme(),
+		DeployerClient:         &deployer.DeployerClient{DeployerAPI: deployerAPI},
+		Debug:                  debug,
+		ManagedSpecEnabled:     managedSpecEnabled,
+		UserSpecEnabled:        userSpecEnabled,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "WeightsAndBiases")
 		os.Exit(1)

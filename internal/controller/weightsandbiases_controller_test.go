@@ -78,13 +78,14 @@ var _ = Describe("WeightsandbiasesController", func() {
 			deployerClient := &deployerfakes.FakeDeployerInterface{}
 			deployerClient.GetSpecReturns(&deployerSpec, nil)
 			reconciler = &WeightsAndBiasesReconciler{
-				Client:          k8sClient,
-				IsAirgapped:     false,
-				DeployerClient:  deployerClient,
-				Scheme:          scheme.Scheme,
-				Recorder:        recorder,
-				DryRun:          true,
-				UserSpecEnabled: true,
+				Client:                 k8sClient,
+				IsAirgapped:            false,
+				DeployerClient:         deployerClient,
+				Scheme:                 scheme.Scheme,
+				Recorder:               recorder,
+				DryRun:                 true,
+				UserSpecEnabled:        true,
+				DeployerChannelEnabled: true,
 			}
 			wandb := wandbcomv1.WeightsAndBiases{
 				ObjectMeta: metav1.ObjectMeta{
@@ -166,13 +167,14 @@ var _ = Describe("WeightsandbiasesController", func() {
 			deployerClient := &deployerfakes.FakeDeployerInterface{}
 			deployerClient.GetSpecReturns(&deployerSpec, nil)
 			reconciler = &WeightsAndBiasesReconciler{
-				Client:          k8sClient,
-				IsAirgapped:     false,
-				DeployerClient:  deployerClient,
-				Scheme:          scheme.Scheme,
-				Recorder:        recorder,
-				DryRun:          true,
-				UserSpecEnabled: true,
+				Client:                 k8sClient,
+				IsAirgapped:            false,
+				DeployerClient:         deployerClient,
+				Scheme:                 scheme.Scheme,
+				Recorder:               recorder,
+				DryRun:                 true,
+				UserSpecEnabled:        true,
+				DeployerChannelEnabled: true,
 			}
 			wandb := wandbcomv1.WeightsAndBiases{
 				ObjectMeta: metav1.ObjectMeta{
@@ -345,14 +347,15 @@ var _ = Describe("WeightsandbiasesController", func() {
 			deployerBaseSpec.Values = deployerValues
 			deployerClient.GetSpecReturns(&deployerBaseSpec, nil)
 			reconciler = &WeightsAndBiasesReconciler{
-				Client:             k8sClient,
-				IsAirgapped:        false,
-				DeployerClient:     deployerClient,
-				Scheme:             scheme.Scheme,
-				Recorder:           recorder,
-				DryRun:             true,
-				ManagedSpecEnabled: true,
-				UserSpecEnabled:    true,
+				Client:                 k8sClient,
+				IsAirgapped:            false,
+				DeployerClient:         deployerClient,
+				Scheme:                 scheme.Scheme,
+				Recorder:               recorder,
+				DryRun:                 true,
+				ManagedSpecEnabled:     true,
+				UserSpecEnabled:        true,
+				DeployerChannelEnabled: true,
 			}
 
 			wandb := &wandbcomv1.WeightsAndBiases{
@@ -472,6 +475,87 @@ var _ = Describe("WeightsandbiasesController", func() {
 			Expect(apierrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{
 				Name: name + "-spec-active", Namespace: "default",
 			}, &v1.Secret{}))).To(BeTrue())
+		})
+
+		It("waits for managed spec without calling Deployer when the Deployer channel is disabled", func() {
+			ctx := context.Background()
+			key := types.NamespacedName{Name: name, Namespace: "default"}
+			reconciler.DeployerChannelEnabled = false
+
+			wandb := &wandbcomv1.WeightsAndBiases{}
+			Expect(k8sClient.Get(ctx, key, wandb)).To(Succeed())
+			wandb.Spec.Chart = wandbcomv1.Object{Object: map[string]interface{}{
+				"url": "https://charts.wandb.ai", "name": "operator-wandb", "version": "0.43.5",
+			}}
+			Expect(k8sClient.Update(ctx, wandb)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, &v1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
+				Name: managedSpecConfigMapName, Namespace: "default",
+			}})).To(Succeed())
+
+			result, err := reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: key})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(BeNumerically(">", 0))
+			Expect(deployerClient.GetSpecCallCount()).To(Equal(0))
+			Expect(k8sClient.Get(ctx, key, wandb)).To(Succeed())
+			Expect(wandb.Status.Phase).To(Equal(string(status.WaitingForManagedSpec)))
+			Expect(apierrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{
+				Name: name + "-spec-active", Namespace: "default",
+			}, &v1.Secret{}))).To(BeTrue())
+		})
+
+		It("keeps a running install's active spec while managed spec is invalid, then recovers", func() {
+			ctx := context.Background()
+			key := types.NamespacedName{Name: name, Namespace: "default"}
+			request := ctrl.Request{NamespacedName: key}
+			activeKey := types.NamespacedName{Name: name + "-spec-active", Namespace: "default"}
+			reconciler.DeployerChannelEnabled = false
+
+			_, err := reconciler.Reconcile(ctx, request)
+			Expect(err).NotTo(HaveOccurred())
+			active := &v1.Secret{}
+			Expect(k8sClient.Get(ctx, activeKey, active)).To(Succeed())
+			appliedValues := active.Data["values"]
+
+			managedSpec := &v1.ConfigMap{}
+			cmKey := types.NamespacedName{Name: managedSpecConfigMapName, Namespace: "default"}
+			Expect(k8sClient.Get(ctx, cmKey, managedSpec)).To(Succeed())
+			validValues := managedSpec.Data["values"]
+			managedSpec.Data["values"] = "{"
+			Expect(k8sClient.Update(ctx, managedSpec)).To(Succeed())
+
+			result, err := reconciler.Reconcile(ctx, request)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(managedSpecRetryInterval))
+			wandb := &wandbcomv1.WeightsAndBiases{}
+			Expect(k8sClient.Get(ctx, key, wandb)).To(Succeed())
+			Expect(wandb.Status.Phase).To(Equal(string(status.WaitingForManagedSpec)))
+			Expect(k8sClient.Get(ctx, activeKey, active)).To(Succeed())
+			Expect(active.Data["values"]).To(Equal(appliedValues))
+
+			Expect(k8sClient.Get(ctx, cmKey, managedSpec)).To(Succeed())
+			managedSpec.Data["values"] = validValues
+			Expect(k8sClient.Update(ctx, managedSpec)).To(Succeed())
+
+			_, err = reconciler.Reconcile(ctx, request)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Get(ctx, key, wandb)).To(Succeed())
+			Expect(wandb.Status.Phase).To(Equal(string(status.Completed)))
+			Expect(deployerClient.GetSpecCallCount()).To(Equal(0))
+		})
+
+		It("installs from managed spec without calling Deployer when the Deployer channel is disabled", func() {
+			ctx := context.Background()
+			key := types.NamespacedName{Name: name, Namespace: "default"}
+			reconciler.DeployerChannelEnabled = false
+
+			_, err := reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: key})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(deployerClient.GetSpecCallCount()).To(Equal(0))
+			active := &v1.Secret{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name + "-spec-active", Namespace: "default"}, active)).To(Succeed())
+			var activeValues spec.Values
+			Expect(json.Unmarshal(active.Data["values"], &activeValues)).To(Succeed())
+			Expect(activeValues["global"].(map[string]interface{})).To(HaveKeyWithValue("cloudProvider", "gcp"))
 		})
 
 		It("does not let a missing managed spec block deletion when airgapped", func() {

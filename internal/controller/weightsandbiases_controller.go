@@ -58,14 +58,15 @@ const resFinalizer = "finalizer.app.wandb.com"
 // WeightsAndBiasesReconciler reconciles a WeightsAndBiases object
 type WeightsAndBiasesReconciler struct {
 	client.Client
-	IsAirgapped        bool
-	DeployerClient     deployer.DeployerInterface
-	Scheme             *runtime.Scheme
-	Recorder           record.EventRecorder
-	DryRun             bool
-	Debug              bool
-	ManagedSpecEnabled bool
-	UserSpecEnabled    bool
+	IsAirgapped            bool
+	DeployerClient         deployer.DeployerInterface
+	Scheme                 *runtime.Scheme
+	Recorder               record.EventRecorder
+	DryRun                 bool
+	Debug                  bool
+	ManagedSpecEnabled     bool
+	UserSpecEnabled        bool
+	DeployerChannelEnabled bool
 }
 
 //+kubebuilder:rbac:groups=apps.wandb.com,resources=weightsandbiases,verbs=get;list;watch;create;update;patch;delete
@@ -145,7 +146,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	license := utils.GetLicense(ctx, r.Client, wandb, crdSpec, userInputSpec)
 
 	getDeployerSpec := func() (*spec.Spec, error) {
-		if r.IsAirgapped {
+		if !r.usesDeployerChannel() {
 			return nil, nil
 		}
 
@@ -188,7 +189,7 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	if wandb.ObjectMeta.DeletionTimestamp.IsZero() {
 		selection, err := r.selectBaseSpec(ctx, wandb.Namespace, getDeployerSpec)
 		if isManagedSpecUnavailable(err) {
-			log.Info("Waiting for managed spec; airgapped mode has no Deployer fallback", "reason", err.Error())
+			log.Info("Waiting for managed spec; the Deployer channel is disabled, so there is no fallback", "reason", err.Error())
 			r.Recorder.Event(wandb, corev1.EventTypeWarning, "WaitingForManagedSpec", err.Error())
 			statusManager.Set(status.WaitingForManagedSpec)
 			return ctrl.Result{RequeueAfter: managedSpecRetryInterval}, nil

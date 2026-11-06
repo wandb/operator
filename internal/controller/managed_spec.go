@@ -25,6 +25,10 @@ func isManagedSpecUnavailable(err error) bool {
 	return errors.Is(err, errManagedSpecUnavailable)
 }
 
+func (r *WeightsAndBiasesReconciler) usesDeployerChannel() bool {
+	return r.DeployerChannelEnabled && !r.IsAirgapped
+}
+
 func (r *WeightsAndBiasesReconciler) selectBaseSpec(
 	ctx context.Context,
 	namespace string,
@@ -40,7 +44,7 @@ func (r *WeightsAndBiasesReconciler) selectBaseSpec(
 	}
 
 	managedSpec, err := r.getManagedSpec(ctx, namespace)
-	if err != nil && r.IsAirgapped {
+	if err != nil && !r.usesDeployerChannel() {
 		return nil, fmt.Errorf("%w: %v", errManagedSpecUnavailable, err)
 	}
 	if apierrors.IsNotFound(err) {
