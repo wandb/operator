@@ -10,6 +10,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	v1 "github.com/wandb/operator/api/v1"
 	"github.com/wandb/operator/pkg/helm"
+	"github.com/wandb/operator/pkg/redact"
 	"github.com/wandb/operator/pkg/wandb/spec"
 	chart "helm.sh/helm/v4/pkg/chart/v2"
 	"helm.sh/helm/v4/pkg/chart/v2/loader"
@@ -73,12 +74,12 @@ func (r OCIRelease) Chart() (*chart.Chart, error) {
 func (r OCIRelease) pullReference(registryClient *registry.Client) (string, error) {
 	parsedURL, err := url.Parse(r.URL)
 	if err != nil {
-		return "", fmt.Errorf("invalid OCI URL %q: %w", r.URL, err)
+		return "", redact.Error(fmt.Errorf("invalid OCI URL %q: %w", redact.URL(r.URL), err))
 	}
 
 	_, normalizedRef, err := registryClient.ValidateReference(r.URL, r.Version, parsedURL)
 	if err != nil {
-		return "", fmt.Errorf("failed to validate OCI reference %s: %w", r.URL, err)
+		return "", redact.Error(fmt.Errorf("failed to validate OCI reference %s: %w", redact.URL(r.URL), err))
 	}
 
 	return normalizedRef.String(), nil
@@ -111,22 +112,22 @@ func (r OCIRelease) pullChart() (*chart.Chart, error) {
 
 	ref, err := r.pullReference(registryClient)
 	if err != nil {
-		log.Error(err, "Failed to normalize OCI reference", "url", r.URL, "version", r.Version)
+		log.Error(redact.Error(err), "Failed to normalize OCI reference", "url", redact.URL(r.URL), "version", r.Version)
 		return nil, err
 	}
 
 	if r.Debug {
-		log.Info("Pulling OCI chart", "ref", ref)
+		log.Info("Pulling OCI chart", "ref", redact.URL(ref))
 	}
 
 	result, err := registryClient.Pull(ref)
 	if err != nil {
-		log.Error(err, "Failed to pull chart", "ref", ref)
-		return nil, fmt.Errorf("failed to pull chart from %s: %w", r.URL, err)
+		log.Error(redact.Error(err), "Failed to pull chart", "ref", redact.URL(ref))
+		return nil, redact.Error(fmt.Errorf("failed to pull chart from %s: %w", redact.URL(r.URL), err))
 	}
 
 	if result.Chart == nil {
-		return nil, fmt.Errorf("registry returned empty chart for %s", r.URL)
+		return nil, fmt.Errorf("registry returned empty chart for %s", redact.URL(r.URL))
 	}
 
 	if r.Debug {

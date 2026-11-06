@@ -7,6 +7,7 @@ import (
 	"reflect"
 
 	v1 "github.com/wandb/operator/api/v1"
+	"github.com/wandb/operator/pkg/redact"
 	chart "helm.sh/helm/v4/pkg/chart/v2"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -125,41 +126,14 @@ func (s *Spec) Merge(spec *Spec) (err error) {
 	return nil
 }
 
-func (s *Spec) SensitiveValuesMasked() *Spec {
-	if s.Values != nil {
-		return &Spec{
-			Metadata: s.Metadata,
-			Chart:    s.Chart,
-			Values:   maskValues(s.Values),
-		}
+// SensitiveValuesMasked returns a deep copy of the spec, including its chart
+// and metadata, with credentials masked. Use it whenever a spec is logged.
+func (s *Spec) SensitiveValuesMasked() map[string]interface{} {
+	return map[string]interface{}{
+		"metadata": redact.Values(s.Metadata),
+		"chart":    redact.Values(s.Chart),
+		"values":   redact.Values(s.Values),
 	}
-	return s
-}
-
-var sensitiveKeys = map[string]bool{
-	"secret":    true,
-	"accessKey": true,
-	"license":   true,
-	"password":  true,
-}
-
-func maskValues(values map[string]interface{}) map[string]interface{} {
-	newValues := make(map[string]interface{})
-	for key, value := range values {
-		switch v := value.(type) {
-		case map[string]interface{}:
-			newValues[key] = maskValues(v)
-		case string:
-			if sensitiveKeys[key] {
-				newValues[key] = "***"
-			} else {
-				newValues[key] = value
-			}
-		default:
-			newValues[key] = value
-		}
-	}
-	return newValues
 }
 
 func (s *Spec) DiffValues(other *Spec) map[string]interface{} {

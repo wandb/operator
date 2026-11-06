@@ -12,6 +12,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	v1 "github.com/wandb/operator/api/v1"
 	"github.com/wandb/operator/pkg/helm"
+	"github.com/wandb/operator/pkg/redact"
 	"github.com/wandb/operator/pkg/wandb/spec"
 	chart "helm.sh/helm/v4/pkg/chart/v2"
 	"helm.sh/helm/v4/pkg/cli"
@@ -58,13 +59,13 @@ func (r RepoRelease) deriveRepoName() (string, error) {
 
 	parsedURL, err := url.Parse(r.URL)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse URL: %w", err)
+		return "", redact.Error(fmt.Errorf("failed to parse URL: %w", err))
 	}
 
 	// Use hostname without dots as the repo name
 	repoName := strings.ReplaceAll(parsedURL.Hostname(), ".", "-")
 	if repoName == "" {
-		return "", fmt.Errorf("could not derive repository name from URL: %s", r.URL)
+		return "", fmt.Errorf("could not derive repository name from URL: %s", redact.URL(r.URL))
 	}
 
 	return repoName, nil
@@ -155,7 +156,7 @@ func (r RepoRelease) downloadChart() (string, error) {
 
 	repoName, err := r.deriveRepoName()
 	if err != nil {
-		log.Error(err, "Failed to derive repository name")
+		log.Error(redact.Error(err), "Failed to derive repository name")
 		return "", err
 	}
 
@@ -167,18 +168,19 @@ func (r RepoRelease) downloadChart() (string, error) {
 
 	parsedURL, err := url.Parse(r.URL)
 	if err != nil {
+		err = redact.Error(err)
 		log.Error(err, "Failed to parse URL for TLS verification check")
 		return "", err
 	}
 
 	entry.InsecureSkipTLSVerify = parsedURL.Scheme == "http"
 	if entry.InsecureSkipTLSVerify && r.Debug {
-		log.Info("TLS verification disabled for HTTP URL", "url", r.URL)
+		log.Info("TLS verification disabled for HTTP URL", "url", redact.URL(r.URL))
 	}
 
 	if r.Debug {
 		log.Info("Setting up chart repository",
-			"url", entry.URL,
+			"url", redact.URL(entry.URL),
 			"name", r.Name,
 			"repoName", entry.Name,
 			"username", entry.Username)
@@ -213,19 +215,20 @@ func (r RepoRelease) downloadChart() (string, error) {
 
 	chartRepo, err := repo.NewChartRepository(entry, providers)
 	if err != nil {
+		err = redact.Error(err)
 		log.Error(err, "Failed to create chart repository")
 		return "", err
 	}
 
 	if r.Debug {
 		log.Info("Attempting to download index file",
-			"url", entry.URL,
+			"url", redact.URL(entry.URL),
 			"username", entry.Username)
 	}
 	_, err = chartRepo.DownloadIndexFile()
 	if err != nil {
-		log.Error(err, "Failed to download index file")
-		return "", fmt.Errorf("failed to download index file from %s: %w", entry.URL, err)
+		log.Error(redact.Error(err), "Failed to download index file")
+		return "", redact.Error(fmt.Errorf("failed to download index file from %s: %w", redact.URL(entry.URL), err))
 	}
 
 	if r.Debug {
@@ -261,7 +264,7 @@ func (r RepoRelease) downloadChart() (string, error) {
 		chartURL = fmt.Sprintf("%s/%s", strings.TrimSuffix(r.URL, "/"), chartURL)
 	}
 	if r.Debug {
-		log.Info("Found chart URL", "url", chartURL)
+		log.Info("Found chart URL", "url", redact.URL(chartURL))
 	}
 
 	_, cfg, err := helm.InitConfig("")
@@ -294,6 +297,7 @@ func (r RepoRelease) downloadChart() (string, error) {
 	}
 	saved, _, err := client.DownloadTo(chartURL, r.Version, dest)
 	if err != nil {
+		err = redact.Error(err)
 		log.Error(err, "Failed to download chart")
 		return "", err
 	}

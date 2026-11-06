@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.23.4](https://github.com/wandb/operator/compare/v1.23.3...v1.23.4) (Unreleased)
+
+### Features
+
+* Export the `user-spec-enabled` and `managed-spec-enabled` switches on the metrics endpoint as `wandb_operator_user_spec_enabled`, `wandb_operator_managed_spec_enabled` and `wandb_operator_config_info`, so each installation reports whether it consumes the user spec.
+
+### Bug fixes
+
+* Mask credentials in every logged spec, spec diff and chart error. Masking now covers chart passwords, env lists, nested lists, sensitive key names in any case such as `MYSQL_PASSWORD`, any spec value that holds URL credentials (masked whole, such as `GORILLA_HISTORY_STORE` or a `MYSQL` DSN), `*_PASS` and passphrase keys, `{key, value}` entries, URL credentials in free text and errors from the first `scheme://` to the last `@`, and quoted `password:` values in embedded config, so values such as a ClickHouse DSN in `GORILLA_HISTORY_STORAGE_ENGINE_ADDRESS` no longer reach controller logs in clear text. The raw CR spec is no longer logged.
+
 ## [1.23.3](https://github.com/wandb/operator/compare/v1.23.2...v1.23.3) (Unreleased)
 
 ### Bug fixes
