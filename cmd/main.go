@@ -96,7 +96,7 @@ func main() {
 	flag.StringVar(&isolationNamespaces, "isolation-namespaces", "", "Specify namespaces (as a comma separated string) that the controller should monitor when operating in namespace isolation mode.")
 
 	flag.BoolVar(&debug, "debug", false, "Enable debug mode")
-	flag.BoolVar(&managedSpecEnabled, "managed-spec-enabled", false, "Use managed spec when available, falling back to Deployer")
+	flag.BoolVar(&managedSpecEnabled, "managed-spec-enabled", false, "Use managed spec when available, falling back to Deployer; with --airgapped, wait for it instead")
 	flag.BoolVar(&userSpecEnabled, "user-spec-enabled", true, "Read and apply the instance user spec")
 
 	opts := zap.Options{

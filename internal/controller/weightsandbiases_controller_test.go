@@ -13,6 +13,7 @@ import (
 	"github.com/wandb/operator/pkg/wandb/spec/charts"
 	"github.com/wandb/operator/pkg/wandb/spec/state"
 	"github.com/wandb/operator/pkg/wandb/spec/state/secrets"
+	"github.com/wandb/operator/pkg/wandb/status"
 
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -426,6 +427,73 @@ var _ = Describe("WeightsandbiasesController", func() {
 			Expect(activeValues["global"].(map[string]interface{})).To(HaveKeyWithValue("cloudProvider", "gcp"))
 			oldState := &v1.ConfigMap{}
 			Expect(apierrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{Name: "wandb-managed-spec-state", Namespace: "default"}, oldState))).To(BeTrue())
+		})
+
+		It("installs from managed spec when airgapped without calling Deployer", func() {
+			ctx := context.Background()
+			key := types.NamespacedName{Name: name, Namespace: "default"}
+			reconciler.IsAirgapped = true
+
+			_, err := reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: key})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(deployerClient.GetSpecCallCount()).To(Equal(0))
+
+			active := &v1.Secret{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: name + "-spec-active", Namespace: "default"}, active)).To(Succeed())
+			var activeValues spec.Values
+			Expect(json.Unmarshal(active.Data["values"], &activeValues)).To(Succeed())
+			Expect(activeValues["global"].(map[string]interface{})).To(HaveKeyWithValue("cloudProvider", "gcp"))
+		})
+
+		It("waits for managed spec when airgapped instead of applying a CR-pinned chart", func() {
+			ctx := context.Background()
+			key := types.NamespacedName{Name: name, Namespace: "default"}
+			request := ctrl.Request{NamespacedName: key}
+			reconciler.IsAirgapped = true
+
+			wandb := &wandbcomv1.WeightsAndBiases{}
+			Expect(k8sClient.Get(ctx, key, wandb)).To(Succeed())
+			wandb.Spec.Chart = wandbcomv1.Object{Object: map[string]interface{}{
+				"url": "https://charts.wandb.ai", "name": "operator-wandb", "version": "0.43.5",
+			}}
+			Expect(k8sClient.Update(ctx, wandb)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, &v1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
+				Name: managedSpecConfigMapName, Namespace: "default",
+			}})).To(Succeed())
+
+			result, err := reconciler.Reconcile(ctx, request)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(BeNumerically(">", 0))
+			Expect(deployerClient.GetSpecCallCount()).To(Equal(0))
+
+			Expect(k8sClient.Get(ctx, key, wandb)).To(Succeed())
+			Expect(wandb.Status.Phase).To(Equal(string(status.WaitingForManagedSpec)))
+			Expect(wandb.Finalizers).NotTo(ContainElement(resFinalizer))
+			Expect(apierrors.IsNotFound(k8sClient.Get(ctx, types.NamespacedName{
+				Name: name + "-spec-active", Namespace: "default",
+			}, &v1.Secret{}))).To(BeTrue())
+		})
+
+		It("does not let a missing managed spec block deletion when airgapped", func() {
+			ctx := context.Background()
+			key := types.NamespacedName{Name: name, Namespace: "default"}
+			request := ctrl.Request{NamespacedName: key}
+			reconciler.IsAirgapped = true
+
+			_, err := reconciler.Reconcile(ctx, request)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Delete(ctx, &v1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
+				Name: managedSpecConfigMapName, Namespace: "default",
+			}})).To(Succeed())
+
+			wandb := &wandbcomv1.WeightsAndBiases{}
+			Expect(k8sClient.Get(ctx, key, wandb)).To(Succeed())
+			Expect(wandb.Finalizers).To(ContainElement(resFinalizer))
+			Expect(k8sClient.Delete(ctx, wandb)).To(Succeed())
+
+			_, err = reconciler.Reconcile(ctx, request)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(apierrors.IsNotFound(k8sClient.Get(ctx, key, &wandbcomv1.WeightsAndBiases{}))).To(BeTrue())
 		})
 
 		It("does not let a missing managed spec block deletion", func() {

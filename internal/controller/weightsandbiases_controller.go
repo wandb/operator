@@ -187,6 +187,12 @@ func (r *WeightsAndBiasesReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	baseSpec := currentActiveSpec
 	if wandb.ObjectMeta.DeletionTimestamp.IsZero() {
 		selection, err := r.selectBaseSpec(ctx, wandb.Namespace, getDeployerSpec)
+		if isManagedSpecUnavailable(err) {
+			log.Info("Waiting for managed spec; airgapped mode has no Deployer fallback", "reason", err.Error())
+			r.Recorder.Event(wandb, corev1.EventTypeWarning, "WaitingForManagedSpec", err.Error())
+			statusManager.Set(status.WaitingForManagedSpec)
+			return ctrl.Result{RequeueAfter: managedSpecRetryInterval}, nil
+		}
 		if err != nil {
 			log.Error(err, "Failed to select Deployer or managed spec")
 			return ctrlqueue.RequeueWithError(err)

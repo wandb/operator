@@ -116,6 +116,64 @@ func TestSelectBaseSpecFallsBackAfterManagedSpecRemoval(t *testing.T) {
 	}
 }
 
+func TestSelectBaseSpecAirgappedRequiresManagedSpec(t *testing.T) {
+	const namespace = "default"
+	for _, tc := range []struct {
+		name    string
+		missing bool
+		mutate  func(map[string]string)
+	}{
+		{name: "missing managed spec", missing: true},
+		{name: "invalid values JSON", mutate: func(d map[string]string) { d["values"] = "{" }},
+		{name: "unsupported chart", mutate: func(d map[string]string) { d["chart"] = "{}" }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cm := testManagedSpecConfigMap(namespace, testManagedValues(true))
+			if tc.mutate != nil {
+				tc.mutate(cm.Data)
+			}
+			var objects []client.Object
+			if !tc.missing {
+				objects = append(objects, cm)
+			}
+			r := testManagedSpecReconciler(t, objects...)
+			r.IsAirgapped = true
+			selected, err := r.selectBaseSpec(context.Background(), namespace, func() (*spec.Spec, error) {
+				return nil, nil
+			})
+			if selected != nil || !errors.Is(err, errManagedSpecUnavailable) {
+				t.Fatalf("got %v, %v; want errManagedSpecUnavailable", selected, err)
+			}
+		})
+	}
+}
+
+func TestSelectBaseSpecAirgappedUsesValidManagedSpec(t *testing.T) {
+	r := testManagedSpecReconciler(t, testManagedSpecConfigMap("default", testManagedValues(true)))
+	r.IsAirgapped = true
+	selected, err := r.selectBaseSpec(context.Background(), "default", func() (*spec.Spec, error) {
+		return nil, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if selected == nil || selected.Values["global"].(map[string]interface{})["enabled"] != true {
+		t.Fatalf("expected managed values, got %v", selected)
+	}
+}
+
+func TestSelectBaseSpecStandaloneAirgappedIgnoresManagedSpec(t *testing.T) {
+	r := testManagedSpecReconciler(t)
+	r.IsAirgapped = true
+	r.ManagedSpecEnabled = false
+	selected, err := r.selectBaseSpec(context.Background(), "default", func() (*spec.Spec, error) {
+		return nil, nil
+	})
+	if selected != nil || err != nil {
+		t.Fatalf("got %v, %v; want no base spec and no error", selected, err)
+	}
+}
+
 func TestManagedSpecConfigMapRequests(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := corev1.AddToScheme(scheme); err != nil {

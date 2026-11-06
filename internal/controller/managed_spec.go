@@ -3,7 +3,9 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"time"
 
 	"github.com/wandb/operator/pkg/wandb/spec"
 	"github.com/wandb/operator/pkg/wandb/spec/charts"
@@ -14,6 +16,14 @@ import (
 )
 
 const managedSpecConfigMapName = "wandb-spec-managed"
+
+const managedSpecRetryInterval = time.Minute
+
+var errManagedSpecUnavailable = errors.New("managed spec is unavailable")
+
+func isManagedSpecUnavailable(err error) bool {
+	return errors.Is(err, errManagedSpecUnavailable)
+}
 
 func (r *WeightsAndBiasesReconciler) selectBaseSpec(
 	ctx context.Context,
@@ -30,6 +40,9 @@ func (r *WeightsAndBiasesReconciler) selectBaseSpec(
 	}
 
 	managedSpec, err := r.getManagedSpec(ctx, namespace)
+	if err != nil && r.IsAirgapped {
+		return nil, fmt.Errorf("%w: %v", errManagedSpecUnavailable, err)
+	}
 	if apierrors.IsNotFound(err) {
 		return deployerSpec, nil
 	}

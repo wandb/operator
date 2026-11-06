@@ -20,6 +20,19 @@ missing, it uses Deployer; if it cannot be read or decoded, it logs an error and
 uses Deployer. Existing Deployer cache fallback still applies during an outage.
 Chart rendering or apply failures follow the normal reconciliation error path.
 
+With `MANAGED_SPEC_ENABLED=true` and `AIRGAPPED=true` there is no Deployer to
+fall back to. A missing, unreadable
+or undecodable `wandb-spec-managed` makes the operator stop before building a
+desired spec: it sets the phase to `Waiting For Managed Spec`, records a
+`WaitingForManagedSpec` warning event, applies nothing and retries every minute.
+The ConfigMap watch reconciles as soon as it appears. This holds even when the CR
+or user spec sets `chart`, which would otherwise be applied without the managed
+values. Deletion is not affected, and an airgapped operator with
+`MANAGED_SPEC_ENABLED=false` keeps its existing behavior. To remove the managed
+spec from an install that uses both flags, first restart the operator with
+`AIRGAPPED=false` to restore the Deployer fallback, or with
+`MANAGED_SPEC_ENABLED=false` to stay airgapped without a managed spec.
+
 Selection is reevaluated on each reconcile. No cutover state is written or read;
 old `wandb-managed-spec-state` ConfigMaps can remain and are ignored. Setting
 the flag to false returns the operator to Deployer after restart.
