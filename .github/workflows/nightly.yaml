@@ -60,7 +60,7 @@ concurrency:
 
 env:
   # The action fixes the public WESTest repository; jobs can select only its tag.
-  WESTEST_IMAGE_TAG: "0.5.1"
+  WESTEST_IMAGE_TAG: "0.8.0"
   # Advance this reviewed baseline to a supported stable v2 release after GA.
   OPERATOR_UPGRADE_FROM_VERSION: "2.0.0-beta.8"
 
