@@ -9,6 +9,14 @@ metadata:
     app.kubernetes.io/component: telemetry
     app.kubernetes.io/part-of: wandb
 spec:
+  {{- with include "telemetry.imagePullSecrets" . }}
+  imagePullSecrets:
+    {{- . | nindent 4 }}
+  {{- end }}
+  # Update with the victoria-metrics-operator 0.66.3 chart in deploy/operator/Chart.yaml.
+  image:
+    repository: {{ include "telemetry.registryPrefix" . }}victoriametrics/victoria-metrics
+    tag: v1.147.0
   retentionPeriod: {{ .Values.retentionPeriod | quote }}
   extraArgs:
     opentelemetry.usePrometheusNaming: "true"
@@ -22,6 +30,14 @@ metadata:
     app.kubernetes.io/component: telemetry
     app.kubernetes.io/part-of: wandb
 spec:
+  {{- with include "telemetry.imagePullSecrets" . }}
+  imagePullSecrets:
+    {{- . | nindent 4 }}
+  {{- end }}
+  image:
+    repository: {{ include "telemetry.registryPrefix" . }}victoriametrics/vmagent
+    tag: v1.147.0
+  configReloaderImage: {{ include "telemetry.configReloaderImage" . | quote }}
   selectAllByDefault: true
   remoteWrite:
     - url: {{ printf "http://vmsingle-%s:8428/api/v1/write" (include "telemetry.vmsingleName" .) | quote }}
@@ -35,6 +51,13 @@ metadata:
     app.kubernetes.io/component: telemetry
     app.kubernetes.io/part-of: wandb
 spec:
+  {{- with include "telemetry.imagePullSecrets" . }}
+  imagePullSecrets:
+    {{- . | nindent 4 }}
+  {{- end }}
+  image:
+    repository: {{ include "telemetry.registryPrefix" . }}victoriametrics/victoria-logs
+    tag: v1.51.0
   retentionPeriod: {{ .Values.retentionPeriod | quote }}
 ---
 apiVersion: operator.victoriametrics.com/v1
@@ -46,8 +69,13 @@ metadata:
     app.kubernetes.io/component: telemetry
     app.kubernetes.io/part-of: wandb
 spec:
+  {{- with include "telemetry.imagePullSecrets" . }}
+  imagePullSecrets:
+    {{- . | nindent 4 }}
+  {{- end }}
   # Grafana Tempo datasource support requires VictoriaTraces v0.9.4 or newer.
   image:
+    repository: {{ include "telemetry.registryPrefix" . }}victoriametrics/victoria-traces
     tag: v0.9.4
   retentionPeriod: {{ .Values.retentionPeriod | quote }}
 {{- end }}

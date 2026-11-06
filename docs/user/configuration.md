@@ -96,6 +96,13 @@ ignored with a log message. Minimum and maximum replicas must be at least one,
 and the minimum cannot exceed the maximum. `legacyOverrides` carries migrated
 v1 settings; prefer the current fields for new deployments.
 
+## Workload security
+
+`spec.wandb.securityProfile` sets shared runtime flags for applications and
+migration Jobs. Named application and migration profiles override shared values.
+See [workload security](workload-security.md) for inheritance, image requirements,
+and the behavior of existing migration Jobs.
+
 ## Apply and verify changes
 
 Merge examples into your complete resource; the fragments above are not standalone

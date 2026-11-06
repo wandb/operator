@@ -85,6 +85,27 @@ Keep `telemetry.otel.secretName` set. Supply any required authentication headers
 through your protected Helm values workflow. For an existing `off` installation,
 perform the CRD preparation upgrade above with only VictoriaMetrics enabled.
 
+## Collect Pod logs
+
+Enabled telemetry modes also install a node log-agent DaemonSet by default.
+It reads Pod log files for the telemetry namespace and Operator release namespace,
+then sends them through the OTLP gateway to VictoriaLogs. Add other W&B namespaces
+when deployments use a different namespace:
+
+```yaml
+telemetry:
+  logAgent:
+    enabled: true
+    extraNamespaces:
+      - wandb-production
+```
+
+The agent needs root access to host Pod log files and hostPath volumes for logs
+and offsets. Set `telemetry.logAgent.enabled: false` where cluster policy disallows
+those requirements. The OpenShift profile disables it for `restricted-v2`.
+Application-emitted OTLP logs remain a separate collection path. Set tolerations
+and resources under `telemetry.logAgent` when required by your nodes.
+
 ## Verify and access telemetry
 
 ```bash
@@ -95,8 +116,18 @@ kubectl get grafana,grafanadatasource -n wandb
 kubectl get services -n wandb
 ```
 
-Run the Grafana query only for `full` mode. Use the listed Grafana Service and
-its port to access the dashboard through your approved cluster access method,
+Run the Grafana query only for `full` mode. With Console enabled, Grafana uses
+`/console/grafana/`. Dashboards include managed MySQL activity and connection
+metrics, buffer-pool and row-lock panels, and deployment availability; verify
+the corresponding scrapes and metrics are available in your deployment.
+
+Grafana plugins are bundled in the Operator image and copied at Pod startup;
+Grafana does not download them at runtime. See
+[restricted environments](restricted-environments.md#telemetry-images-and-plugins)
+for mirroring settings.
+
+Use the listed Grafana Service and its port to access the dashboard through your
+approved cluster access method,
 such as `kubectl port-forward`. Verify data arrives from an application; resource
 existence alone does not prove successful collection. In `forward` mode, also
 check the receiving endpoint.

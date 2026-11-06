@@ -24,8 +24,9 @@ files, without requiring a checkout.
 Validate examples against the current CRD schema and admission rules. Rendering
 or schema checks do not prove a live deployment works; record the version and
 scenario when an end-to-end procedure has been exercised. Check local links and
-anchors whenever pages move. Old top-level docs are forwarding pages so existing
-links still lead readers to the appropriate guide.
+anchors whenever pages move. The old flat documentation pages have been removed;
+link directly to the audience guides and update in-scope references when moving
+new material from main.
 
 Design records need an explicit status and links to the current implementation
 or replacement guide. Historical examples are evidence of a decision, not
@@ -42,8 +43,11 @@ evidence or operational validation:
 | Compatibility and sizing | Version roles, prerequisites, size profiles | Publish tested Operator/W&B/Kubernetes combinations and measured capacity guidance |
 | First deployment | Complete managed Ingress example and verification steps | Exercise the sequence on supported cluster profiles and record results |
 | External infrastructure | Named instances, canonical Secret/value form, MySQL/Redis/S3/ClickHouse examples | Test provider combinations, TLS variants, and cloud workload identity recipes, including GCS/Azure |
-| Isolated environments | Registry, manifest, CA, and proxy configuration | Validate a complete offline mirror inventory and per-dependency image overrides for each release |
-| OpenShift | Profile, required values, constraints, and instance example | Revalidate frontend/SCC limitations against selected W&B images; produce a tested Route recipe |
+| Isolated environments | Registry, manifest, CA, proxy, and telemetry image/plugin configuration | Validate a complete offline mirror inventory and per-dependency image overrides for each release |
+| OpenShift | Profile, log-agent opt-out, runtime constraints, and external-store example | Validate managed-service images and SCC admission, especially SeaweedFS non-root behavior; revalidate frontend constraints and produce a tested Route recipe |
+| Workload security | CR precedence, manifest merge rules, and managed-service implementation records | Exercise supported images, writable paths, restarts, migration Jobs, and platform admission |
+| Support bundles | Template configuration, launch/status checks, and permission model | Validate collection, redaction, object-store delivery, retrieval, and cleanup on supported clusters |
+| CI integration | Current PR and nightly WESTest runbooks | Complete cloud cleanup validation and secure failed-teardown recovery before enabling unattended schedules |
 | v1 migration | Preserved preflight, ownership caveats, cutover checks | Validate release-specific controller handoff, resource adoption, downtime, cleanup, and rollback sequence |
 | Restore and recovery | Retention semantics and ownership checks | Exercise provider-specific backup/restore and detached-resource recovery |
 | Reference | Main field index and installed-schema lookup | Decide whether to generate and publish a full versioned API/Helm reference |

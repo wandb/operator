@@ -428,7 +428,7 @@ narrow fidelity loss for a smaller conversion webhook.
 3. Move the structured-flag mapping into `mapClickHouse` (option A) and delete the
    env harvest + exclusion from the conversion webhook.
 4. Migrate/rewrite the affected tests; update
-   [docs/infra-connection-settings.md](../../infra-connection-settings.md) to note
+   [docs/infra-connection-settings.md](../../developer/connection-internals.md) to note
    replication env vars are now promoted at reconcile.
 5. `make manifests generate sync-crd-embed`, `make lint`, `make test`.
 

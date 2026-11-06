@@ -69,6 +69,16 @@ Names are derived from the W&B resource; substitute the names for your deploymen
 For very long CR names, inspect the generated resources rather than assuming the
 unshortened name.
 
+## Metrics and support bundles
+
+Console has Pod metrics read permissions for clusters exposing metrics-server.
+The full telemetry stack also configures Grafana under `/console/grafana/`. See
+[monitoring](monitoring.md) for collection and dashboard setup.
+
+[Support bundles](support-bundles.md) have a separate collection template and
+readiness status. Operator grants Console collection permissions only after the
+required admission policy and binding are in place.
+
 ## Permissions and troubleshooting
 
 | Symptom | Check |

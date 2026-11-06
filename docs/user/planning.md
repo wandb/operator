@@ -15,6 +15,7 @@ declare each W&B deployment with an `apps.wandb.com/v2` resource.
 | Kafka | Managed Bufstream and its supporting resources; no external Kafka field is exposed |
 | Console | Optional administration UI, enabled per W&B resource |
 | Telemetry | Optional VictoriaMetrics stack and Grafana, configured through Helm |
+| Support bundles | Collection template enabled by default; collections run only when launched |
 
 Omitted infrastructure configuration defaults to managed services. Choose
 external connections before creating a deployment when you intend to use
@@ -49,6 +50,9 @@ enough. Review the release's workload requests and persistent storage needs.
 - Choose the public W&B URL, configure DNS, and prepare a TLS certificate or
   issuer. Workloads and browsers must be able to reach the relevant application
   and object-storage endpoints.
+- The default [support-bundle template](support-bundles.md) requires the v1
+  ValidatingAdmissionPolicy APIs. Check their availability, or opt out of the
+  template on clusters that do not provide them.
 - Select your W&B release and arrange the license required for your deployment.
 - Ensure access to the chart, controller/dependency images, W&B images, and
   server manifest. For isolated networks, prepare the

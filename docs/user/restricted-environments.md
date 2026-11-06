@@ -37,6 +37,35 @@ repositories and pull credentials separately. Obtain the exact values supported 
 your selected chart with `helm show values`. A single universal set of image
 overrides for every dependency is not defined in this guide.
 
+## Telemetry images and plugins
+
+Configure telemetry images in the Operator Helm values separately from the W&B
+CR. Mirror the telemetry repositories under your prefix and merge these settings
+into your complete values file:
+
+```yaml
+global:
+  image:
+    registry: registry.example.com/mirror
+  imagePullSecrets:
+    - name: registry-credentials
+```
+
+The telemetry templates apply this prefix to the OTEL collectors, Victoria
+components and config reloaders, alerting, and Grafana. Pull Secrets must exist
+in each namespace where the corresponding Pods run. Configure the Operator and
+component-controller images using their own chart values as well.
+
+The full-stack Grafana Pod copies its bundled plugins from the installed Operator
+image, including its registry/tag or digest. An explicit
+`telemetry.grafana.pluginImage` overrides that source; the image must contain
+`/opt/wandb/grafana-plugins`. The standalone telemetry chart requires
+`grafana.pluginImage` when running in full mode. Runtime plugin downloading is
+disabled, so mirror the plugin source image along with Grafana itself.
+
+Support-bundle collections use a separate Lumen image. Mirror it when that
+feature is enabled; see [support bundles](support-bundles.md).
+
 ## Trust a custom registry CA
 
 Set one source under the chart's `wandb-operator.caCerts`. For example, reference
@@ -92,7 +121,8 @@ spec:
 
 Use `valueFrom.secretKeyRef` for a proxy URL containing credentials. Each
 `noProxy` entry must be a separate string without commas. Operator adds its
-in-cluster exclusions and injects both uppercase and lowercase proxy variables
+in-cluster exclusions and the cloud metadata address `169.254.169.254`, then
+injects both uppercase and lowercase proxy variables
 into application workloads, including init containers and migration Jobs. This
 CR setting does not configure the Operator process's own egress proxy.
 

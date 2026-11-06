@@ -12,6 +12,8 @@ the W&B resource.
 | Connect managed or external backing services | [Infrastructure](infrastructure.md) |
 | Configure Ingress, Gateway API, and TLS | [Networking](networking.md) |
 | Use private registries, custom CAs, and proxies | [Restricted environments](restricted-environments.md) |
+| Set application and migration runtime security | [Workload security](workload-security.md) |
+| Collect diagnostic evidence | [Support bundles](support-bundles.md) |
 | Deploy on OpenShift | [OpenShift](openshift.md) |
 | Enable and access the administration UI | [Console](console.md) |
 | Collect and forward telemetry | [Monitoring](monitoring.md) |

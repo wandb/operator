@@ -24,12 +24,13 @@ workloads from a versioned server manifest.
 The current flow in [reconcile_v2.go](../../internal/controller/reconciler/reconcile_v2.go)
 is broadly:
 
-1. Handle deletion and retention finalizers, or normalize legacy conversion state.
+1. Handle deletion and retention finalizers, reconcile support-bundle templates,
+   and normalize legacy conversion state.
 2. Resolve the server manifest and the deployment's infrastructure configuration.
 3. Reconcile backing services and infer their connection information and status.
 4. Publish networking and reconcile Console before the infrastructure readiness gate.
-5. Wait for infrastructure, generate required secrets, and complete MySQL initialization.
-6. Run the W&B migrations for the requested version.
+5. Wait for infrastructure, reconcile manifest Secrets, and complete MySQL initialization.
+6. Reconcile migration identities and run W&B migrations for the requested version.
 7. Reconcile Applications, wait for live Deployment readiness, and clean up the
    known obsolete v1 application Deployments.
 8. Publish W&B readiness for the observed generation.
@@ -49,6 +50,8 @@ flowchart TD
 
 Console failures are retried without blocking the rest of W&B reconciliation.
 Console readiness does not contribute to the W&B `Ready` condition.
+[Support-bundle collection](support-bundles.md) also reconciles independently;
+its template waits for a default object-store connection without blocking W&B.
 
 ## Managed and external services
 

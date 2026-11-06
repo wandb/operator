@@ -1,5 +1,5 @@
 > Status: Historical rollout plan. A manual workflow is implemented; the scheduled trigger remains disabled in the current workflow.
-> See the [current developer guide](../developer/testing.md) before using these notes.
+> See the [current nightly runbook](../developer/nightly-westest.md) before using these notes.
 
 # Nightly WESTest testing — plan & runbook
 

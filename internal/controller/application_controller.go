@@ -235,6 +235,9 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			app.Status.RolloutStatus.Replicas > 0 {
 			app.Status.Ready = true
 		}
+	} else if app.Spec.Kind == "CronJob" {
+		// Only reached after reconcileCronJobs succeeded, so ready means the templates are installed.
+		app.Status.Ready = len(app.Spec.CronJobs) > 0
 	}
 
 	if apiequality.Semantic.DeepEqual(statusBefore, app.Status) {
@@ -355,6 +358,14 @@ func deploymentManagedFieldsEqual(before, after *appsv1.Deployment) bool {
 
 func rolloutManagedFieldsEqual(before, after *v1alpha1.Rollout) bool {
 	return managedObjectMetadataEqual(before, after) && reflect.DeepEqual(before.Spec, after.Spec)
+}
+
+// The apiserver defaults fields the desired CronJob leaves unset, so only compare what we set.
+func cronJobManagedFieldsEqual(current, desired *batchv1.CronJob) bool {
+	return apiequality.Semantic.DeepDerivative(desired.GetLabels(), current.GetLabels()) &&
+		apiequality.Semantic.DeepDerivative(desired.GetAnnotations(), current.GetAnnotations()) &&
+		apiequality.Semantic.DeepEqual(desired.GetOwnerReferences(), current.GetOwnerReferences()) &&
+		apiequality.Semantic.DeepDerivative(desired.Spec, current.Spec)
 }
 
 func statefulSetManagedFieldsEqual(before, after *appsv1.StatefulSet) bool {
@@ -731,6 +742,8 @@ func (r *ApplicationReconciler) deleteJobs(ctx context.Context, app *wandbv2.App
 func (r *ApplicationReconciler) reconcileCronJobs(ctx context.Context, app *wandbv2.Application) error {
 	logger := logx.GetSlog(ctx)
 
+	var statuses map[string]batchv1.CronJobStatus
+
 	for i, cronJob := range app.Spec.CronJobs {
 		cronJobName := cronJob.Name
 		if cronJobName == "" {
@@ -747,6 +760,14 @@ func (r *ApplicationReconciler) reconcileCronJobs(ctx context.Context, app *wand
 			logger.Error("Failed to get CronJob", logx.ErrAttr(err), "CronJob", cronJobName)
 			return err
 		}
+		if !currentCronJob.CreationTimestamp.IsZero() && !metav1.IsControlledBy(currentCronJob, app) {
+			return fmt.Errorf("CronJob %s/%s already exists and is not controlled by Application %s/%s",
+				app.Namespace, cronJobName, app.Namespace, app.Name)
+		}
+		if statuses == nil {
+			statuses = map[string]batchv1.CronJobStatus{}
+		}
+		statuses[cronJobName] = currentCronJob.Status
 
 		// Set up the cronjob with the provided spec
 		cronJobToReconcile := cronJob.DeepCopy()
@@ -774,8 +795,7 @@ func (r *ApplicationReconciler) reconcileCronJobs(ctx context.Context, app *wand
 		} else {
 			// Update existing cronjob
 			cronJobToReconcile.ResourceVersion = currentCronJob.ResourceVersion
-			if managedObjectMetadataEqual(currentCronJob, cronJobToReconcile) &&
-				apiequality.Semantic.DeepEqual(currentCronJob.Spec, cronJobToReconcile.Spec) {
+			if cronJobManagedFieldsEqual(currentCronJob, cronJobToReconcile) {
 				continue
 			}
 			if err := r.Update(ctx, cronJobToReconcile); err != nil {
@@ -786,6 +806,7 @@ func (r *ApplicationReconciler) reconcileCronJobs(ctx context.Context, app *wand
 		}
 	}
 
+	app.Status.CronJobStatuses = statuses
 	return nil
 }
 
@@ -811,6 +832,9 @@ func (r *ApplicationReconciler) deleteCronJobs(ctx context.Context, app *wandbv2
 
 	deletePolicy := client.PropagationPolicy(metav1.DeletePropagationBackground)
 	for _, cronJob := range cronJobList.Items {
+		if !metav1.IsControlledBy(&cronJob, app) {
+			continue
+		}
 		logger.Info("Deleting CronJob", "CronJob", cronJob.Name)
 		if err := r.Delete(ctx, &cronJob, deletePolicy); err != nil {
 			logger.Error("Failed to delete CronJob", logx.ErrAttr(err), "CronJob", cronJob.Name)
@@ -860,7 +884,7 @@ func (r *ApplicationReconciler) reconcileService(ctx context.Context, app *wandb
 			return err
 		}
 	} else if !metav1.IsControlledBy(current, app) {
-		return fmt.Errorf("Service %s/%s already exists and is not controlled by Application %s/%s",
+		return fmt.Errorf("service %s/%s already exists and is not controlled by Application %s/%s",
 			current.Namespace, current.Name, app.Namespace, app.Name)
 	}
 
@@ -1295,6 +1319,7 @@ func (r *ApplicationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&appsv1.StatefulSet{}).
 		Owns(&corev1.Service{}).
 		Owns(&autoscalingv2.HorizontalPodAutoscaler{}).
+		Owns(&batchv1.CronJob{}).
 		Named("application")
 
 	if utils.IsRegistered(r.Scheme, &v1alpha1.Rollout{}) {

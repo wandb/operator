@@ -17,7 +17,9 @@ code snippets and package paths may differ from the current implementation.
 | [Private registry manifests](wandb_v2/private_registry_manifests.md) | Original design; authenticated manifest retrieval is implemented; see [restricted environments](../user/restricted-environments.md) |
 | [Ingress and Gateway plan](networking-plan.md) | Historical implementation plan; use [networking](../user/networking.md) for current API values |
 | [Watchtower research](watchtower-history.md) | Historical integration research; current packaging is in [Console integration](../developer/console.md) |
-| [Nightly WESTest plan](nightly-westest-plan.md) | Historical rollout plan; manual workflow exists, schedule is disabled; see [testing](../developer/testing.md) |
+| [Workload security profiles](wandb_v2/workload_security_profiles.md) | Implemented contract; see [user settings](../user/workload-security.md) and [development](../developer/workload-security.md) |
+| [MOCO](wandb_v2/moco_runtime_security.md), [Redis](wandb_v2/redis_runtime_security.md), and [SeaweedFS runtime security](wandb_v2/seaweedfs_runtime_security.md) | Implemented renderer records; runtime image/platform acceptance remains explicit |
+| [Nightly WESTest plan](nightly-westest-plan.md) | Historical rollout plan; see the current [nightly runbook](../developer/nightly-westest.md) and [PR testing](../developer/pr-westest-testing.md) |
 | [Legacy Config API](legacy-config-api.md) | Historical console/configmap note; current consumer and applicability require review |
 
 When revisiting a record, update its status and link to the current implementation

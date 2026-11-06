@@ -68,6 +68,25 @@ func volumeLayout(storageQuantity resource.Quantity) (int32, int32) {
 	return int32(volumeSizeMB), int32(maxVolumeCount)
 }
 
+// The pinned upstream controller copies these fields to each component's Pod
+// and managed container. Writable data paths stay on the existing PVCs.
+// The current image declares root. Leave identity unset until a published
+// non-root image supports activation without fixed Pod UID/GID defaults.
+func seaweedPodSecurityContext() *corev1.PodSecurityContext {
+	return &corev1.PodSecurityContext{
+		SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
+	}
+}
+
+func seaweedContainerSecurityContext() *corev1.SecurityContext {
+	return &corev1.SecurityContext{
+		ReadOnlyRootFilesystem:   ptr.To(true),
+		AllowPrivilegeEscalation: ptr.To(false),
+		Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
+		SeccompProfile:           &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
+	}
+}
+
 func seaweedWritableVolumes() []corev1.Volume {
 	return []corev1.Volume{
 		{
@@ -144,9 +163,11 @@ func ToObjectStoreVendorSpec(
 				VolumeSizeLimitMB:  &volumeSizeLimitMB,
 				MetricsPort:        ptr.To(seaweedMasterMetricsPort),
 				ComponentSpec: seaweedv1.ComponentSpec{
-					Volumes:      seaweedWritableVolumes(),
-					VolumeMounts: seaweedWritableVolumeMounts(),
-					ExtraArgs:    []string{"-ip.bind=0.0.0.0"},
+					PodSecurityContext:       seaweedPodSecurityContext(),
+					ContainerSecurityContext: seaweedContainerSecurityContext(),
+					Volumes:                  seaweedWritableVolumes(),
+					VolumeMounts:             seaweedWritableVolumeMounts(),
+					ExtraArgs:                []string{"-ip.bind=0.0.0.0"},
 				},
 			},
 			Volume: &seaweedv1.VolumeSpec{
@@ -155,9 +176,11 @@ func ToObjectStoreVendorSpec(
 					MetricsPort:     ptr.To(seaweedVolumeMetricsPort),
 					MaxVolumeCounts: ptr.To(maxVolumeCount),
 					ComponentSpec: seaweedv1.ComponentSpec{
-						Volumes:      seaweedWritableVolumes(),
-						VolumeMounts: seaweedWritableVolumeMounts(),
-						ExtraArgs:    []string{"-ip.bind=0.0.0.0"},
+						PodSecurityContext:       seaweedPodSecurityContext(),
+						ContainerSecurityContext: seaweedContainerSecurityContext(),
+						Volumes:                  seaweedWritableVolumes(),
+						VolumeMounts:             seaweedWritableVolumeMounts(),
+						ExtraArgs:                []string{"-ip.bind=0.0.0.0"},
 						ReadinessProbe: &seaweedv1.ProbeOverride{
 							PeriodSeconds: ptr.To(seaweedVolumeReadinessPeriodSeconds),
 						},
@@ -171,10 +194,12 @@ func ToObjectStoreVendorSpec(
 			},
 			S3: &seaweedv1.S3GatewaySpec{
 				ComponentSpec: seaweedv1.ComponentSpec{
-					Affinity:     wandb.GetAffinity(infraSpec.ManagedInfraSpec),
-					Tolerations:  *wandb.GetTolerations(infraSpec.ManagedInfraSpec),
-					Volumes:      seaweedWritableVolumes(),
-					VolumeMounts: seaweedWritableVolumeMounts(),
+					PodSecurityContext:       seaweedPodSecurityContext(),
+					ContainerSecurityContext: seaweedContainerSecurityContext(),
+					Affinity:                 wandb.GetAffinity(infraSpec.ManagedInfraSpec),
+					Tolerations:              *wandb.GetTolerations(infraSpec.ManagedInfraSpec),
+					Volumes:                  seaweedWritableVolumes(),
+					VolumeMounts:             seaweedWritableVolumeMounts(),
 					Env: []corev1.EnvVar{{
 						// W&B presigns S3 URLs against the in-cluster endpoint and
 						// rewrites the host for external clients without re-signing;
@@ -200,9 +225,11 @@ func ToObjectStoreVendorSpec(
 				MetricsPort: ptr.To(seaweedFilerMetricsPort),
 				Config:      ptr.To("[leveldb2]\nenabled = true\ndir = \"" + seaweedFilerDataMountPath + "\""),
 				ComponentSpec: seaweedv1.ComponentSpec{
-					Volumes:      seaweedWritableVolumes(),
-					VolumeMounts: seaweedWritableVolumeMounts(),
-					ExtraArgs:    []string{"-ip.bind=0.0.0.0"},
+					PodSecurityContext:       seaweedPodSecurityContext(),
+					ContainerSecurityContext: seaweedContainerSecurityContext(),
+					Volumes:                  seaweedWritableVolumes(),
+					VolumeMounts:             seaweedWritableVolumeMounts(),
+					ExtraArgs:                []string{"-ip.bind=0.0.0.0"},
 				},
 				Persistence: &seaweedv1.PersistenceSpec{
 					Enabled:   true,

@@ -64,6 +64,18 @@ func TestBuildCRDefaultGateway(t *testing.T) {
 	}
 }
 
+func TestBuildCRSupportBundle(t *testing.T) {
+	for _, enabled := range []bool{true, false} {
+		cr, err := BuildCR(Options{SupportBundleEnabled: enabled})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cr.Spec.SupportBundle.Enabled == nil || *cr.Spec.SupportBundle.Enabled != enabled {
+			t.Fatalf("support bundle enabled = %v, want explicit %v", cr.Spec.SupportBundle.Enabled, enabled)
+		}
+	}
+}
+
 func TestBuildCRExternalMySQLOnly(t *testing.T) {
 	cr, err := BuildCR(Options{ExternalMySQL: true})
 	if err != nil {

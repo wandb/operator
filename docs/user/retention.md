@@ -26,6 +26,15 @@ resources, Operator-owned routes, and Console are removed during deletion or
 owner garbage collection. External services remain under their provider's
 ownership. Preserving infrastructure is also not a backup or a tested restore.
 
+## Manifest Secrets
+
+Manifest-declared Secrets follow the global retention policy. `detach` removes
+the deleting CR's owner reference and preserves Secret data; `purge` leaves
+ownership in place for Kubernetes garbage collection. A replacement CR can adopt
+an ownerless Secret it declares without regenerating existing values. Secrets
+owned by another resource are not adopted. Preserve signing and generated keys
+alongside service data when planning recovery.
+
 ## Before removing a deployment
 
 1. Record the W&B resource, release values, infrastructure resource names,

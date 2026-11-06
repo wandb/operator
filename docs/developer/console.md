@@ -17,13 +17,16 @@ prepare a production image build:
 
 ```bash
 GH_TOKEN="$(gh auth token)" make download-watchtower
+make download-grafana-plugins
 make docker-build
 ```
 
 Keep the Watchtower binary architecture consistent with the image build. The
 [Dockerfile](../../Dockerfile) copies the downloaded binary; it does not download
 it. Tilt uses its `Watchtower-Download` resource when Console is enabled and
-matches the local manager architecture.
+matches the local manager architecture. The image also carries Grafana plugins;
+`make download-grafana-plugins` prepares them before a Docker build. Tilt has a
+`Grafana-Plugins-Download` resource for its telemetry setup.
 
 The chart supplies `OPERATOR_IMAGE`; `watchtowerImage()` uses it so the Console
 image follows the installed Operator image and registry override. An unset value
@@ -56,6 +59,9 @@ password. The shared W&B hostname allows the browser to send its session cookie.
 Read current RBAC in `reconcileWatchtowerRBAC` before expanding capabilities.
 Default grants include W&B CR modification, namespace Secret reads, and
 namespace ActionRun creation/deletion for administrator-published actions.
+Cluster-wide Pod metrics reads support the Metrics tab when metrics-server is
+available. [Support-bundle grants](support-bundles.md#permissions-and-console)
+are conditional on the expected admission policy and binding being installed.
 The generated ClusterRole omits CRD discovery and pod port-forwarding. Expanding
 Console grants also requires Operator to possess those permissions.
 

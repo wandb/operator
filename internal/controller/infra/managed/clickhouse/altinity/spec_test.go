@@ -43,6 +43,7 @@ var _ = Describe("ClickHouse vendor specs", func() {
 		Expect(podSpec.InitContainers).To(HaveLen(1))
 		wait := podSpec.InitContainers[0]
 		Expect(wait.Name).To(Equal("wait-object-store"))
+		expectClickHouseDefaultContainerSecurityContext(wait.SecurityContext)
 		Expect(wait.Image).To(Equal(podSpec.Containers[0].Image))
 		Expect(wait.Args).To(HaveLen(3))
 		Expect(wait.Args[0]).To(ContainSubstring("wget"))
@@ -74,6 +75,7 @@ var _ = Describe("ClickHouse vendor specs", func() {
 		podSpec := chi.Spec.Templates.PodTemplates[0].Spec
 		expectClickHouseOpenShiftPodSecurityContext(podSpec.SecurityContext)
 		expectClickHouseOpenShiftContainerSecurityContext(podSpec.Containers[0].SecurityContext)
+		expectClickHouseOpenShiftContainerSecurityContext(podSpec.InitContainers[0].SecurityContext)
 	})
 
 	It("backs storage with the object store, sets a default policy, and wires keeper", func() {
@@ -242,6 +244,7 @@ func expectClickHouseDefaultContainerSecurityContext(securityContext *corev1.Sec
 	Expect(*securityContext.RunAsNonRoot).To(BeTrue())
 	Expect(securityContext.AllowPrivilegeEscalation).NotTo(BeNil())
 	Expect(*securityContext.AllowPrivilegeEscalation).To(BeFalse())
+	Expect(securityContext.ReadOnlyRootFilesystem).To(HaveValue(BeTrue()))
 	Expect(securityContext.Capabilities).NotTo(BeNil())
 	Expect(securityContext.Capabilities.Drop).To(ContainElement(clickHouseCapabilityAll))
 	Expect(securityContext.SeccompProfile).NotTo(BeNil())
@@ -278,6 +281,7 @@ func expectClickHouseOpenShiftContainerSecurityContext(securityContext *corev1.S
 	Expect(*securityContext.RunAsNonRoot).To(BeTrue())
 	Expect(securityContext.AllowPrivilegeEscalation).NotTo(BeNil())
 	Expect(*securityContext.AllowPrivilegeEscalation).To(BeFalse())
+	Expect(securityContext.ReadOnlyRootFilesystem).To(HaveValue(BeTrue()))
 	Expect(securityContext.Capabilities).NotTo(BeNil())
 	Expect(securityContext.Capabilities.Drop).To(ContainElement(clickHouseCapabilityAll))
 	Expect(securityContext.SeccompProfile).NotTo(BeNil())

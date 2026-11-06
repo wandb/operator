@@ -21,6 +21,22 @@ When adding a manifest field, update the loader/merge behavior and consumers,
 and test both local and OCI loading where relevant. Coordinate publication with
 the upstream manifest generator; checked-in testing manifests are fixtures.
 
+## Manifest Secrets and migration identities
+
+Top-level `secrets` declarations create generated or initially empty Secrets
+before migration Jobs and applications. Existing values are preserved, ownerless
+Secrets can be adopted, and the global retention policy governs deletion. Legacy
+`generatedSecrets` remains compatible. See [manifest Secrets](server-manifest-secrets.md).
+
+Migrations can declare dedicated ServiceAccounts and namespaced permissions.
+Identity resources reconcile before Jobs; completed migrations are not rerun by
+an identity change. See [migration service accounts](server-manifest-service-accounts.md)
+for ownership, token mounting, and publication requirements. Application identity
+configuration is unchanged.
+
+[Workload security profiles](workload-security.md) have their own manifest merge
+and CR override rules; migration fragments still replace a complete entry.
+
 ## Infrastructure adapters
 
 Managed implementations under [infra/managed](../../internal/controller/infra/managed)
@@ -57,6 +73,7 @@ for the original rationale.
 
 - [Telemetry internals](telemetry.md): runtime configuration and manifest env sources.
 - [Console integration](console.md): packaging, ordering, authentication, and RBAC.
+- [Support bundles](support-bundles.md): collection templates, lifecycle, and permission policies.
 - [Connection internals](connection-internals.md): upstream application URL parameters.
 - [Legacy Config API note](../design/legacy-config-api.md): historical console/configmap
   behavior whose current applicability requires review.

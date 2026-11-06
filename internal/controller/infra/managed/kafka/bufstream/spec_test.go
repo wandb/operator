@@ -155,10 +155,45 @@ func TestToBufstreamApplication(t *testing.T) {
 	envNames := map[string]bool{}
 	for _, e := range container.Env {
 		envNames[e.Name] = true
-		require.NotNil(t, e.ValueFrom, "credentials must come from a secret ref, not inline")
+		if e.Name == EnvStorageAccessKeyID || e.Name == EnvStorageSecretAccessKey {
+			require.Empty(t, e.Value)
+			require.NotNil(t, e.ValueFrom, "credentials must come from a secret ref, not inline")
+			require.NotNil(t, e.ValueFrom.SecretKeyRef)
+		}
 	}
 	require.True(t, envNames[EnvStorageAccessKeyID])
 	require.True(t, envNames[EnvStorageSecretAccessKey])
+}
+
+func TestBufstreamPeerAddressAcrossObjectStores(t *testing.T) {
+	setOpenShiftMode(t, false)
+	nsn := CreateNsNameBuilder(types.NamespacedName{Namespace: "default", Name: "wandb-kafka"})
+
+	for name, storage := range map[string]objectstore.ConnInfo{
+		"static credentials": testStorage(),
+		"native AWS":         {Provider: apiv2.ObjectStoreProviderS3, URI: "s3://bucket", Bucket: "bucket", Region: "us-east-1"},
+		"GCS":                {Provider: apiv2.ObjectStoreProviderGCS, URI: "gs://bucket", Bucket: "bucket"},
+		"Azure":              {Provider: apiv2.ObjectStoreProviderAzure, URI: "https://account.blob.core.windows.net/container", Bucket: "container"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			app, err := ToBufstreamApplication(testWandb(), nsn, storage, false, testScheme(t), manifest.Manifest{})
+			require.NoError(t, err)
+			container := app.Spec.PodTemplate.Spec.Containers[0]
+			env := map[string]corev1.EnvVar{}
+			for _, e := range container.Env {
+				require.NotContains(t, env, e.Name, "environment variables must be unique")
+				env[e.Name] = e
+			}
+			require.Equal(t, "0.0.0.0", env["BUFSTREAM_CONNECT_HOST"].Value)
+			require.Equal(t, "8080", env["BUFSTREAM_CONNECT_PORT"].Value)
+			require.Equal(t, "8080", env["BUFSTREAM_CONNECT_PUBLIC_PORT"].Value)
+			publicHost := env["BUFSTREAM_CONNECT_PUBLIC_HOST"]
+			require.Empty(t, publicHost.Value)
+			require.NotNil(t, publicHost.ValueFrom)
+			require.Equal(t, &corev1.ObjectFieldSelector{FieldPath: "status.podIP"}, publicHost.ValueFrom.FieldRef)
+			require.Contains(t, container.Ports, corev1.ContainerPort{Name: "connect", ContainerPort: 8080})
+		})
+	}
 }
 
 func TestBringYourOwnObjectStoresDoNotGetBucketInitializer(t *testing.T) {

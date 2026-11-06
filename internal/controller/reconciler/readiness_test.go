@@ -11,6 +11,7 @@ import (
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -88,8 +89,8 @@ func TestRunMigrationsSurfacesFailedJobPhaseAndReason(t *testing.T) {
 	if err := apiv2.AddToScheme(scheme); err != nil {
 		t.Fatalf("add W&B API to scheme: %v", err)
 	}
-	if err := batchv1.AddToScheme(scheme); err != nil {
-		t.Fatalf("add batch API to scheme: %v", err)
+	if err := clientgoscheme.AddToScheme(scheme); err != nil {
+		t.Fatalf("add Kubernetes APIs to scheme: %v", err)
 	}
 	wandb := &apiv2.WeightsAndBiases{
 		ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "default"},
@@ -151,5 +152,199 @@ func TestRunMigrationsSurfacesFailedJobPhaseAndReason(t *testing.T) {
 	}
 	if message == "" {
 		t.Fatal("readiness message should identify the failed migration")
+	}
+}
+
+func TestRunMigrationsSecurityProfileOverrides(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name             string
+		profile          apiv2.WorkloadSecurityProfile
+		shared, override apiv2.WorkloadSecurityProfile
+		wantProfiled     bool
+		wantRunAsNonRoot *bool
+		wantReadOnlyRoot *bool
+	}{
+		{name: "unset profile"},
+		{
+			name: "enabled profile",
+			profile: apiv2.WorkloadSecurityProfile{
+				RunAsNonRoot:           new(true),
+				ReadOnlyRootFilesystem: new(true),
+			},
+			wantProfiled:     true,
+			wantRunAsNonRoot: new(true),
+			wantReadOnlyRoot: new(true),
+		},
+		{
+			name: "explicit false profile",
+			profile: apiv2.WorkloadSecurityProfile{
+				RunAsNonRoot:           new(false),
+				ReadOnlyRootFilesystem: new(false),
+			},
+			wantProfiled:     true,
+			wantRunAsNonRoot: new(false),
+			wantReadOnlyRoot: new(false),
+		},
+		{
+			name: "pod setting only",
+			profile: apiv2.WorkloadSecurityProfile{
+				RunAsNonRoot: new(true),
+			},
+			wantProfiled:     true,
+			wantRunAsNonRoot: new(true),
+		},
+		{
+			name: "container setting only",
+			profile: apiv2.WorkloadSecurityProfile{
+				ReadOnlyRootFilesystem: new(true),
+			},
+			wantProfiled:     true,
+			wantReadOnlyRoot: new(true),
+		},
+
+		{
+			name:         "shared CR without manifest",
+			shared:       apiv2.WorkloadSecurityProfile{RunAsNonRoot: new(true)},
+			wantProfiled: true, wantRunAsNonRoot: new(true),
+		},
+		{
+			name:         "shared CR false beats manifest",
+			profile:      apiv2.WorkloadSecurityProfile{RunAsNonRoot: new(true), ReadOnlyRootFilesystem: new(true)},
+			shared:       apiv2.WorkloadSecurityProfile{RunAsNonRoot: new(false)},
+			wantProfiled: true, wantRunAsNonRoot: new(false), wantReadOnlyRoot: new(true),
+		},
+		{
+			name:         "migration CR beats shared",
+			shared:       apiv2.WorkloadSecurityProfile{RunAsNonRoot: new(true), ReadOnlyRootFilesystem: new(true)},
+			override:     apiv2.WorkloadSecurityProfile{ReadOnlyRootFilesystem: new(false)},
+			wantProfiled: true, wantRunAsNonRoot: new(true), wantReadOnlyRoot: new(false),
+		},
+		{
+			name:         "migration CR alone",
+			override:     apiv2.WorkloadSecurityProfile{RunAsNonRoot: new(true)},
+			wantProfiled: true, wantRunAsNonRoot: new(true),
+		},
+	}
+
+	for _, version := range []string{"0.84.9", "0.85.0", "0.85.0-rc.1", "1.0.0", "custom-build"} {
+		for _, test := range tests {
+			test := test
+			t.Run(version+"/"+test.name, func(t *testing.T) {
+				t.Parallel()
+
+				scheme := runtime.NewScheme()
+				if err := apiv2.AddToScheme(scheme); err != nil {
+					t.Fatalf("add W&B API to scheme: %v", err)
+				}
+				if err := clientgoscheme.AddToScheme(scheme); err != nil {
+					t.Fatalf("add Kubernetes APIs to scheme: %v", err)
+				}
+
+				wandb := &apiv2.WeightsAndBiases{
+					ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "default"},
+					Spec: apiv2.WeightsAndBiasesSpec{
+						Wandb: apiv2.WandbAppSpec{
+							Version:         version,
+							SecurityProfile: test.shared,
+							Migrations: map[string]apiv2.WandbMigrationOverride{
+								"gorilla": {SecurityProfile: test.override},
+								"unknown": {SecurityProfile: apiv2.WorkloadSecurityProfile{ReadOnlyRootFilesystem: new(true)}},
+							},
+						},
+					},
+					Status: apiv2.WeightsAndBiasesStatus{
+						Wandb: apiv2.WandbStatus{
+							Migration: apiv2.WandbMigrationStatus{
+								Version: version,
+								Jobs:    map[string]apiv2.MigrationJobStatus{},
+							},
+						},
+					},
+				}
+				c := fake.NewClientBuilder().
+					WithScheme(scheme).
+					WithStatusSubresource(&apiv2.WeightsAndBiases{}).
+					WithObjects(wandb).
+					Build()
+				manifest := servermanifest.Manifest{
+					Migrations: map[string]servermanifest.MigrationJob{
+						"gorilla": {
+							Image:           servermanifest.ImageRef{Repository: "example/migrate", Tag: "test"},
+							SecurityProfile: test.profile,
+						},
+					},
+				}
+
+				if _, err := runMigrations(context.Background(), c, wandb, manifest); err != nil {
+					t.Fatalf("run migrations: %v", err)
+				}
+				job := &batchv1.Job{}
+				if err := c.Get(context.Background(), client.ObjectKey{Name: "wandb-gorilla", Namespace: "default"}, job); err != nil {
+					t.Fatalf("get rendered migration job: %v", err)
+				}
+				if len(job.Spec.Template.Spec.Containers) != 1 {
+					t.Fatalf("migration containers = %d, want 1", len(job.Spec.Template.Spec.Containers))
+				}
+				containerSecurityContext := job.Spec.Template.Spec.Containers[0].SecurityContext
+				if !test.wantProfiled {
+					if job.Spec.Template.Spec.SecurityContext != nil || containerSecurityContext != nil {
+						t.Fatalf("unconfigured migration gained security contexts: pod=%#v container=%#v", job.Spec.Template.Spec.SecurityContext, containerSecurityContext)
+					}
+					return
+				}
+
+				assertPodSecurityBaseline(t, job.Spec.Template.Spec.SecurityContext)
+				assertContainerSecurityBaseline(t, containerSecurityContext)
+				assertOptionalBool(t, "migration runAsNonRoot", job.Spec.Template.Spec.SecurityContext.RunAsNonRoot, test.wantRunAsNonRoot)
+				assertOptionalBool(t, "migration readOnlyRootFilesystem", containerSecurityContext.ReadOnlyRootFilesystem, test.wantReadOnlyRoot)
+			})
+		}
+	}
+}
+
+func TestSecurityProfileDoesNotRestartCompletedMigrations(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := apiv2.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	if err := clientgoscheme.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	const version = "0.85.0"
+	wandb := &apiv2.WeightsAndBiases{
+		ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "default"},
+		Spec:       apiv2.WeightsAndBiasesSpec{Wandb: apiv2.WandbAppSpec{Version: version}},
+		Status: apiv2.WeightsAndBiasesStatus{Wandb: apiv2.WandbStatus{
+			Migration: apiv2.WandbMigrationStatus{Version: version, Ready: true, Jobs: map[string]apiv2.MigrationJobStatus{
+				"gorilla": {Succeeded: true},
+			}},
+		}},
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&apiv2.WeightsAndBiases{}).WithObjects(wandb).Build()
+	for _, profile := range []apiv2.WorkloadSecurityProfile{
+		{RunAsNonRoot: new(true), ReadOnlyRootFilesystem: new(true)},
+		{RunAsNonRoot: new(false)}, {},
+	} {
+		wandb.Spec.Wandb.SecurityProfile = profile
+		wandb.Spec.Wandb.Migrations = map[string]apiv2.WandbMigrationOverride{"gorilla": {SecurityProfile: profile}}
+		manifest := servermanifest.Manifest{Migrations: map[string]servermanifest.MigrationJob{
+			"gorilla": {Image: servermanifest.ImageRef{Repository: "example/migrate", Tag: "test"}, SecurityProfile: profile},
+		}}
+		result, err := runMigrations(context.Background(), c, wandb, manifest)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.RequeueAfter != 0 || !wandb.Status.Wandb.Migration.Ready || !wandb.Status.Wandb.Migration.Jobs["gorilla"].Succeeded {
+			t.Fatalf("completed migration restarted: result=%#v status=%#v", result, wandb.Status.Wandb.Migration)
+		}
+		jobs := &batchv1.JobList{}
+		if err := c.List(context.Background(), jobs); err != nil {
+			t.Fatal(err)
+		}
+		if len(jobs.Items) != 0 {
+			t.Fatal("profile change recreated a completed migration Job")
+		}
 	}
 }

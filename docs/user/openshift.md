@@ -54,6 +54,8 @@ a tested OpenShift Route recipe is still tracked in the
 | --- | --- | --- |
 | **Ingress / Frontend (`frontend-nginx`)** | The bundled frontend image runs as a fixed, non-numeric user (`nginx`) that owns `/usr/share/nginx/html` and rewrites files there at startup. `restricted-v2`'s arbitrary UID cannot write, and `nonroot-v2` rejects the pod because the kubelet cannot verify a non-numeric user is non-root. | **BYO ingress required.** Front W&B with your own ingress/route. |
 | **Kafka (bufstream)** | The distroless broker image ships a `0700` binary owned by a fixed UID (65532) that can only be executed as that exact user, so it cannot run under `restricted-v2`. | Currently runs under `nonroot-v2` (via a dedicated ServiceAccount) rather than `restricted-v2`. |
+| **Pod-log agent** | Node log files need root and hostPath access, which `restricted-v2` blocks. | Disabled by the OpenShift Helm profile; use application OTLP logging or a platform-approved log collector. |
+| **SeaweedFS** | The pinned image declares root; non-root runtime and SCC acceptance are not established by the read-only-root changes. | Use a validated image/platform combination or an external object store. |
 | **Cluster-scoped install** | The chart creates SCC grants and cluster-scoped RBAC. | Requires `cluster-admin` at install time. |
 
 ## Required: bring your own ingress
@@ -64,15 +66,14 @@ not run under OpenShift's `restricted-v2` SCC (see
 
 - **Ingress (BYO required).** Front W&B with the cluster's own edge — an
   OpenShift `Route` or your ingress controller.
-- **Object storage (optional BYO).** Managed SeaweedFS runs under `restricted-v2`
-  (its S3 gateway binds an unprivileged port, so no root/`anyuid` grant is
-  needed). You can still point the CR at an external object store (S3, GCS, Azure
-  Blob, or any S3-compatible endpoint you run) via
-  `spec.objectStore.default.externalObjectStore` if you prefer. See
-  [Infrastructure Connection Settings](infrastructure.md).
+- **Object storage.** Use an external object store unless your managed SeaweedFS
+  image and SCC behavior have been validated. Set
+  `spec.objectStore.default.externalObjectStore` as described in
+  [infrastructure configuration](infrastructure.md).
 
-The rest of the managed infra (MySQL, Redis, ClickHouse, Kafka) is supported on
-OpenShift via the adaptations described below.
+The adaptations below configure managed infrastructure for OpenShift, but the
+actual upstream-generated Pods still require runtime and admission validation
+with your selected images. Read-only roots alone do not establish compatibility.
 
 ## Deploying
 
@@ -106,6 +107,9 @@ moco:
     - --disable-default-security-context
 grafana-operator:
   isOpenShift: true
+telemetry:
+  logAgent:
+    enabled: false
 ```
 
 ```bash
@@ -118,10 +122,9 @@ helm install wandb-operator \
 
 ### 2. Apply a `WeightsAndBiases` resource
 
-Object storage can be managed (SeaweedFS runs under `restricted-v2`) or external.
-The example below wires an external object store; omit the `objectStore` block to
-use the managed default. When bringing your own, provide the connection details
-in a Secret and reference its keys:
+The example uses an external object store. Provide the connection details in a
+Secret and reference its keys. Omitting `objectStore` selects managed SeaweedFS;
+validate that image's SCC and filesystem behavior before choosing it.
 
 ```yaml
 apiVersion: v1
@@ -190,8 +193,9 @@ oc get pods -n wandb \
   -o custom-columns=NAME:.metadata.name,SCC:'.metadata.annotations.openshift\.io/scc'
 ```
 
-Managed infra pods run under `restricted-v2`, except the Kafka broker/etcd pods,
-which run under `nonroot-v2` (see below).
+Check each upstream-generated Pod rather than assuming the assigned SCC. Kafka
+uses a dedicated `nonroot-v2` grant; validate the other components against your
+cluster policy and selected images.
 
 ## What the OpenShift profile changes
 
@@ -203,6 +207,8 @@ which run under `nonroot-v2` (see below).
 - **Kafka (bufstream)** gets a dedicated ServiceAccount bound to the
   `nonroot-v2` SCC, because its distroless broker image ships a `0700` binary
   owned by a fixed UID (65532) that can only be executed as that exact user.
+- **Pod-log collection** is disabled because the telemetry log agent requires
+  root access and hostPath mounts.
 - **OwnerReferencesPermissionEnforcement** RBAC is rendered so the built-in
   StatefulSet controller (moco PVCs) can set finalizers on the resources it owns
   — OpenShift's admission plugin requires this and it is a no-op on upstream

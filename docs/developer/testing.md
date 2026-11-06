@@ -6,6 +6,10 @@ controllers, networking, migrations, and application behavior.
 
 ## Unit and envtest checks
 
+When Helm is installed, the Go telemetry tests also render the charts. Complete
+the dependency setup in [chart checks](#chart-checks) before the first `make test`
+in a fresh checkout or worktree.
+
 ```bash
 make lint
 make test
@@ -68,18 +72,27 @@ coverage inventory as an implemented tool.
 
 ## WESTest in CI
 
-The current [Nightly WESTest workflow](../../.github/workflows/nightly.yaml)
-supports manual dispatch. Its schedule is commented out. Dispatch can build a
-development/nightly chart and image, or test a supplied `operator_version`
-without building. An optional `scenario` selects one scenario.
+The [PR workflow](pr-westest-testing.md) tests eight local Kind scenarios against
+non-draft PR merge commits targeting `main`. It builds the checked-out Operator
+and chart inside the test environment. Fork and Dependabot runs skip these tests;
+airgap scenarios are temporarily excluded.
 
-The default smoke set covers local Ingress, Gateway, OIDC PKCE, OIDC implicit, and
-proxy scenarios. It uses the pinned WESTest release and large runners declared
-in the workflow. The repository's local `westest-run` action downloads WESTest
-with a GitHub App token; required secrets and permissions are defined in that
-workflow. Inspect uploaded scenario artifacts and the report job on failure.
+The [nightly workflow](nightly-westest.md) tests published Operator charts. Manual
+dispatch can build a development/nightly chart, or select an existing chart with
+`operator_version`. The matrix includes nine local scenarios and seven GCP
+scenarios; cloud scenarios run only on `main`. AWS remains disabled, and the daily
+schedule remains commented out pending cloud cleanup validation.
 
-The [original nightly plan](../design/nightly-westest-plan.md) contains rollout
-history, proposed scenarios, and prerequisites. Confirm them against the active
-workflow before operating or extending it. A scenario must test the image paired
-with the intended chart version, not an unrelated published image.
+Both workflows use the public WESTest container and resolve one stable W&B
+application version and manifest digest for each run. The operator-upgrade
+scenario holds the application version fixed across its two phases. Review the
+workflow-specific guides for credentials, parameters, timeouts, and cleanup.
+
+Offline runner and matrix checks run in the regular PR test workflow:
+
+```bash
+python3 -B -m unittest discover -s hack/scripts -p test_nightly_westest.py
+```
+
+The [original nightly plan](../design/nightly-westest-plan.md) remains historical;
+use the current runbooks above for operation and extension.

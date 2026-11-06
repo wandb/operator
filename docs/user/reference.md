@@ -35,13 +35,16 @@ helm show values \
 | `wandb.notifications` | Email and Slack settings |
 | `wandb.security` | Supported application security flags |
 | `wandb.retention` | Application data-retention settings; distinct from infrastructure deletion policy |
-| `wandb.applications` | Per-manifest-application autoscaling overrides |
+| `wandb.applications` | Per-manifest-application autoscaling and security overrides |
+| `wandb.securityProfile` | Shared application/migration non-root and read-only-root flags |
+| `wandb.migrations` | Security profiles for named migration Jobs, applied to new Jobs |
 | `wandb.probes` | Defaults for generated application health probes |
 | `wandb.serviceAccount` | Application workload identity |
 | `mysql`, `redis`, `objectStore`, `clickhouse` | Instance maps requiring a `default` entry |
 | `kafka.managedKafka` | Managed Bufstream configuration |
 | `networking.mode` | Empty, `ingress`, or `gateway` |
 | `adminConsoleEnabled` | Enable Console; disabled when omitted |
+| `supportBundle.enabled`, `supportBundle.version` | Install the suspended collection template (enabled by default) and optionally override its collector image tag |
 | `global.imageRegistry`, `global.imagePullSecrets` | W&B image registry and shared manifest/workload credentials |
 | `global.customCACerts`, `global.caCertsConfigMap` | W&B workload CA trust |
 | `global.proxy` | Application HTTP/HTTPS proxy and additional bypass entries |
@@ -62,6 +65,9 @@ mode, and rejects reducing an established managed MySQL replica count.
 | `moco.enabled`, `redis-operator.enabled`, `seaweedfs-operator.enabled`, `altinity-clickhouse-operator.enabled` | Install backing controllers and their bundled CRDs |
 | `openshift.enabled` and the OpenShift profile values | OpenShift-specific security and RBAC configuration |
 | `telemetry` | Collection mode, CRDs, forwarding, retention, and runtime settings |
+| `telemetry.logAgent` | Pod-log collection, extra namespaces, resources, and tolerations |
+| `global.image.registry`, `global.imagePullSecrets` | Telemetry registry prefix and pull credentials; separate from CR workload settings |
+| `telemetry.grafana.pluginImage` | Optional bundled-plugin image override; defaults to the installed Operator image |
 | `victoria-metrics-operator.enabled`, `grafana-operator.enabled` | Telemetry controller dependencies |
 
 ## Observed state
@@ -74,7 +80,9 @@ Infrastructure statuses mirror the instance maps in `mysqlStatus`, `redisStatus`
 `objectStoreStatus`, and `clickhouseStatus`; Kafka uses `kafkaStatus`.
 `wandb.migration` records migration progress and version. `ingressStatus`,
 `gatewayStatus`, `watchtowerStatus`, and `telemetryStatus` report their respective
-components. Console readiness is separate from overall W&B readiness.
+components. Console readiness is separate from overall W&B readiness. `supportBundle` reports
+collection-template readiness, its CronJob, image/version, running state, and last
+successful time. See [support bundles](support-bundles.md).
 
 Do not copy `status` or server-populated metadata into your desired-state file.
 For Operator release notes use [GitHub Releases](https://github.com/wandb/operator/releases);

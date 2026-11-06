@@ -47,6 +47,9 @@ version without a migration-specific recovery procedure and verified backup.
 
 ## Collect evidence
 
+Use the [support-bundle guide](support-bundles.md) for the installed collection
+template, its readiness requirements, and a manual collection procedure.
+
 Record the Operator chart/image version, W&B version, affected resource names,
 current generation and status, relevant events, and failing Job or pod logs.
 Inspect exports before sharing: CRs can contain licenses or literal credentials,

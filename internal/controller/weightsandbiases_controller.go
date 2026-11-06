@@ -22,7 +22,9 @@ import (
 
 	mocov1beta2 "github.com/cybozu-go/moco/api/v1beta2"
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/controller/common"
 	v2 "github.com/wandb/operator/internal/controller/reconciler"
+	"github.com/wandb/operator/internal/observability/supportbundle"
 	"github.com/wandb/operator/internal/observability/telemetry"
 	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/wandb/spec/channel/deployer"
@@ -145,7 +147,9 @@ func (r *WeightsAndBiasesReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&batchv1.Job{}).
 		Owns(&corev1.Secret{}).
 		Owns(&corev1.ConfigMap{}).
-		Owns(&networkingv1.Ingress{})
+		Owns(&networkingv1.Ingress{}).
+		// Support-bundle Jobs are owned by their CronJob, so map them back through their labels.
+		Watches(&batchv1.Job{}, handler.EnqueueRequestsFromMapFunc(mapSupportBundleJobToWandb))
 	if utils.IsRegistered(r.Scheme, &gatewayv1.Gateway{}) {
 		b = b.Watches(&gatewayv1.Gateway{}, handler.EnqueueRequestsFromMapFunc(r.mapGatewayToWandb))
 	}
@@ -198,6 +202,16 @@ func (r *WeightsAndBiasesReconciler) mapTelemetryConfigToWandb(ctx context.Conte
 	}
 
 	return requests
+}
+
+func mapSupportBundleJobToWandb(_ context.Context, obj client.Object) []ctrl.Request {
+	labels := obj.GetLabels()
+	if labels[common.WandbComponentLabel] != supportbundle.Component {
+		return nil
+	}
+	return []ctrl.Request{{
+		Namespace: labels[common.WandbNamespaceLabel],
+		Name:      labels[common.WandbNameLabel]}}
 }
 
 func (r *WeightsAndBiasesReconciler) mapGatewayToWandb(ctx context.Context, obj client.Object) []ctrl.Request {

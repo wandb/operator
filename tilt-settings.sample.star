@@ -14,7 +14,7 @@ SETTINGS = {
     "wandbName": "wandb",
     "wandbNamespace": "wandb",
     "wandbHostname": "http://localhost:8080",
-    "wandbVersion": "0.80.0",
+    "wandbVersion": "0.85.1",
     "size": "dev",
     "retentionPolicy": "detach",
     "licenseFile": "",
@@ -22,6 +22,9 @@ SETTINGS = {
     # Download Watchtower and enable Console v2 at /console. Uses gh auth token;
     # authenticate gh with read access to wandb/watchtower.
     "adminConsoleEnabled": False,
+
+    # Install the suspended support-bundle CronJob template
+    "supportBundleEnabled": True,
 
     # Default to the published server manifest repository. Use
     # local mode only when developing against repo-local manifest definitions.

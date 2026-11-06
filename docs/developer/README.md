@@ -10,6 +10,10 @@ keep generated code, CRDs, and the running controller in sync.
 | Change code, APIs, CRDs, or charts | [Development workflow](workflow.md) |
 | Evolve APIs and preserve compatibility | [API development](api-development.md) |
 | Work with manifests and integrations | [Reconciliation and integrations](reconciliation.md) |
+| Define manifest Secrets and migration identities | [Secrets](server-manifest-secrets.md), [service accounts](server-manifest-service-accounts.md) |
+| Change workload security contracts | [Workload security](workload-security.md) |
+| Maintain collection templates and permissions | [Support-bundle integration](support-bundles.md) |
+| Run WESTest in CI | [PR testing](pr-westest-testing.md), [nightly testing](nightly-westest.md) |
 | Test locally and through CI | [Testing](testing.md) |
 | Diagnose local build and reconciliation failures | [Debugging](debugging.md) |
 | Work on telemetry | [Telemetry internals](telemetry.md) |

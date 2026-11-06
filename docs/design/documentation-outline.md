@@ -14,7 +14,8 @@ can become a current guide.
 
 The refactor covers root-level documentation and everything under `docs/`.
 Documentation colocated with code elsewhere stays in place; the main guides can
-link to it when relevant. The refactor now provides forwarding pages at the former top-level doc paths.
+link to it when relevant. Former top-level doc paths have been removed; the
+audience guides are the canonical destinations.
 
 Entry points established by the refactor:
 
@@ -52,7 +53,7 @@ should work from published releases without requiring a source checkout.
   prerequisites, permissions, storage, capacity, hostname, and licensing needs.
 
 **Existing:** [README overview](../user/planning.md), prerequisites in
-[migration](../migrating-v1-to-v2.md) and [Console setup](../console-v2-setup.md).
+[migration](../user/migrating-v1-to-v2.md) and [Console setup](../user/console.md).
 
 **Work:** Consolidate the concepts and prerequisites. Add verified compatibility
 and capacity guidance; explain what must exist before installation begins.
@@ -65,8 +66,8 @@ and capacity guidance; explain what must exist before installation begins.
   login. Include an OpenShift deployment path.
 
 **Existing:** [README installation](../user/installation.md),
-[OpenShift deployment](../openshift.md), and installation steps in
-[Console setup](../console-v2-setup.md).
+[OpenShift deployment](../user/openshift.md), and installation steps in
+[Console setup](../user/console.md).
 
 **Work:** Assemble a complete first deployment guide. Validate examples and
 readiness checks together; feature guides should link to this installation
@@ -83,7 +84,7 @@ procedure instead of repeating it.
 [value or secret fields](wandb_v2/secret_or_value_connection_fields.md).
 
 **Work:** Write the configuration guide and extract current examples from the
-design record. [Config API](../config-api.md) describes console/configmap
+design record. [Config API](legacy-config-api.md) describes console/configmap
 integration and cannot serve as the CR configuration reference.
 
 ### Configure backing infrastructure
@@ -93,9 +94,9 @@ integration and cannot serve as the CR configuration reference.
 - Supply connection settings and credentials, configure TLS, and verify
   connectivity. Explain storage endpoint requirements for browser access.
 
-**Existing:** [Infrastructure connection settings](../infra-connection-settings.md),
-object-store examples in [OpenShift](../openshift.md), connection checks in
-[migration](../migrating-v1-to-v2.md), and the
+**Existing:** [Infrastructure connection settings](../developer/connection-internals.md),
+object-store examples in [OpenShift](../user/openshift.md), connection checks in
+[migration](../user/migrating-v1-to-v2.md), and the
 [value or secret design](wandb_v2/secret_or_value_connection_fields.md).
 
 **Work:** Turn the connector reference into CR-oriented instructions with examples
@@ -109,9 +110,9 @@ keep application parser internals in developer documentation.
 - Explain resource ownership, networking mode changes, controller-specific
   requirements, and how to verify routes.
 
-**Existing:** [Networking](../networking.md),
+**Existing:** [Networking](../user/networking.md),
 [README Gateway TLS example](../user/networking.md#implementation-specific-tls-options), and
-[Ingress and Gateway design](../plan-ingress-gateway-api.md).
+[Ingress and Gateway design](networking-plan.md).
 
 **Work:** Retain useful Ingress guidance and write the general Gateway setup
 guide. Extract and validate design examples before use; cover prerequisites and
@@ -137,9 +138,9 @@ guide; proxy guidance is also missing from the main user docs.
 - Enable or disable telemetry, use Grafana, forward telemetry externally, and
   verify that collection and forwarding work.
 
-**Existing:** [Console setup](../console-v2-setup.md),
-[Watchtower deployment](../watchtower-deployment.md), and
-[monitoring](../monitoring.md).
+**Existing:** [Console setup](../user/console.md),
+[Watchtower deployment](../developer/console.md), and
+[monitoring](../user/monitoring.md).
 
 **Work:** Keep Console and telemetry as distinct guides within this section.
 Reconcile conflicting Console configuration examples and terminology. Move Tilt,
@@ -152,8 +153,8 @@ image packaging, manifest authoring, and reconciliation details to developer doc
 - Migrate from Operator v1 to v2, preserve existing infrastructure, verify
   application data, and determine when legacy resources can be cleaned up.
 
-**Existing:** [Migration guide](../migrating-v1-to-v2.md), an Operator upgrade
-command in [Console setup](../console-v2-setup.md), and
+**Existing:** [Migration guide](../user/migrating-v1-to-v2.md), an Operator upgrade
+command in [Console setup](../user/console.md), and
 [release history](../../CHANGELOG.md).
 
 **Work:** Complete the migration guide's pre-upgrade TODO. Write routine Operator
@@ -169,7 +170,7 @@ instructions.
   and supported recovery or reattachment procedures.
 
 **Existing:** Retention examples in [README](../../README.md) and backup and
-ownership cautions in [migration](../migrating-v1-to-v2.md).
+ownership cautions in [migration](../user/migrating-v1-to-v2.md).
 
 **Work:** Write lifecycle and recovery guidance. Verify which actions are
 supported and document their limits. Local Tilt cleanup belongs in the developer
@@ -183,8 +184,8 @@ guide and must not be reused as a production uninstall procedure.
   storage, registry, TLS, networking, Console, and telemetry failures.
 
 **Existing:** Troubleshooting and verification fragments in
-[migration](../migrating-v1-to-v2.md), [Console setup](../console-v2-setup.md),
-[OpenShift](../openshift.md), and [monitoring](../monitoring.md).
+[migration](../user/migrating-v1-to-v2.md), [Console setup](../user/console.md),
+[OpenShift](../user/openshift.md), and [monitoring](../user/monitoring.md).
 
 **Work:** Create a shared diagnostic guide and link specialized failure cases
 from their feature guides. Define useful evidence to collect for support.
@@ -196,7 +197,7 @@ from their feature guides. Define useful evidence to collect for support.
 - Provide minimal complete examples and link version-specific compatibility
   information and release notes.
 
-**Existing:** Scattered examples, [connection settings](../infra-connection-settings.md),
+**Existing:** Scattered examples, [connection settings](../developer/connection-internals.md),
 and the [value or secret design](wandb_v2/secret_or_value_connection_fields.md).
 
 **Work:** Build a reference checked against the current API and chart. Decide how
@@ -244,7 +245,7 @@ agent instructions.
 - Document code generation, embedded CRD synchronization, local rebuilds,
   linting, formatting, and contribution conventions.
 
-**Existing:** [Development flow](../../DEVELOPMENT.md) and workflow rules in
+**Existing:** [Development flow](../developer/workflow.md) and workflow rules in
 [CLAUDE.md](../../CLAUDE.md).
 
 **Work:** Replace stale Tilt resource names and paths with the current workflow.
@@ -287,10 +288,10 @@ editing local test fixtures from publishing upstream W&B manifests.
   corresponding chart and RBAC changes.
 
 **Existing:** [Infrastructure reconciliation](wandb_v2/infra_reconciliation.md),
-[connection internals](../infra-connection-settings.md),
-[networking plan](../plan-ingress-gateway-api.md), [monitoring](../monitoring.md),
-[Watchtower deployment](../watchtower-deployment.md),
-[Watchtower research](../watchtower.md), and [Config API](../config-api.md).
+[connection internals](../developer/connection-internals.md),
+[networking plan](networking-plan.md), [monitoring](../user/monitoring.md),
+[Watchtower deployment](../developer/console.md),
+[Watchtower research](watchtower-history.md), and [Config API](legacy-config-api.md).
 
 **Work:** Separate current implementation contracts from historical research.
 Verify whether the configmap/console API note still describes an active contract.
@@ -304,8 +305,8 @@ Keep user configuration examples in the user guides and link to them.
   and application data verification; explain test artifact inspection.
 
 **Existing:** Testing sections in [README](../../README.md) and
-[DEVELOPMENT.md](../../DEVELOPMENT.md),
-[nightly WESTest plan and runbook](../nightly-westest-testing.md), and the
+[DEVELOPMENT.md](../developer/workflow.md),
+[nightly WESTest plan and runbook](../developer/nightly-westest.md), and the
 application test data inventory (the earlier working draft is no longer present;
 see the [coverage tracker](../developer/documentation.md#remaining-coverage)).
 
@@ -319,7 +320,7 @@ contract in the working tree, not evidence of an implemented generator.
   through status and logs, and distinguish stale CRDs from code failures.
 - Diagnose Tilt build and deployment issues and reset local state safely.
 
-**Existing:** [Development troubleshooting](../../DEVELOPMENT.md),
+**Existing:** [Development troubleshooting](../developer/workflow.md),
 [README cleanup](../developer/setup.md#cleaning-up-tilt), and
 [Tilt dependencies](wandb_v2/tilt.md).
 
@@ -333,8 +334,8 @@ the developer toolchain.
 - Validate and publish development, preview, and stable releases; distinguish
   v2 release procedures from v1 maintenance.
 
-**Existing:** [v2 releasing](../releasing.md), [v1 releasing](../releasing-v1.md),
-packaging details in [Watchtower deployment](../watchtower-deployment.md), and
+**Existing:** [v2 releasing](../developer/releasing.md), [v1 releasing](../developer/releasing-v1.md),
+packaging details in [Watchtower deployment](../developer/console.md), and
 release conventions in [CLAUDE.md](../../CLAUDE.md).
 
 **Work:** Use the current release workflows as the authority. Resolve the

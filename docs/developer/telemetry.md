@@ -85,3 +85,29 @@ Render the Operator chart with `--include-crds` and each telemetry profile when
 changing templates. The forward profile requires a destination endpoint. See
 [testing](testing.md) for chart checks. The standalone telemetry chart expects
 its controllers and CRDs to exist already.
+
+## Image packaging and pod-log collection
+
+`make download-grafana-plugins` downloads and verifies the pinned VictoriaLogs
+plugin before `make docker-build`. The Dockerfile copies it into
+`/opt/wandb/grafana-plugins`; Grafana's init container copies that directory into
+its shared plugin volume. Update the pinned version and checksum together.
+The parent chart selects the installed Operator image by default, while the
+standalone telemetry chart requires `grafana.pluginImage` in full mode.
+
+The [telemetry helpers](../../deploy/telemetry/templates/_helpers.tpl) centralize
+registry prefixes, pull Secrets, and the Grafana resource. Keep explicit Victoria
+and config-reloader image versions aligned with the bundled controller. Validate
+both the parent Operator chart and standalone telemetry chart when changing this
+contract. User-facing settings are in [restricted environments](../user/restricted-environments.md#telemetry-images-and-plugins).
+
+The log-agent DaemonSet tails node Pod logs through a filelog receiver, persists
+offsets on the host, and exports through the OTLP gateway. Its namespace filters
+include the telemetry and release namespaces plus `logAgent.extraNamespaces`.
+It excludes its own logs to avoid a collection loop. The agent needs root and
+hostPath access; keep the OpenShift profile's log-agent opt-out intact.
+
+The full-stack Grafana configuration serves `/console/grafana/` and includes
+managed MySQL and deployment-availability panels. Console also has direct Pod
+metrics read permissions; that path depends on metrics-server rather than the
+Victoria scrape pipeline.

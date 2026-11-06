@@ -42,6 +42,7 @@ var _ = Describe("Keeper vendor spec", func() {
 
 		Expect(chk.Spec.Configuration.Clusters).To(HaveLen(1))
 		Expect(chk.Spec.Configuration.Clusters[0].Layout.ReplicasCount).To(Equal(5))
+		Expect(chk.Spec.Configuration.Settings.Get("path").String()).To(Equal("/var/lib/clickhouse-keeper/"))
 
 		Expect(chk.Spec.Templates.VolumeClaimTemplates).To(HaveLen(1))
 		storage := chk.Spec.Templates.VolumeClaimTemplates[0].Spec.Resources.Requests[corev1.ResourceStorage]
@@ -51,6 +52,9 @@ var _ = Describe("Keeper vendor spec", func() {
 		container := chk.Spec.Templates.PodTemplates[0].Spec.Containers[0]
 		Expect(container.Image).To(Equal(KeeperImage(manifest.ImageRef{}, "")))
 		Expect(container.Name).To(Equal(keeperContainerName))
+		Expect(container.SecurityContext.ReadOnlyRootFilesystem).To(HaveValue(BeTrue()))
+		Expect(container.SecurityContext.AllowPrivilegeEscalation).To(HaveValue(BeFalse()))
+		Expect(container.SecurityContext.Capabilities.Drop).To(ConsistOf(corev1.Capability("ALL")))
 		Expect(container.Resources.Requests[corev1.ResourceCPU]).To(Equal(resource.MustParse("250m")))
 		Expect(container.VolumeMounts).To(ConsistOf(corev1.VolumeMount{
 			Name:      keeperLogVolumeName,
@@ -104,6 +108,12 @@ var _ = Describe("Keeper vendor spec", func() {
 		Expect(err).NotTo(HaveOccurred())
 		sc := chk.Spec.Templates.PodTemplates[0].Spec.SecurityContext
 		Expect(sc.RunAsUser).To(BeNil())
+		Expect(sc.RunAsGroup).To(BeNil())
+		Expect(sc.FSGroup).To(BeNil())
+		containerSC := chk.Spec.Templates.PodTemplates[0].Spec.Containers[0].SecurityContext
+		Expect(containerSC.ReadOnlyRootFilesystem).To(HaveValue(BeTrue()))
+		Expect(containerSC.RunAsUser).To(BeNil())
+		Expect(containerSC.RunAsGroup).To(BeNil())
 		Expect(sc.RunAsNonRoot).NotTo(BeNil())
 		Expect(*sc.RunAsNonRoot).To(BeTrue())
 	})

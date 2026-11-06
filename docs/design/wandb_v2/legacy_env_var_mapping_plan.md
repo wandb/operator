@@ -443,7 +443,7 @@ field + its `fill` (fed by the structured flag). The env mapper now owns
 
 - No `*_types.go` change, so codegen is a no-op — but run
   `make manifests generate sync-crd-embed` to be safe (CI gates on it).
-- Update [docs/infra-connection-settings.md](../../infra-connection-settings.md):
+- Update [docs/infra-connection-settings.md](../../developer/connection-internals.md):
   note the two replication env vars are now promoted to typed fields at reconcile.
 - `make lint && make test`.
 

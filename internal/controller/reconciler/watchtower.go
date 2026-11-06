@@ -10,12 +10,16 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/logx"
+	"github.com/wandb/operator/internal/observability/supportbundle"
 	"github.com/wandb/operator/pkg/utils"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -197,7 +201,7 @@ func buildWatchtowerApplication(wandb *apiv2.WeightsAndBiases, authService strin
 			PodTemplate: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					ServiceAccountName: watchtowerServiceAccountName(wandb),
-					SecurityContext:    resolvePodSecurityContext(),
+					SecurityContext:    resolvePodSecurityContext(apiv2.WorkloadSecurityProfile{}),
 					Affinity:           wandb.Spec.Affinity,
 					Tolerations:        watchtowerTolerations(wandb),
 					Containers: []corev1.Container{
@@ -206,7 +210,7 @@ func buildWatchtowerApplication(wandb *apiv2.WeightsAndBiases, authService strin
 							Image:           image,
 							Command:         []string{"/watchtower"},
 							Args:            []string{"--port", fmt.Sprintf("%d", watchtowerContainerPort)},
-							SecurityContext: resolveContainerSecurityContext(),
+							SecurityContext: resolveContainerSecurityContext(apiv2.WorkloadSecurityProfile{}),
 							Env:             watchtowerEnv(wandb, authService, basePath),
 							Resources:       watchtowerResources(),
 							Ports: []corev1.ContainerPort{{
@@ -485,6 +489,23 @@ func reconcileWatchtowerRBAC(ctx context.Context, c ctrlClient.Client, wandb *ap
 	serviceAccountName := watchtowerServiceAccountName(wandb)
 	clusterScopedName := watchtowerClusterScopedName(wandb)
 
+	// The support-bundle grants wait for the policy that confines the Jobs Watchtower can create.
+	supportBundleGrants := false
+	if supportbundle.Enabled(wandb) {
+		want := supportbundle.WatchtowerJobPolicy(wandb, serviceAccountName)
+		policy := &admissionregistrationv1.ValidatingAdmissionPolicy{}
+		binding := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
+		err := c.Get(ctx, ctrlClient.ObjectKeyFromObject(want), policy)
+		if err == nil {
+			err = c.Get(ctx, ctrlClient.ObjectKeyFromObject(want), binding)
+		}
+		if err != nil && !apiErrors.IsNotFound(err) && !meta.IsNoMatchError(err) {
+			return fmt.Errorf("failed to check the Watchtower job policy: %w", err)
+		}
+		supportBundleGrants = err == nil && apiequality.Semantic.DeepEqual(want.Spec, policy.Spec) &&
+			apiequality.Semantic.DeepEqual(supportbundle.WatchtowerJobPolicyBinding(wandb).Spec, binding.Spec)
+	}
+
 	role := &rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: watchtowerName(wandb), Namespace: wandb.Namespace}}
 	if _, err := controllerruntime.CreateOrUpdate(ctx, c, role, func() error {
 		role.Labels = utils.MergeMapsStringString(role.Labels, labels)
@@ -526,6 +547,14 @@ func reconcileWatchtowerRBAC(ctx context.Context, c ctrlClient.Client, wandb *ap
 				Resources: []string{"ingresses"},
 				Verbs:     []string{"get", "list", "watch"},
 			},
+		}
+		if supportBundleGrants {
+			// Launching, cancelling and copying out support-bundle collections.
+			role.Rules = append(role.Rules,
+				rbacv1.PolicyRule{APIGroups: []string{"batch"}, Resources: []string{"jobs"}, Verbs: []string{"create", "delete"}},
+				rbacv1.PolicyRule{APIGroups: []string{""}, Resources: []string{"pods"}, Verbs: []string{"delete"}},
+				rbacv1.PolicyRule{APIGroups: []string{""}, Resources: []string{"pods/exec"}, Verbs: []string{"create", "get"}},
+			)
 		}
 		return controllerutil.SetOwnerReference(wandb, role, c.Scheme())
 	}); err != nil {
