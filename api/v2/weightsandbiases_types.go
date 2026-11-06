@@ -1166,6 +1166,7 @@ type WeightsAndBiasesStatus struct {
 	IngressStatus    *IngressStatusSummary       `json:"ingressStatus,omitempty"`
 	WatchtowerStatus *WatchtowerStatusSummary    `json:"watchtowerStatus,omitempty"`
 	SupportBundle    *SupportBundleStatusSummary `json:"supportBundle,omitempty"`
+	Preflights       map[string]PreflightStatus  `json:"preflights,omitempty"`
 }
 
 type SupportBundleStatusSummary struct {
@@ -1320,4 +1321,15 @@ type TelemetryConnectionStatus struct {
 	DatadogTraceAgentURL  string `json:"datadogTraceAgentURL,omitempty"`
 	DatadogTraceAgentHost string `json:"datadogTraceAgentHost,omitempty"`
 	DatadogTraceAgentPort string `json:"datadogTraceAgentPort,omitempty"`
+}
+
+type PreflightStatus struct {
+	Outcome            string `json:"outcome"`
+	Message            string `json:"message,omitempty"`
+	ObservedGeneration int64  `json:"observedGeneration"`
+	// +optional
+	InputVersion string `json:"inputVersion,omitempty"`
+	// LastRunTime gates retries of a non-passing check so it isn't re-run on every reconcile.
+	// +optional
+	LastRunTime metav1.Time `json:"lastRunTime,omitempty"`
 }
