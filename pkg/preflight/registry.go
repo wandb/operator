@@ -1,19 +1,31 @@
 package preflight
 
-import apiv2 "github.com/wandb/operator/api/v2"
-
 const (
 	ExternalMysqlCheck       = "externalMysqlCheck"
 	ExternalRedisCheck       = "externalRedisCheck"
+	ExternalClickHouseCheck  = "externalClickHouseCheck"
 	ExternalObjectStoreCheck = "externalObjectStoreCheck"
+
+	ManagedMysqlAPIsCheck       = "managedMysqlApisCheck"
+	ManagedRedisAPIsCheck       = "managedRedisApisCheck"
+	ManagedObjectStoreAPIsCheck = "managedObjectStoreApisCheck"
+	ManagedClickHouseAPIsCheck  = "managedClickHouseApisCheck"
 )
 
 var Checks = map[string]Check{
-	ExternalMysqlCheck: typedCheck[apiv2.MysqlConnection](ExternalMysqlCheck, "spec.mysql.*.externalMysql",
+	ExternalMysqlCheck: typedCheck(ExternalMysqlCheck, "spec.mysql.*.externalMysql",
 		TypeConnection, []ResourceReq{ReqReadOnly}, RunExternalMysqlCheck),
-	// Register new infra checks against the CR struct at their field, e.g.:
-	//   ExternalRedisCheck: typedCheck[apiv2.RedisConnection](ExternalRedisCheck, "spec.redis.*.externalRedis",
-	//       TypeConnection, []ResourceReq{ReqReadOnly}, RunExternalRedisCheck),
-	//   ExternalObjectStoreCheck: typedCheck[apiv2.ObjectStoreConnection](ExternalObjectStoreCheck, "spec.objectStore.*.externalObjectStore",
-	//       TypeConnection, []ResourceReq{ReqReadOnly}, RunExternalObjectStoreCheck),
+	ExternalRedisCheck: typedCheck(ExternalRedisCheck, "spec.redis.*.externalRedis",
+		TypeConnection, []ResourceReq{ReqReadOnly}, RunExternalRedisCheck),
+	ExternalClickHouseCheck: typedCheck(ExternalClickHouseCheck, "spec.clickhouse.*.externalClickhouse",
+		TypeConnection, []ResourceReq{ReqReadOnly}, RunExternalClickHouseCheck),
+	ExternalObjectStoreCheck: typedCheck(ExternalObjectStoreCheck, "spec.objectStore.*.externalObjectStore",
+		TypeConnection, []ResourceReq{ReqReadOnly}, RunExternalObjectStoreCheck),
+
+	ManagedMysqlAPIsCheck: managedAPIsCheck(ManagedMysqlAPIsCheck, "spec.mysql.*.managedMysql", managedMysqlAPIs),
+	ManagedRedisAPIsCheck: managedAPIsCheck(ManagedRedisAPIsCheck, "spec.redis.*.managedRedis", managedRedisAPIs),
+	ManagedObjectStoreAPIsCheck: managedAPIsCheck(ManagedObjectStoreAPIsCheck, "spec.objectStore.*.managedObjectStore",
+		managedObjectStoreAPIs),
+	ManagedClickHouseAPIsCheck: managedAPIsCheck(ManagedClickHouseAPIsCheck, "spec.clickhouse.*.managedClickhouse",
+		managedClickHouseAPIs),
 }
