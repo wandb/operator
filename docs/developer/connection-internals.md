@@ -1,4 +1,11 @@
-# Infrastructure Connection Settings
+# Application connection internals
+
+This matrix records application connector URL/query parameters and Weave
+environment variables. It is not the Operator CR schema, and the upstream
+connector defaults need review when W&B versions change. Use the
+[user infrastructure guide](../user/infrastructure.md) to configure a deployment.
+In particular, the Kafka entries below describe application connection formats;
+the current W&B CR exposes managed Kafka only.
 
 All Go URL spec components are parsed by the shared `connectors.ParseConnectionString()` into `connectors.ConnectionInfo`.
 Query params are parsed per-connector via `queryparams.ParseAndValidate()` into typed structs (e.g., `RedisQueryParams`).

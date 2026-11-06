@@ -83,7 +83,7 @@ use the declared identity. Allow an existing migration to complete before
 changing its account or permissions.
 
 Removing `permissions` from a retained account declaration removes its managed
-Role and RoleBinding. Secrets are preserved. 
+Role and RoleBinding. Secrets are preserved.
 
 Declared ownerless Secrets are adopted by the CR. On CR deletion they follow
 the global retention policy: detach removes this CR's owner reference, while

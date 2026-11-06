@@ -1,3 +1,6 @@
+> Status: Historical research and implementation notes. Current configuration and packaging have changed.
+> See the [current developer guide](../developer/reconciliation.md) before using these notes.
+
 With wandb console being deprecated, users want a way to access a wandb deployed UI for managing their infrastructure. Today we have https://github.com/wandb/watchtower which can connect to any context and manage instance deploys there, but this access is too general and we want a wandb app for on-prem customers to manage their deploys the way they used to with console.
 
 # How Console Was Set Up

@@ -1,5 +1,8 @@
 # Workload security profiles
 
+Status: implemented design record. See [workload security development](../../developer/workload-security.md)
+and [user configuration](../../user/workload-security.md) for current guidance.
+
 Configure workload security through the WeightsAndBiases CR. Server manifests
 can supply release-specific defaults while compatible image versions roll out.
 Both use the same optional `runAsNonRoot` and `readOnlyRootFilesystem` fields.

@@ -13,7 +13,7 @@ creates the matching GitHub Release.
    - `version` in `deploy/operator/Chart.yaml`
    - `appVersion` in `deploy/operator/Chart.yaml`
    - `wandb-operator.image.tag` in `deploy/operator/values.yaml`
-3. Set the latest WATCHTOWER_VERSION on `Makefile`
+3. Select and pin the reviewed `WATCHTOWER_VERSION` in `Makefile`.
 4. Run the chart validation commands used by CI:
 
    ```bash

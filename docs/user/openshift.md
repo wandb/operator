@@ -6,7 +6,7 @@ known limitations of running under OpenShift's default `restricted-v2` Security
 Context Constraint (SCC).
 
 For **local** OpenShift development with CRC + Tilt, see
-[`config/openshift-dev/README.md`](../config/openshift-dev/README.md) instead —
+[`config/openshift-dev/README.md`](../../config/openshift-dev/README.md) instead —
 that path is automated and does not require the manual steps below.
 
 ## Why OpenShift needs special handling
@@ -23,12 +23,17 @@ when it knows it is running on OpenShift, driven by two switches:
 
 | Switch | Where | Effect |
 | --- | --- | --- |
-| `OPENSHIFT=true` env on the operator | `profiles/openshift.yaml` | Makes `utils.IsOpenShift()` true, so managed infra specs omit fixed UID/GID and the Kafka pods get a dedicated SA bound to `nonroot-v2`. |
-| `openshift.enabled=true` chart value | `profiles/openshift.yaml` | Renders the OpenShift-only RBAC/SCC templates (`openshift-owner-finalizers-rbac.yaml`, `openshift-scc-rbac.yaml`). |
+| `OPENSHIFT=true` env on the operator | OpenShift values file | Makes managed infrastructure omit fixed UID/GID and gives Kafka a dedicated ServiceAccount bound to `nonroot-v2`. |
+| `openshift.enabled=true` chart value | OpenShift values file | Enables the OpenShift-specific RBAC and SCC grants. |
 
-Both are set for you by the `profiles/openshift.yaml` values overlay.
+Both are included in the values file below and the chart's OpenShift profile.
 
 ## Prerequisites
+
+Complete the shared [deployment prerequisites](planning.md), including
+cert-manager and persistent storage. Create the W&B namespace before its Secrets
+and resource, as in [installation](installation.md).
+
 
 - OpenShift 4.x cluster.
 - `cluster-admin` (or equivalent) for the install: the chart creates
@@ -39,10 +44,18 @@ Both are set for you by the `profiles/openshift.yaml` values overlay.
 
 ## Known limitations
 
+The frontend constraints below are inherited from the existing OpenShift guide
+and depend on the W&B image version. Revalidate them for your selected release;
+a tested OpenShift Route recipe is still tracked in the
+[documentation backlog](../developer/documentation.md#remaining-coverage).
+
+
 | Component | Limitation | Status / workaround |
 | --- | --- | --- |
 | **Ingress / Frontend (`frontend-nginx`)** | The bundled frontend image runs as a fixed, non-numeric user (`nginx`) that owns `/usr/share/nginx/html` and rewrites files there at startup. `restricted-v2`'s arbitrary UID cannot write, and `nonroot-v2` rejects the pod because the kubelet cannot verify a non-numeric user is non-root. | **BYO ingress required.** Front W&B with your own ingress/route. |
 | **Kafka (bufstream)** | The distroless broker image ships a `0700` binary owned by a fixed UID (65532) that can only be executed as that exact user, so it cannot run under `restricted-v2`. | Currently runs under `nonroot-v2` (via a dedicated ServiceAccount) rather than `restricted-v2`. |
+| **Pod-log agent** | Node log files need root and hostPath access, which `restricted-v2` blocks. | Disabled by the OpenShift Helm profile; use application OTLP logging or a platform-approved log collector. |
+| **SeaweedFS** | The pinned image declares root; non-root runtime and SCC acceptance are not established by the read-only-root changes. | Use a validated image/platform combination or an external object store. |
 | **Cluster-scoped install** | The chart creates SCC grants and cluster-scoped RBAC. | Requires `cluster-admin` at install time. |
 
 ## Required: bring your own ingress
@@ -53,31 +66,21 @@ not run under OpenShift's `restricted-v2` SCC (see
 
 - **Ingress (BYO required).** Front W&B with the cluster's own edge — an
   OpenShift `Route` or your ingress controller.
-- **Object storage (optional BYO).** Managed SeaweedFS runs under `restricted-v2`
-  (its S3 gateway binds an unprivileged port, so no root/`anyuid` grant is
-  needed). You can still point the CR at an external object store (S3, GCS, Azure
-  Blob, or any S3-compatible endpoint you run) via
-  `spec.objectStore.externalObjectStore` if you prefer. See
-  [Infrastructure Connection Settings](infra-connection-settings.md).
+- **Object storage.** Use an external object store unless your managed SeaweedFS
+  image and SCC behavior have been validated. Set
+  `spec.objectStore.default.externalObjectStore` as described in
+  [infrastructure configuration](infrastructure.md).
 
-The rest of the managed infra (MySQL, Redis, ClickHouse, Kafka) is supported on
-OpenShift via the adaptations described below.
+The adaptations below configure managed infrastructure for OpenShift, but the
+actual upstream-generated Pods still require runtime and admission validation
+with your selected images. Read-only roots alone do not establish compatibility.
 
 ## Deploying
 
 ### 1. Install the operator with the OpenShift profile
 
-From a checkout of this repository:
-
-```bash
-helm install wandb-operator ./deploy/operator \
-  --namespace wandb-operators --create-namespace \
-  -f deploy/operator/profiles/openshift.yaml
-```
-
-Installing from the published OCI chart works the same way, but you must supply
-the OpenShift values yourself (the `-f` file must be a local path). Save the
-snippet below as `openshift-values.yaml`:
+Set `OPERATOR_VERSION` to the published v2 chart version you selected. Save the
+following as `openshift-values.yaml` and merge in your other chart settings:
 
 ```yaml
 openshift:
@@ -104,21 +107,24 @@ moco:
     - --disable-default-security-context
 grafana-operator:
   isOpenShift: true
+telemetry:
+  logAgent:
+    enabled: false
 ```
 
 ```bash
 helm install wandb-operator \
   oci://us-docker.pkg.dev/wandb-production/public/wandb/charts/operator \
+  --version "$OPERATOR_VERSION" \
   --namespace wandb-operators --create-namespace \
   -f openshift-values.yaml
 ```
 
 ### 2. Apply a `WeightsAndBiases` resource
 
-Object storage can be managed (SeaweedFS runs under `restricted-v2`) or external.
-The example below wires an external object store; omit the `objectStore` block to
-use the managed default. When bringing your own, provide the connection details
-in a Secret and reference its keys:
+The example uses an external object store. Provide the connection details in a
+Secret and reference its keys. Omitting `objectStore` selects managed SeaweedFS;
+validate that image's SCC and filesystem behavior before choosing it.
 
 ```yaml
 apiVersion: v1
@@ -146,18 +152,22 @@ spec:
     onDelete: detach
   wandb:
     version: <wandb-version>
+    hostname: https://wandb.example.com
   networking:
     mode: ingress
     ingress:
       ingressClassName: <ingress-class-name>
+      managed: false
   objectStore:
-    externalObjectStore:
-      bucket:    { name: wandb-object-store, key: bucket }
-      region:    { name: wandb-object-store, key: region }
-      accessKey: { name: wandb-object-store, key: accessKey }
-      secretKey: { name: wandb-object-store, key: secretKey }
-      # endpoint: { name: wandb-object-store, key: endpoint }
-      # port:     { name: wandb-object-store, key: port }
+    default:
+      externalObjectStore:
+        provider: {value: s3}
+        bucket: {valueFrom: {secretKeyRef: {name: wandb-object-store, key: bucket}}}
+        region: {valueFrom: {secretKeyRef: {name: wandb-object-store, key: region}}}
+        accessKey: {valueFrom: {secretKeyRef: {name: wandb-object-store, key: accessKey}}}
+        secretKey: {valueFrom: {secretKeyRef: {name: wandb-object-store, key: secretKey}}}
+        tlsEnabled: {value: "true"}
+        forcePathStyle: {value: "false"}
 ```
 
 ```bash
@@ -166,9 +176,8 @@ kubectl apply -f wandb.yaml
 
 On OpenShift you must front the deployment with the cluster's own edge — an
 OpenShift `Route` or your ingress controller — not a bundled load balancer or
-the bundled frontend. See
-[`docs/infra-connection-settings.md`](infra-connection-settings.md) for
-networking and object-store connection options.
+the bundled frontend. See [networking](networking.md) for routing and
+[infrastructure](infrastructure.md) for object-store connections.
 
 ### 3. Verify
 
@@ -184,8 +193,9 @@ oc get pods -n wandb \
   -o custom-columns=NAME:.metadata.name,SCC:'.metadata.annotations.openshift\.io/scc'
 ```
 
-Managed infra pods run under `restricted-v2`, except the Kafka broker/etcd pods,
-which run under `nonroot-v2` (see below).
+Check each upstream-generated Pod rather than assuming the assigned SCC. Kafka
+uses a dedicated `nonroot-v2` grant; validate the other components against your
+cluster policy and selected images.
 
 ## What the OpenShift profile changes
 
@@ -197,6 +207,8 @@ which run under `nonroot-v2` (see below).
 - **Kafka (bufstream)** gets a dedicated ServiceAccount bound to the
   `nonroot-v2` SCC, because its distroless broker image ships a `0700` binary
   owned by a fixed UID (65532) that can only be executed as that exact user.
+- **Pod-log collection** is disabled because the telemetry log agent requires
+  root access and hostPath mounts.
 - **OwnerReferencesPermissionEnforcement** RBAC is rendered so the built-in
   StatefulSet controller (moco PVCs) can set finalizers on the resources it owns
   — OpenShift's admission plugin requires this and it is a no-op on upstream

@@ -1,5 +1,8 @@
 # Legacy env-var → CR field mapping: from conversion special-case to a reconcile-time registry
 
+> Status: Original proposal; related implementation now exists in legacy_env_mapping.go. The proposal text below is retained as history.
+> Current guidance: [developer guide](../../developer/api-development.md).
+
 **Status:** Proposal (not yet implemented)
 **Related:** [legacy_overrides.md](legacy_overrides.md) (the `spec.wandb.legacyOverrides` mechanism this builds on)
 
@@ -425,7 +428,7 @@ narrow fidelity loss for a smaller conversion webhook.
 3. Move the structured-flag mapping into `mapClickHouse` (option A) and delete the
    env harvest + exclusion from the conversion webhook.
 4. Migrate/rewrite the affected tests; update
-   [docs/infra-connection-settings.md](../../infra-connection-settings.md) to note
+   [docs/infra-connection-settings.md](../../developer/connection-internals.md) to note
    replication env vars are now promoted at reconcile.
 5. `make manifests generate sync-crd-embed`, `make lint`, `make test`.
 
