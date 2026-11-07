@@ -70,5 +70,3 @@ spec:
     reloader:
       install: true
 
-    settingsMigrationJob:
-      install: false
