@@ -10,6 +10,7 @@ import (
 	"github.com/wandb/operator/internal/controller/infra/external"
 	externalmysql "github.com/wandb/operator/internal/controller/infra/external/mysql"
 	"github.com/wandb/operator/internal/controller/infra/managed/mysql/moco"
+	"github.com/wandb/operator/pkg/preflight"
 	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/wandb/manifest"
 	"k8s.io/api/batch/v1"
@@ -35,6 +36,10 @@ func mysqlWriteState(
 		case spec.ManagedMysql != nil:
 			out[key] = managedMysqlWriteState(ctx, client, wandb, spec.ManagedMysql, mfst)
 		case spec.ExternalMysql != nil:
+			if conds := externalMysqlPreflight(ctx, client, wandb, key, spec.ExternalMysql); conds != nil {
+				out[key] = conds
+				continue
+			}
 			out[key] = externalmysql.WriteState(ctx, client, wandb, key, spec.ExternalMysql)
 		}
 	}
@@ -474,4 +479,25 @@ func runMysqlInitJobInstance(ctx context.Context, client client.Client, wandb *a
 
 	logger.Info("MySQL init job still running")
 	return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
+}
+
+func externalMysqlPreflight(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, key string, spec *apiv2.MysqlConnection) []metav1.Condition {
+	if preflightSkipped(wandb, preflight.ExternalMysqlCheck) {
+		return nil
+	}
+	inputVersion, err := secretInputVersion(ctx, c, wandb.Namespace,
+		spec.Host, spec.Port, spec.Database, spec.Username, spec.Password, spec.Tls, spec.SslCa, spec.SslCert, spec.SslKey)
+	if err != nil {
+		return []metav1.Condition{{Type: common.ReconciledType, Status: metav1.ConditionFalse, Reason: common.ApiErrorReason}}
+	}
+
+	fieldPath := fmt.Sprintf("spec.mysql.%s.externalMysql", key)
+	passed, msg, err := runPreflightOnce(ctx, c, wandb, preflight.Checks[preflight.ExternalMysqlCheck], fieldPath, spec, inputVersion)
+	if err != nil {
+		return []metav1.Condition{{Type: common.ReconciledType, Status: metav1.ConditionFalse, Reason: common.ApiErrorReason}}
+	}
+	if !passed {
+		return []metav1.Condition{{Type: common.ReconciledType, Status: metav1.ConditionFalse, Reason: common.PreflightFailedReason, Message: msg}}
+	}
+	return nil
 }
