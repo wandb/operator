@@ -168,6 +168,10 @@ func TestToBufstreamApplication(t *testing.T) {
 		require.Equal(t, tc.period, tc.probe.PeriodSeconds, name)
 	}
 
+	require.NotNil(t, app.Spec.PodTemplate.Spec.TerminationGracePeriodSeconds, "broker should set a shutdown grace period")
+	require.Equal(t, BufstreamTerminationGracePeriodSeconds, *app.Spec.PodTemplate.Spec.TerminationGracePeriodSeconds,
+		"broker should get Bufstream's shutdown grace period")
+
 	envNames := map[string]bool{}
 	for _, e := range container.Env {
 		envNames[e.Name] = true

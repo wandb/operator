@@ -43,6 +43,12 @@ const (
 	// scaled freely. Used when no explicit replica count is configured.
 	BufstreamReplicas = 2
 
+	// BufstreamTerminationGracePeriodSeconds bounds a broker's shutdown. A
+	// broker waits up to a minute for Kafka clients to disconnect after
+	// SIGTERM, then finishes its in-flight writes; this matches the default
+	// in Bufstream's Helm chart so the kubelet does not cut that short.
+	BufstreamTerminationGracePeriodSeconds int64 = 420
+
 	// EtcdClusterToken namespaces the etcd cluster's bootstrap so that distinct
 	// W&B installs cannot accidentally cross-join.
 	EtcdClusterToken = "wandb-etcd"

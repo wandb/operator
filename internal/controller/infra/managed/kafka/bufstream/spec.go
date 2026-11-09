@@ -624,14 +624,15 @@ func ToBufstreamApplication(
 			},
 			PodTemplate: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
-					ImagePullSecrets:             wandb.Spec.Global.ImagePullSecrets,
-					ServiceAccountName:           kafkaServiceAccountName(infraSpec),
-					AutomountServiceAccountToken: ptr.To(!storage.HasStaticCredentials()),
-					SecurityContext:              bufstreamPodSecurityContext(),
-					Affinity:                     spreadAffinity(wandb, infraSpec.ManagedInfraSpec, labels),
-					Tolerations:                  tolerations(wandb, infraSpec.ManagedInfraSpec),
-					InitContainers:               initContainers,
-					Containers:                   []corev1.Container{container},
+					ImagePullSecrets:              wandb.Spec.Global.ImagePullSecrets,
+					ServiceAccountName:            kafkaServiceAccountName(infraSpec),
+					AutomountServiceAccountToken:  ptr.To(!storage.HasStaticCredentials()),
+					SecurityContext:               bufstreamPodSecurityContext(),
+					Affinity:                      spreadAffinity(wandb, infraSpec.ManagedInfraSpec, labels),
+					Tolerations:                   tolerations(wandb, infraSpec.ManagedInfraSpec),
+					InitContainers:                initContainers,
+					Containers:                    []corev1.Container{container},
+					TerminationGracePeriodSeconds: ptr.To(BufstreamTerminationGracePeriodSeconds),
 					Volumes: []corev1.Volume{
 						{
 							Name: "config",
