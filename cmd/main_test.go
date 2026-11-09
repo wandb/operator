@@ -14,6 +14,7 @@ func TestSpecFlagsFromEnvironment(t *testing.T) {
 	}{
 		{"managed-spec-enabled", "MANAGED_SPEC_ENABLED", false},
 		{"user-spec-enabled", "USER_SPEC_ENABLED", true},
+		{"deployer-channel-enabled", "DEPLOYER_CHANNEL_ENABLED", true},
 	} {
 		for _, value := range []string{"true", "false"} {
 			t.Run(tc.name+"/"+value, func(t *testing.T) {
