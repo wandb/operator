@@ -198,12 +198,13 @@ func newUserSpecReconciler(t *testing.T, mode string, objects ...client.Object) 
 	return &WeightsAndBiasesReconciler{
 		Client: fake.NewClientBuilder().WithScheme(scheme).
 			WithStatusSubresource(wandb).WithObjects(objects...).Build(),
-		Scheme:             scheme,
-		Recorder:           record.NewFakeRecorder(30),
-		DeployerClient:     deployer,
-		DryRun:             true,
-		ManagedSpecEnabled: mode != "deployer",
-		UserSpecEnabled:    true,
+		Scheme:                 scheme,
+		Recorder:               record.NewFakeRecorder(30),
+		DeployerClient:         deployer,
+		DryRun:                 true,
+		ManagedSpecEnabled:     mode != "deployer",
+		UserSpecEnabled:        true,
+		DeployerChannelEnabled: true,
 	}, wandb, deployer
 }
 

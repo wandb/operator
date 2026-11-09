@@ -14,6 +14,8 @@ const (
 	Applying      Status = "Applying"
 	InvalidConfig Status = "Invalid Config"
 	Completed     Status = "Completed"
+
+	WaitingForManagedSpec Status = "Waiting For Managed Spec"
 )
 
 func NewManager(

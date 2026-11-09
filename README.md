@@ -14,15 +14,42 @@ Set `MANAGED_SPEC_ENABLED=true` on the operator to prefer the
 The flag defaults to false and can also be set with `--managed-spec-enabled`.
 
 The operator continues fetching and caching the Deployer spec on each normal
-reconcile (except in airgapped mode). When the flag is enabled, it uses a valid
+reconcile, unless the Deployer channel is off (below). When the flag is enabled, it uses a valid
 managed spec directly, without comparing it to Deployer. If the ConfigMap is
 missing, it uses Deployer; if it cannot be read or decoded, it logs an error and
 uses Deployer. Existing Deployer cache fallback still applies during an outage.
 Chart rendering or apply failures follow the normal reconciliation error path.
 
+## Deployer channel
+
+`DEPLOYER_CHANNEL_ENABLED` defaults to `true`. Set it to `false`, or pass
+`--deployer-channel-enabled=false`, to stop fetching the Deployer channel spec,
+including `_releaseId` pins and the `latest-cached-release` cache. `AIRGAPPED=true`
+also turns the Deployer channel off; this flag does it without the other
+airgapped settings. Charts are still downloaded from their repository, and the
+license is still read as before. The operator exports
+`wandb_operator_deployer_channel_enabled`, which is 0 when either flag turns
+the channel off.
+
+With `MANAGED_SPEC_ENABLED=true` and the Deployer channel off, there is no
+Deployer to fall back to. A missing, unreadable or undecodable
+`wandb-spec-managed` makes the operator stop before building a desired spec: it
+sets the phase to `Waiting For Managed Spec`, records a `WaitingForManagedSpec`
+warning event, applies nothing and retries every minute. The ConfigMap watch
+reconciles as soon as it appears. This holds even when the CR or user spec sets
+`chart`, which would otherwise be applied without the managed values. Deletion
+is not affected.
+
+To remove or disable the managed spec on such an install, first restart the
+operator with `DEPLOYER_CHANNEL_ENABLED=true` and `AIRGAPPED=false`, so it can
+fall back to Deployer. Turning off `MANAGED_SPEC_ENABLED` alone isn't safe:
+with the Deployer channel still off, the guard no longer applies, and a chart
+set by the CR or user spec would be applied without the managed values.
+
 Selection is reevaluated on each reconcile. No cutover state is written or read;
 old `wandb-managed-spec-state` ConfigMaps can remain and are ignored. Setting
-the flag to false returns the operator to Deployer after restart.
+the flag to false returns the operator to Deployer after restart, as long as
+the Deployer channel is on.
 
 ## User spec
 
