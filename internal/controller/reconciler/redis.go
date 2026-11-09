@@ -2,12 +2,14 @@ package reconciler
 
 import (
 	"context"
+	"fmt"
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/controller/infra/external"
 	externalredis "github.com/wandb/operator/internal/controller/infra/external/redis"
 	"github.com/wandb/operator/internal/controller/infra/managed/redis/opstree"
+	"github.com/wandb/operator/pkg/preflight"
 	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/wandb/manifest"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -27,8 +29,20 @@ func redisWriteState(
 	for key, spec := range wandb.Spec.Redis {
 		switch {
 		case spec.ManagedRedis != nil:
+			if conds := gatePreflight(ctx, client, wandb, preflight.ManagedRedisAPIsCheck,
+				fmt.Sprintf("spec.redis.%s.managedRedis", key), spec.ManagedRedis); conds != nil {
+				out[key] = conds
+				continue
+			}
 			out[key] = managedRedisWriteState(ctx, client, wandb, spec.ManagedRedis, mfst)
 		case spec.ExternalRedis != nil:
+			r := spec.ExternalRedis
+			if conds := gatePreflight(ctx, client, wandb, preflight.ExternalRedisCheck,
+				fmt.Sprintf("spec.redis.%s.externalRedis", key), r,
+				r.Host, r.Port, r.Password, r.Tls, r.SslCa); conds != nil {
+				out[key] = conds
+				continue
+			}
 			out[key] = externalredis.WriteState(ctx, client, wandb, key, spec.ExternalRedis)
 		}
 	}
@@ -231,6 +245,11 @@ func managedRedisInferStatus(
 	)
 	for _, e := range events {
 		recorder.Event(wandb, e.Type, e.Reason, e.Message)
+	}
+	// ComputeStatus only reads component conditions, so a blocked gate would otherwise leave a stale ready status.
+	if preflightBlocked(newConditions) {
+		updatedStatus.Ready = false
+		updatedStatus.State = common.ErrorState
 	}
 	wandb.Status.RedisStatus[key] = updatedStatus
 	err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore)
