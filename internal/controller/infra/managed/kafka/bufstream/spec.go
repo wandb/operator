@@ -407,6 +407,27 @@ func etcdProbe() *corev1.Probe {
 	}
 }
 
+// bufstreamProbe checks an HTTP endpoint on the broker's debug listener,
+// matching the probes in Bufstream's Helm chart. `/health` succeeds once the
+// process is up; `/ready` succeeds only once the broker is serving Kafka
+// clients and its metadata-store and object-storage checks pass, so a rollout
+// waits for each new broker before stopping an old one.
+func bufstreamProbe(path string, initialDelaySeconds, periodSeconds int32) *corev1.Probe {
+	return &corev1.Probe{
+		ProbeHandler: corev1.ProbeHandler{
+			HTTPGet: &corev1.HTTPGetAction{
+				Path:   path,
+				Port:   intstrFromInt(DebugPort),
+				Scheme: corev1.URISchemeHTTP,
+			},
+		},
+		InitialDelaySeconds: initialDelaySeconds,
+		PeriodSeconds:       periodSeconds,
+		TimeoutSeconds:      5,
+		FailureThreshold:    3,
+	}
+}
+
 // spreadAffinity preserves any operator/CR-provided affinity, otherwise it
 // spreads the component's pods across nodes so a single node failure cannot take
 // down quorum (etcd) or all brokers (Bufstream). GetAffinity may return a
@@ -576,6 +597,9 @@ func ToBufstreamApplication(
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: "config", MountPath: ConfigMountPath, ReadOnly: true},
 		},
+		StartupProbe:   bufstreamProbe("/health", 1, 5),
+		LivenessProbe:  bufstreamProbe("/health", 0, 3),
+		ReadinessProbe: bufstreamProbe("/ready", 0, 3),
 	}
 	if len(infraSpec.Config.Resources.Requests) > 0 || len(infraSpec.Config.Resources.Limits) > 0 {
 		container.Resources = infraSpec.Config.Resources
