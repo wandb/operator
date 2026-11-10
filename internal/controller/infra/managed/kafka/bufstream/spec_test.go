@@ -152,6 +152,26 @@ func TestToBufstreamApplication(t *testing.T) {
 	requireKafkaPodSecurityContext(t, app.Spec.PodTemplate.Spec.SecurityContext)
 	requireKafkaContainerSecurityContext(t, container.SecurityContext)
 
+	for name, tc := range map[string]struct {
+		probe  *corev1.Probe
+		path   string
+		period int32
+	}{
+		"startup":   {container.StartupProbe, "/health", 5},
+		"liveness":  {container.LivenessProbe, "/health", 3},
+		"readiness": {container.ReadinessProbe, "/ready", 3},
+	} {
+		require.NotNil(t, tc.probe, "broker should have a %s probe", name)
+		require.NotNil(t, tc.probe.HTTPGet, "%s probe should be an HTTP check", name)
+		require.Equal(t, tc.path, tc.probe.HTTPGet.Path, name)
+		require.Equal(t, intstrFromInt(DebugPort), tc.probe.HTTPGet.Port, name)
+		require.Equal(t, tc.period, tc.probe.PeriodSeconds, name)
+	}
+
+	require.NotNil(t, app.Spec.PodTemplate.Spec.TerminationGracePeriodSeconds, "broker should set a shutdown grace period")
+	require.Equal(t, BufstreamTerminationGracePeriodSeconds, *app.Spec.PodTemplate.Spec.TerminationGracePeriodSeconds,
+		"broker should get Bufstream's shutdown grace period")
+
 	envNames := map[string]bool{}
 	for _, e := range container.Env {
 		envNames[e.Name] = true
