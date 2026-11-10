@@ -1,0 +1,50 @@
+name: local-kind-size-expansion-upgrade
+provider: local
+platform: kind
+status: implemented
+backend: local
+terraformEnv: local-kind
+customResource: local-kind-ingress
+network: ingress
+clusterProfile: kind
+dependencyProfile: operator-managed
+storageProfile: managed-objectstore
+operator:
+    source: local
+deploy:
+    backend: local-operator-chart
+    appVersion: 0.85.1
+artifacts: kubernetes
+params:
+    - name: fromOperatorVersion
+      description: operator chart version installed first
+      target: phases.install-old.deploy.operatorChartVersion
+    - name: appVersion
+      description: W&B app version to deploy
+      target:
+        - phases.install-old.deploy.appVersion
+        - phases.upgrade.deploy.appVersion
+phases:
+    - name: install-old
+      # Keep the baseline published when --operator-repo selects a local upgrade.
+      operator: { source: remote }
+      deploy: { operatorChartVersion: 2.0.0-beta.10 }
+      validate:
+        - wandb-workloads-ready
+        - wandb-routes-ready
+        - wandb-api-key
+        - rollout-ready
+        - application-image-runtime
+        - wandb-verify
+        - { type: data-fixture, with: { mode: seed, dataset: baseline } }
+        - { type: upgrade-continuity, with: { mode: snapshot } }
+    - name: upgrade
+      validate:
+        - wandb-workloads-ready
+        - wandb-routes-ready
+        - wandb-api-key
+        - rollout-ready
+        - application-image-runtime
+        - wandb-verify
+        - { type: data-fixture, with: { mode: assert, dataset: baseline } }
+        - { type: upgrade-continuity, with: { mode: assert } }
