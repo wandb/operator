@@ -221,6 +221,9 @@ victoria-metrics-operator:
   podSecurityContext:
     seccompProfile:
       type: RuntimeDefault
+  # Its webhook isn't serving yet when Helm creates the telemetry CRs on first install
+  admissionWebhooks:
+    policy: Ignore
   crds:
     # Install Victoria CRDs through Helm's CRD phase so telemetry resources
     # in this chart can be created in the same release.

@@ -10,8 +10,8 @@ WATCHTOWER_ARCH ?= amd64
 WATCHTOWER_BINARY ?= watchtower
 
 # Grafana plugins baked into the operator image so Grafana never downloads them at runtime.
-GRAFANA_PLUGIN_VERSION ?= 0.33.1
-GRAFANA_PLUGIN_SHA256 ?= 849edf4d86a6555bbf3fdbe1c53ed719a6c51c3d69965dcc0384e2c129ad991a
+GRAFANA_PLUGIN_VERSION ?= 0.34.0
+GRAFANA_PLUGIN_SHA256 ?= 72c7dbe4bc046f278670f6ab4c4b1518201037f35f534eff462f76fa6ef771be
 GRAFANA_PLUGINS_DIR ?= grafana-plugins
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)

@@ -181,6 +181,24 @@ func TestTelemetryChartRejectsStringPullSecrets(t *testing.T) {
 	mustContain(t, output, "global.imagePullSecrets entry to be a {name: <secret>} object")
 }
 
+func TestVictoriaMetricsWebhookIgnoresFailures(t *testing.T) {
+	output := runHelmTemplate(t, "--values", filepath.Join(operatorChartPath, "profiles", "telemetry-full.yaml"))
+
+	var webhook string
+	for _, doc := range strings.Split(output, "\n---\n") {
+		if strings.Contains(doc, "kind: ValidatingWebhookConfiguration") && strings.Contains(doc, "victoria-metrics-operator-admission") {
+			webhook = doc
+		}
+	}
+	if webhook == "" {
+		t.Fatalf("VictoriaMetrics ValidatingWebhookConfiguration not rendered")
+	}
+	policies := strings.Count(webhook, "failurePolicy:")
+	if policies == 0 || strings.Count(webhook, "failurePolicy: Ignore") != policies {
+		t.Fatalf("want every VictoriaMetrics webhook failurePolicy to be Ignore:\n%s", webhook)
+	}
+}
+
 func TestStandaloneTelemetryChartFullModeRendersCoreStack(t *testing.T) {
 	output := runHelmTemplateForChart(t, filepath.Join("..", "..", "..", "deploy", "telemetry"),
 		"--set", "mode=full",
