@@ -16,11 +16,8 @@ import (
 
 const sourceSecretName = "ext-objectstore"
 
-func sel(key string) corev1.SecretKeySelector {
-	return corev1.SecretKeySelector{
-		LocalObjectReference: corev1.LocalObjectReference{Name: sourceSecretName},
-		Key:                  key,
-	}
+func sel(key string) apiv2.ValueOrSecret {
+	return apiv2.ValueFromSecret(sourceSecretName, key, false)
 }
 
 // writeStateFixture builds a fake client seeded with a source Secret holding
@@ -183,14 +180,56 @@ func TestWriteState_FullConfig(t *testing.T) {
 	require.Equal(t, "us-west-2", data["Region"])
 
 	// Optional flags: only url and Bucket are required.
-	require.NotNil(t, conn.URL.Optional)
-	require.False(t, *conn.URL.Optional)
-	require.NotNil(t, conn.Bucket.Optional)
-	require.False(t, *conn.Bucket.Optional)
-	for _, s := range []corev1.SecretKeySelector{conn.Endpoint, conn.Port, conn.AccessKey, conn.SecretKey, conn.Region} {
-		require.NotNil(t, s.Optional)
-		require.True(t, *s.Optional)
+	require.NotNil(t, conn.URL.SecretKeyRef())
+	require.False(t, *conn.URL.SecretKeyRef().Optional)
+	require.NotNil(t, conn.Bucket.SecretKeyRef())
+	require.False(t, *conn.Bucket.SecretKeyRef().Optional)
+	for _, s := range []apiv2.ValueOrSecret{conn.Endpoint, conn.Port, conn.AccessKey, conn.SecretKey, conn.Region} {
+		ref := s.SecretKeyRef()
+		require.NotNil(t, ref)
+		require.NotNil(t, ref.Optional)
+		require.True(t, *ref.Optional)
 	}
+}
+
+// TestWriteState_LiteralValues proves the value-or-secret union: non-secret
+// fields are supplied as plain literals while credentials stay in a Secret, and
+// both resolve into the operator connection secret.
+func TestWriteState_LiteralValues(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, corev1.AddToScheme(scheme))
+	require.NoError(t, apiv2.AddToScheme(scheme))
+
+	source := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: sourceSecretName, Namespace: "default"},
+		Data:       map[string][]byte{"AccessKey": []byte("access"), "SecretKey": []byte("secret")},
+	}
+	ext := &apiv2.ObjectStoreConnection{
+		Endpoint:  apiv2.LiteralValue("s3.us-west-2.amazonaws.com"),
+		Port:      apiv2.LiteralValue("443"),
+		Bucket:    apiv2.LiteralValue("my-wandb-bucket"),
+		Region:    apiv2.LiteralValue("us-west-2"),
+		AccessKey: apiv2.ValueFromSecret(sourceSecretName, "AccessKey", false),
+		SecretKey: apiv2.ValueFromSecret(sourceSecretName, "SecretKey", false),
+	}
+	wandb := &apiv2.WeightsAndBiases{
+		ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "default"},
+		Spec: apiv2.WeightsAndBiasesSpec{ObjectStore: map[string]apiv2.ObjectStoreSpec{
+			apiv2.DefaultInstanceName: {ExternalObjectStore: ext},
+		}},
+	}
+
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(wandb, source).Build()
+	conditions, conn := WriteState(context.Background(), c, wandb, apiv2.DefaultInstanceName, ext)
+	require.Nil(t, conditions)
+	require.NotNil(t, conn)
+
+	written := &corev1.Secret{}
+	require.NoError(t, c.Get(context.Background(), types.NamespacedName{Name: ConnectionSecretName, Namespace: "default"}, written))
+	data := connectionData(written)
+	require.Equal(t, "us-west-2", data["Region"])
+	require.Equal(t, "my-wandb-bucket", data["Bucket"])
+	require.Equal(t, "s3://access:secret@s3.us-west-2.amazonaws.com:443/my-wandb-bucket", data["url"])
 }
 
 func TestWriteState_PathPrefix(t *testing.T) {
@@ -210,9 +249,9 @@ func TestWriteState_PathPrefix(t *testing.T) {
 	data := connectionData(written)
 	require.Equal(t, "s3://minio:minio123@minio.local:9000/my-bucket/team/prefix", data["url"])
 	require.Equal(t, "team/prefix", data["Path"])
-	require.Equal(t, "Path", conn.Path.Key)
-	require.NotNil(t, conn.Path.Optional)
-	require.True(t, *conn.Path.Optional)
+	require.Equal(t, "Path", conn.Path.SecretKeyRef().Key)
+	require.NotNil(t, conn.Path.SecretKeyRef().Optional)
+	require.True(t, *conn.Path.SecretKeyRef().Optional)
 
 	// Native AWS with a prefix; slashes are normalized.
 	_, written, conditions, _ = writeStateFixture(t,
@@ -284,8 +323,8 @@ func TestWriteState_GCSWorkloadIdentity(t *testing.T) {
 	)
 	require.Nil(t, conditions)
 	require.NotNil(t, conn)
-	require.Equal(t, ConnectionSecretName, conn.Provider.Name)
-	require.Equal(t, "Provider", conn.Provider.Key)
+	require.Equal(t, ConnectionSecretName, conn.Provider.SecretKeyRef().Name)
+	require.Equal(t, "Provider", conn.Provider.SecretKeyRef().Key)
 
 	data := connectionData(written)
 	require.Equal(t, "gs://my-gcs-bucket", data["url"], "workload identity carries no credentials")
@@ -319,8 +358,8 @@ func TestWriteState_AzureWithKey(t *testing.T) {
 	)
 	require.Nil(t, conditions)
 	require.NotNil(t, conn)
-	require.Equal(t, ConnectionSecretName, conn.Provider.Name)
-	require.Equal(t, "Provider", conn.Provider.Key)
+	require.Equal(t, ConnectionSecretName, conn.Provider.SecretKeyRef().Name)
+	require.Equal(t, "Provider", conn.Provider.SecretKeyRef().Key)
 
 	data := connectionData(written)
 	require.Equal(t, "az://:accountkey==@mystorageaccount/mycontainer", data["url"])

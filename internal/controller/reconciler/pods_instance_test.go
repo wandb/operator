@@ -12,11 +12,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-func mysqlURLSelector(secretName string) corev1.SecretKeySelector {
-	return corev1.SecretKeySelector{
-		LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
-		Key:                  "url",
-	}
+func mysqlURLSelector(secretName string) apiv2.ValueOrSecret {
+	return apiv2.ValueFromSecret(secretName, "url", false)
 }
 
 func wandbWithTwoMysqlInstances() *apiv2.WeightsAndBiases {

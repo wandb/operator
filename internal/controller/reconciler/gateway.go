@@ -253,6 +253,12 @@ func buildListenerTLS(tlsConfig *apiv2.ListenerTLSConfig, wandb *apiv2.WeightsAn
 	listenerTLS := &gatewayv1.ListenerTLSConfig{
 		Mode: &mode,
 	}
+	if len(tlsConfig.Options) > 0 {
+		listenerTLS.Options = make(map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue, len(tlsConfig.Options))
+		for key, value := range tlsConfig.Options {
+			listenerTLS.Options[gatewayv1.AnnotationKey(key)] = gatewayv1.AnnotationValue(value)
+		}
+	}
 
 	if tlsConfig.CertificateRef != nil {
 		ref := gatewayv1.SecretObjectReference{
@@ -273,16 +279,16 @@ func buildListenerTLS(tlsConfig *apiv2.ListenerTLSConfig, wandb *apiv2.WeightsAn
 }
 
 func buildDefaultTLS(wandb *apiv2.WeightsAndBiases) *gatewayv1.ListenerTLSConfig {
+	if wandb.Spec.Networking.TLS == nil || wandb.Spec.Networking.TLS.SecretName == "" {
+		return nil
+	}
 	mode := gatewayv1.TLSModeTerminate
-	listenerTLS := &gatewayv1.ListenerTLSConfig{
+	return &gatewayv1.ListenerTLSConfig{
 		Mode: &mode,
-	}
-	if wandb.Spec.Networking.TLS != nil && wandb.Spec.Networking.TLS.SecretName != "" {
-		listenerTLS.CertificateRefs = []gatewayv1.SecretObjectReference{{
+		CertificateRefs: []gatewayv1.SecretObjectReference{{
 			Name: gatewayv1.ObjectName(wandb.Spec.Networking.TLS.SecretName),
-		}}
+		}},
 	}
-	return listenerTLS
 }
 
 func parseHostname(rawHostname string) string {

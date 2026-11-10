@@ -19,11 +19,8 @@ import (
 
 const redisSourceSecretName = "external-redis"
 
-func redisSel(key string) corev1.SecretKeySelector {
-	return corev1.SecretKeySelector{
-		LocalObjectReference: corev1.LocalObjectReference{Name: redisSourceSecretName},
-		Key:                  key,
-	}
+func redisSel(key string) apiv2.ValueOrSecret {
+	return apiv2.ValueFromSecret(redisSourceSecretName, key, false)
 }
 
 func redisWriteStateFixture(t *testing.T, sourceData map[string][]byte) (ctrlclient.Client, *apiv2.WeightsAndBiases) {

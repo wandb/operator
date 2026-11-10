@@ -89,11 +89,10 @@ func writeKafkaConnInfo(
 		return nil, err
 	}
 
-	localRef := corev1.LocalObjectReference{Name: nsName.Name}
 	return &apiv2.KafkaConnection{
-		URL:            corev1.SecretKeySelector{LocalObjectReference: localRef, Key: urlKey, Optional: ptr.To(false)},
-		Host:           corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Host", Optional: ptr.To(false)},
-		Port:           corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Port", Optional: ptr.To(false)},
-		BrokerEndpoint: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Host", Optional: ptr.To(false)},
+		URL:            apiv2.ValueFromSecret(nsName.Name, urlKey, false),
+		Host:           apiv2.ValueFromSecret(nsName.Name, "Host", false),
+		Port:           apiv2.ValueFromSecret(nsName.Name, "Port", false),
+		BrokerEndpoint: apiv2.ValueFromSecret(nsName.Name, "Host", false),
 	}, nil
 }

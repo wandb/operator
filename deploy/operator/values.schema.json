@@ -10,8 +10,29 @@
           "type": "string",
           "enum": ["off", "forward", "full"]
         },
+        "crds": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "victoriaMetrics": {
+              "type": "boolean"
+            },
+            "grafana": {
+              "type": "boolean"
+            }
+          }
+        },
         "namespace": {
           "type": "string"
+        },
+        "grafana": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "pluginImage": {
+              "type": "string"
+            }
+          }
         },
         "otel": {
           "type": "object",
@@ -78,6 +99,28 @@
               "additionalProperties": true
             },
             "securityContext": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        },
+        "logAgent": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "extraNamespaces": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "tolerations": {
+              "type": "array"
+            },
+            "resources": {
               "type": "object",
               "additionalProperties": true
             }

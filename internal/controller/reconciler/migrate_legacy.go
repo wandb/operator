@@ -111,12 +111,12 @@ func migrateLegacyMySQL(
 	}
 
 	data := map[string][]byte{}
-	fill := func(target *corev1.SecretKeySelector, dataKey, value string) {
-		if target.Name != "" || value == "" {
+	fill := func(target *apiv2.ValueOrSecret, dataKey, value string) {
+		if !target.IsZero() || value == "" {
 			return
 		}
 		data[dataKey] = []byte(value)
-		*target = secretSelector(secretName, dataKey)
+		*target = apiv2.ValueFromSecret(secretName, dataKey, false)
 	}
 
 	fill(&conn.Host, "host", payload.Host)
@@ -171,12 +171,12 @@ func migrateLegacyRedis(
 	}
 
 	data := map[string][]byte{}
-	fill := func(target *corev1.SecretKeySelector, dataKey, value string) {
-		if target.Name != "" || value == "" {
+	fill := func(target *apiv2.ValueOrSecret, dataKey, value string) {
+		if !target.IsZero() || value == "" {
 			return
 		}
 		data[dataKey] = []byte(value)
-		*target = secretSelector(secretName, dataKey)
+		*target = apiv2.ValueFromSecret(secretName, dataKey, false)
 	}
 
 	fill(&conn.Host, "host", payload.Host)
@@ -234,12 +234,12 @@ func migrateLegacyClickHouse(
 	}
 
 	data := map[string][]byte{}
-	fill := func(target *corev1.SecretKeySelector, dataKey, value string) {
-		if target.Name != "" || value == "" {
+	fill := func(target *apiv2.ValueOrSecret, dataKey, value string) {
+		if !target.IsZero() || value == "" {
 			return
 		}
 		data[dataKey] = []byte(value)
-		*target = secretSelector(secretName, dataKey)
+		*target = apiv2.ValueFromSecret(secretName, dataKey, false)
 	}
 
 	fill(&conn.Host, "host", payload.Host)
@@ -302,12 +302,12 @@ func migrateLegacyBucket(
 	forcePathStyle, tlsEnabled := deriveBucketAddressing(payload.Provider, endpoint, query)
 
 	data := map[string][]byte{}
-	fill := func(target *corev1.SecretKeySelector, dataKey, value string) {
-		if target.Name != "" || value == "" {
+	fill := func(target *apiv2.ValueOrSecret, dataKey, value string) {
+		if !target.IsZero() || value == "" {
 			return
 		}
 		data[dataKey] = []byte(value)
-		*target = secretSelector(secretName, dataKey)
+		*target = apiv2.ValueFromSecret(secretName, dataKey, false)
 	}
 
 	fill(&conn.Endpoint, "endpoint", endpoint)
@@ -410,12 +410,12 @@ func migrateLegacyOIDC(
 	oidc := &wandb.Spec.Wandb.OIDC
 
 	data := map[string][]byte{}
-	fill := func(target *corev1.SecretKeySelector, dataKey, value string) {
-		if target.Name != "" || value == "" {
+	fill := func(target *apiv2.ValueOrSecret, dataKey, value string) {
+		if !target.IsZero() || value == "" {
 			return
 		}
 		data[dataKey] = []byte(value)
-		*target = secretSelector(secretName, dataKey)
+		*target = apiv2.ValueFromSecret(secretName, dataKey, false)
 	}
 
 	fill(&oidc.ClientId, "clientId", payload.ClientId)
@@ -514,12 +514,5 @@ func normalizePort(v any) string {
 		return string(p)
 	default:
 		return fmt.Sprintf("%v", p)
-	}
-}
-
-func secretSelector(name, key string) corev1.SecretKeySelector {
-	return corev1.SecretKeySelector{
-		LocalObjectReference: corev1.LocalObjectReference{Name: name},
-		Key:                  key,
 	}
 }

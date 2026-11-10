@@ -18,7 +18,7 @@ var _ = Describe("Server manifest YAML decode", func() {
 	}
 
 	It("merges multiple manifest files from a version directory", func() {
-		m, err := manifest.LoadManifestFromFile(context.Background(), manifestRepository(), "0.84.0-redis-replicas.0")
+		m, err := manifest.LoadManifestFromFile(context.Background(), manifestRepository(), "0.85.1")
 		Expect(err).NotTo(HaveOccurred())
 
 		// Features (match current testing manifest values)

@@ -8,6 +8,9 @@ forwarding:
     tls:
       insecure: false
 retentionPeriod: 1d
+grafana:
+  # Operator image that carries the bundled Grafana plugins
+  pluginImage: ""
 otlpGateway:
   podSecurityContext:
     runAsNonRoot: true
@@ -20,6 +23,17 @@ otlpGateway:
       drop:
         - ALL
     runAsNonRoot: true
+logAgent:
+  enabled: true
+  extraNamespaces: []
+  tolerations: []
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
 scrape:
   enabled: true
   kubeletCadvisor: true

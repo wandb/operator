@@ -87,7 +87,7 @@ func ReadState(
 			"Attempting to purge associated redis resources after deletion",
 			"specName", specNamespacedName.Name,
 		)
-		if err := purgeAssociatedResources(ctx, client, specNamespacedName.Namespace, onDeleteRule.Selector); err != nil {
+		if err := purgeAssociatedResources(ctx, client, specNamespacedName, onDeleteRule.Selector); err != nil {
 			conditions = append(conditions, metav1.Condition{
 				Type:   RedisStandaloneCustomResourceType,
 				Status: metav1.ConditionUnknown,

@@ -82,3 +82,39 @@ func TestDeleteGatewayDoesNotDeleteUnownedGateway(t *testing.T) {
 	err := client.Get(context.Background(), types.NamespacedName{Name: "wandb-gateway", Namespace: "default"}, &gatewayv1.Gateway{})
 	require.NoError(t, err, "unowned gateway must not be deleted")
 }
+
+func TestBuildListenerTLSCopiesOptionsWithoutCertificateRefs(t *testing.T) {
+	wandb := newWandbForGateway()
+	tlsConfig := &apiv2.ListenerTLSConfig{
+		Options: map[string]apiv2.TLSOptionValue{
+			"networking.gke.io/pre-shared-certs": "wandb-cert",
+			"example.com/min-tls-version":        "TLS_1_2",
+		},
+	}
+
+	got := buildListenerTLS(tlsConfig, wandb)
+
+	require.Equal(t, gatewayv1.TLSModeTerminate, *got.Mode)
+	require.Empty(t, got.CertificateRefs)
+	require.Equal(t, map[gatewayv1.AnnotationKey]gatewayv1.AnnotationValue{
+		"networking.gke.io/pre-shared-certs": "wandb-cert",
+		"example.com/min-tls-version":        "TLS_1_2",
+	}, got.Options)
+}
+
+func TestBuildListenerTLSKeepsSecretFallbackWithOptions(t *testing.T) {
+	wandb := newWandbForGateway()
+	wandb.Spec.Networking.TLS = &apiv2.TLSConfig{SecretName: "wandb-tls"}
+	tlsConfig := &apiv2.ListenerTLSConfig{
+		Options: map[string]apiv2.TLSOptionValue{
+			"example.com/min-tls-version": "TLS_1_2",
+		},
+	}
+
+	got := buildListenerTLS(tlsConfig, wandb)
+
+	require.Equal(t, []gatewayv1.SecretObjectReference{{
+		Name: gatewayv1.ObjectName("wandb-tls"),
+	}}, got.CertificateRefs)
+	require.Equal(t, gatewayv1.AnnotationValue("TLS_1_2"), got.Options["example.com/min-tls-version"])
+}

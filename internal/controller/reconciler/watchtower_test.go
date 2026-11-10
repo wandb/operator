@@ -12,12 +12,17 @@ package reconciler
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	apiv2 "github.com/wandb/operator/api/v2"
+	"github.com/wandb/operator/internal/observability/supportbundle"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -28,13 +33,16 @@ import (
 	"k8s.io/utils/ptr"
 	ctrlClient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/yaml"
 )
 
 func watchtowerTestClient(t *testing.T, objects ...ctrlClient.Object) ctrlClient.Client {
 	t.Helper()
 	scheme := runtime.NewScheme()
 	require.NoError(t, corev1.AddToScheme(scheme))
+	require.NoError(t, networkingv1.AddToScheme(scheme))
 	require.NoError(t, rbacv1.AddToScheme(scheme))
+	require.NoError(t, admissionregistrationv1.AddToScheme(scheme))
 	require.NoError(t, apiv2.AddToScheme(scheme))
 
 	builder := fake.NewClientBuilder().WithScheme(scheme)
@@ -183,6 +191,55 @@ func TestReconcileWatchtowerSecretGeneratesAPassword(t *testing.T) {
 	require.Equal(t, corev1.SecretTypeOpaque, secret.Type)
 }
 
+// Watchtower's Role is a security boundary. Secret WRITES are the broad grant —
+// create/update/delete on every Secret in the install namespace, which holds the
+// database, object-store, OIDC, license and operator-managed credentials — so the
+// property worth pinning is that they are absent unless explicitly enabled.
+func TestReconcileWatchtowerRBACSecretWritesAreOptIn(t *testing.T) {
+	read := []string{"get", "list", "watch"}
+	write := append(append([]string{}, read...), "create", "update", "patch", "delete")
+
+	for _, tc := range []struct {
+		name string
+		env  string
+		want []string
+	}{
+		{"default install stays read-only", "", read},
+		{"opted in", "true", write},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(secretWritesEnvVar, tc.env)
+			wandb := watchtowerTestCR("wandb", "wandb")
+			c := watchtowerTestClient(t, wandb)
+			require.NoError(t, reconcileWatchtowerRBAC(context.Background(), c, wandb))
+
+			role := &rbacv1.Role{}
+			require.NoError(t, c.Get(context.Background(), types.NamespacedName{
+				Name: watchtowerName(wandb), Namespace: wandb.Namespace,
+			}, role))
+
+			verbsFor := func(resource string) []string {
+				for _, rule := range role.Rules {
+					for _, r := range rule.Resources {
+						if r == resource {
+							return rule.Verbs
+						}
+					}
+				}
+				return nil
+			}
+
+			require.ElementsMatch(t, tc.want, verbsFor("secrets"))
+
+			// Nothing else is ever writable, opted in or not. configmaps shared a
+			// rule with secrets before the split, so it is the regression to catch.
+			for _, readOnly := range []string{"configmaps", "jobs", "cronjobs", "ingresses"} {
+				require.ElementsMatch(t, read, verbsFor(readOnly), "%s must stay read-only", readOnly)
+			}
+		})
+	}
+}
+
 // The whole point of create-if-not-found: an upgrade must not rotate the password
 // out from under whoever is holding it.
 func TestReconcileWatchtowerSecretPreservesAnExistingPassword(t *testing.T) {
@@ -234,6 +291,109 @@ func secretPassword(secret *corev1.Secret) string {
 
 // --- container environment ---------------------------------------------------
 
+func TestReconcileWatchtowerRBACGrantsActionRunLifecycle(t *testing.T) {
+	wandb := watchtowerTestCR("wandb", "wandb")
+	c := watchtowerTestClient(t, wandb)
+
+	require.NoError(t, reconcileWatchtowerRBAC(context.Background(), c, wandb))
+
+	role := &rbacv1.Role{}
+	require.NoError(t, c.Get(context.Background(), types.NamespacedName{
+		Name: watchtowerName(wandb), Namespace: wandb.Namespace,
+	}, role))
+	require.Contains(t, role.Rules, rbacv1.PolicyRule{
+		APIGroups: []string{"apps.wandb.com"},
+		Resources: []string{"actionruns"},
+		Verbs:     []string{"get", "list", "watch", "create", "delete"},
+	})
+}
+
+var watchtowerSupportBundleRules = []rbacv1.PolicyRule{
+	{APIGroups: []string{"batch"}, Resources: []string{"jobs"}, Verbs: []string{"create", "delete"}},
+	{APIGroups: []string{""}, Resources: []string{"pods"}, Verbs: []string{"delete"}},
+	{APIGroups: []string{""}, Resources: []string{"pods/exec"}, Verbs: []string{"create", "get"}},
+}
+
+func TestReconcileWatchtowerRBACSupportBundleGrants(t *testing.T) {
+	ctx := context.Background()
+	wandb := watchtowerTestCR("wandb", "wandb")
+	c := watchtowerTestClient(t, wandb)
+	role := func() *rbacv1.Role {
+		t.Helper()
+		require.NoError(t, reconcileWatchtowerRBAC(ctx, c, wandb))
+		role := &rbacv1.Role{}
+		require.NoError(t, c.Get(ctx, types.NamespacedName{Name: watchtowerName(wandb), Namespace: wandb.Namespace}, role))
+		return role
+	}
+	requireNone := func(rules []rbacv1.PolicyRule) {
+		t.Helper()
+		for _, rule := range watchtowerSupportBundleRules {
+			require.NotContains(t, rules, rule)
+		}
+	}
+
+	// A CR the API server has not defaulted yet has no value at all.
+	require.Nil(t, wandb.Spec.SupportBundle.Enabled)
+	requireNone(role().Rules)
+
+	wandb.Spec.SupportBundle.Enabled = ptr.To(true)
+	requireNone(role().Rules)
+	require.NoError(t, c.Create(ctx, supportbundle.WatchtowerJobPolicy(wandb, watchtowerServiceAccountName(wandb))))
+	requireNone(role().Rules)
+	require.NoError(t, c.Create(ctx, supportbundle.WatchtowerJobPolicyBinding(wandb)))
+	before := len(role().Rules)
+	rules := role().Rules
+	require.Len(t, rules, before, "repeated reconciles must not duplicate rules")
+	for _, rule := range watchtowerSupportBundleRules {
+		require.Contains(t, rules, rule)
+	}
+	for _, readOnly := range []string{"configmaps", "cronjobs", "ingresses"} {
+		for _, rule := range rules {
+			if slices.Contains(rule.Resources, readOnly) {
+				require.ElementsMatch(t, []string{"get", "list", "watch"}, rule.Verbs, readOnly)
+			}
+		}
+	}
+
+	binding := &rbacv1.RoleBinding{}
+	require.NoError(t, c.Get(ctx, types.NamespacedName{Name: watchtowerName(wandb), Namespace: wandb.Namespace}, binding))
+	require.Equal(t, []rbacv1.Subject{{Kind: "ServiceAccount", Name: watchtowerServiceAccountName(wandb), Namespace: wandb.Namespace}}, binding.Subjects)
+
+	policyBinding := supportbundle.WatchtowerJobPolicyBinding(wandb)
+	require.NoError(t, c.Get(ctx, ctrlClient.ObjectKeyFromObject(policyBinding), policyBinding))
+	policyBinding.Spec.ValidationActions = []admissionregistrationv1.ValidationAction{admissionregistrationv1.Warn}
+	require.NoError(t, c.Update(ctx, policyBinding))
+	requireNone(role().Rules)
+	policyBinding.Spec.ValidationActions = []admissionregistrationv1.ValidationAction{admissionregistrationv1.Deny}
+	require.NoError(t, c.Update(ctx, policyBinding))
+	require.Contains(t, role().Rules, watchtowerSupportBundleRules[0])
+
+	wandb.Spec.SupportBundle.Enabled = ptr.To(false)
+	requireNone(role().Rules)
+}
+
+// The API server refuses a Role granting verbs the operator does not hold itself.
+func TestOperatorHoldsWatchtowerSupportBundleGrants(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "config", "rbac", "role.yaml"))
+	require.NoError(t, err)
+	operator := &rbacv1.ClusterRole{}
+	require.NoError(t, yaml.Unmarshal(data, operator))
+	held := func(group, resource, verb string) bool {
+		for _, rule := range operator.Rules {
+			if len(rule.ResourceNames) == 0 && slices.Contains(rule.APIGroups, group) &&
+				slices.Contains(rule.Resources, resource) && slices.Contains(rule.Verbs, verb) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, rule := range watchtowerSupportBundleRules {
+		for _, verb := range rule.Verbs {
+			require.True(t, held(rule.APIGroups[0], rule.Resources[0], verb), "%s %s", verb, rule.Resources[0])
+		}
+	}
+}
+
 func TestWatchtowerEnvReferencesThePasswordSecret(t *testing.T) {
 	wandb := watchtowerTestCR("wandb", "wandb")
 
@@ -262,6 +422,31 @@ func TestWatchtowerEnvReferencesThePasswordSecret(t *testing.T) {
 }
 
 // --- auth service derivation -------------------------------------------------
+
+// The DB-admin capability writes directly to the W&B application database, so
+// "absent unless explicitly asked for" is the security property worth pinning:
+// an unset operator env must leave no trace on the Watchtower pod.
+func TestWatchtowerEnvOmitsDBAdminUnlessOperatorOptsIn(t *testing.T) {
+	wandb := watchtowerTestCR("wandb", "wandb")
+
+	t.Setenv(dbAdminEnvVar, "")
+	for _, e := range watchtowerEnv(wandb, "api:8080", "/console") {
+		if e.Name == dbAdminEnvVar {
+			t.Fatalf("%s leaked into the pod env with the operator env unset", dbAdminEnvVar)
+		}
+	}
+
+	t.Setenv(dbAdminEnvVar, "true")
+	var got string
+	for _, e := range watchtowerEnv(wandb, "api:8080", "/console") {
+		if e.Name == dbAdminEnvVar {
+			got = e.Value
+		}
+	}
+	if got != "true" {
+		t.Errorf("%s = %q, want \"true\" when the operator opts in", dbAdminEnvVar, got)
+	}
+}
 
 func TestWatchtowerAuthServiceDerivesFromTheOIDCApplication(t *testing.T) {
 	wandb := watchtowerTestCR("wandb", "wandb")
@@ -372,6 +557,17 @@ func TestBuildWatchtowerApplicationPinsOneReplica(t *testing.T) {
 	require.Equal(t, int32(1), *app.Spec.Replicas)
 	require.Equal(t, "Deployment", app.Spec.Kind)
 	require.Equal(t, watchtowerName(wandb), app.Name)
+}
+
+func TestBuildWatchtowerApplicationPreservesSecurityBaseline(t *testing.T) {
+	wandb := watchtowerTestCR("wandb", "wandb")
+	pod := buildWatchtowerApplication(wandb, "api:8081", testOperatorImage).Spec.PodTemplate.Spec
+
+	assertPodSecurityBaseline(t, pod.SecurityContext)
+	assertOptionalBool(t, "runAsNonRoot", pod.SecurityContext.RunAsNonRoot, nil)
+	require.Len(t, pod.Containers, 1)
+	assertContainerSecurityBaseline(t, pod.Containers[0].SecurityContext)
+	assertOptionalBool(t, "readOnlyRootFilesystem", pod.Containers[0].SecurityContext.ReadOnlyRootFilesystem, nil)
 }
 
 // The component label is what makes manifest-driven Application pruning skip
@@ -545,4 +741,34 @@ func TestReconcileWatchtowerIgnoresInfraReadiness(t *testing.T) {
 		&corev1.ServiceAccount{}), "the ServiceAccount must exist even with infra down")
 	require.NoError(t, c.Get(ctx, types.NamespacedName{Name: watchtowerName(wandb), Namespace: ns},
 		&rbacv1.Role{}), "the Role must exist even with infra down")
+}
+
+func TestReconcileWatchtowerConfiguresAWSIngressHealthCheck(t *testing.T) {
+	t.Setenv(operatorImageEnvVar, testOperatorImage)
+
+	className := "alb"
+	wandb := watchtowerTestCR("wandb", "wandb")
+	wandb.Spec.Networking = apiv2.NetworkingSpec{
+		Mode: apiv2.NetworkingModeIngress,
+		Ingress: &apiv2.IngressConfig{
+			Managed:          ptr.To(false),
+			IngressClassName: &className,
+		},
+	}
+	ingressClass := &networkingv1.IngressClass{
+		ObjectMeta: metav1.ObjectMeta{Name: className},
+		Spec: networkingv1.IngressClassSpec{
+			Controller: awsLoadBalancerIngressController,
+		},
+	}
+
+	c := watchtowerTestClient(t, wandb, ingressClass)
+	require.NoError(t, reconcileWatchtower(context.Background(), c, wandb, manifestWithOIDC()))
+
+	application := &apiv2.Application{}
+	require.NoError(t, c.Get(context.Background(), types.NamespacedName{
+		Name: watchtowerName(wandb), Namespace: wandb.Namespace,
+	}, application))
+	require.Equal(t, "/console/ready", application.Spec.ServiceAnnotations[awsHealthCheckPathAnnotation])
+	require.Equal(t, "8080", application.Spec.ServiceAnnotations[awsHealthCheckPortAnnotation])
 }

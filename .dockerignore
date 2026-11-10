@@ -6,3 +6,4 @@ git/
 node_modules
 .github
 charts/
+gha-creds-*.json

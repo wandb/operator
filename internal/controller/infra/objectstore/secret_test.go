@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	corev1 "k8s.io/api/core/v1"
 
 	apiv2 "github.com/wandb/operator/api/v2"
 )
@@ -83,18 +82,20 @@ func TestToObjectStoreConnection_RequireAll(t *testing.T) {
 	conn := ci.ToObjectStoreConnection("conn-secret", true)
 
 	// Every emitted selector points at conn-secret and is required.
-	for _, s := range []corev1.SecretKeySelector{
+	for _, s := range []apiv2.ValueOrSecret{
 		conn.URL, conn.Provider, conn.Endpoint, conn.Port, conn.AccessKey,
 		conn.SecretKey, conn.Region, conn.Bucket, conn.TlsEnabled, conn.ForcePathStyle,
 	} {
-		require.Equal(t, "conn-secret", s.Name)
-		require.NotNil(t, s.Optional)
-		require.False(t, *s.Optional)
+		ref := s.SecretKeyRef()
+		require.NotNil(t, ref)
+		require.Equal(t, "conn-secret", ref.Name)
+		require.NotNil(t, ref.Optional)
+		require.False(t, *ref.Optional)
 	}
-	require.Equal(t, "Host", conn.Endpoint.Key)
-	require.Equal(t, "url", conn.URL.Key)
+	require.Equal(t, "Host", conn.Endpoint.SecretKeyRef().Key)
+	require.Equal(t, "url", conn.URL.SecretKeyRef().Key)
 	// Path is not written for the managed shape, so its selector stays empty.
-	require.Empty(t, conn.Path.Name)
+	require.Nil(t, conn.Path.SecretKeyRef())
 }
 
 func TestToObjectStoreConnection_ExternalOptionality(t *testing.T) {
@@ -111,13 +112,17 @@ func TestToObjectStoreConnection_ExternalOptionality(t *testing.T) {
 	conn := ci.ToObjectStoreConnection("conn-secret", false)
 
 	// url/Provider/Bucket are required...
-	for _, s := range []corev1.SecretKeySelector{conn.URL, conn.Provider, conn.Bucket} {
-		require.NotNil(t, s.Optional)
-		require.False(t, *s.Optional)
+	for _, s := range []apiv2.ValueOrSecret{conn.URL, conn.Provider, conn.Bucket} {
+		ref := s.SecretKeyRef()
+		require.NotNil(t, ref)
+		require.NotNil(t, ref.Optional)
+		require.False(t, *ref.Optional)
 	}
 	// ...everything else is optional.
-	for _, s := range []corev1.SecretKeySelector{conn.Endpoint, conn.Port, conn.AccessKey, conn.SecretKey, conn.Region} {
-		require.NotNil(t, s.Optional)
-		require.True(t, *s.Optional)
+	for _, s := range []apiv2.ValueOrSecret{conn.Endpoint, conn.Port, conn.AccessKey, conn.SecretKey, conn.Region} {
+		ref := s.SecretKeyRef()
+		require.NotNil(t, ref)
+		require.NotNil(t, ref.Optional)
+		require.True(t, *ref.Optional)
 	}
 }

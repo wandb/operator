@@ -29,6 +29,7 @@ rules:
   - ""
   resources:
   - endpoints
+  - limitranges
   - namespaces
   - namespaces/status
   - nodes
@@ -36,7 +37,7 @@ rules:
   - nodes/proxy
   - nodes/spec
   - nodes/stats
-  - pods
+  - persistentvolumes
   - pods/log
   - pods/status
   - replicationcontrollers
@@ -46,6 +47,51 @@ rules:
   - get
   - list
   - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods/exec
+  verbs:
+  - create
+  - get
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - mutatingwebhookconfigurations
+  - validatingwebhookconfigurations
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - validatingadmissionpolicies
+  - validatingadmissionpolicybindings
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apiextensions.k8s.io
+  resources:
+  - customresourcedefinitions
+  verbs:
+  - get
+  - list
 - apiGroups:
   - apps
   resources:
@@ -74,6 +120,26 @@ rules:
 - apiGroups:
   - apps.wandb.com
   resources:
+  - actionruns
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - watch
+- apiGroups:
+  - apps.wandb.com
+  resources:
+  - actionruns/status
+  - applications/status
+  - weightsandbiases/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - apps.wandb.com
+  resources:
   - applications
   - weightsandbiases
   verbs:
@@ -90,15 +156,6 @@ rules:
   - applications/finalizers
   - weightsandbiases/finalizers
   verbs:
-  - update
-- apiGroups:
-  - apps.wandb.com
-  resources:
-  - applications/status
-  - weightsandbiases/status
-  verbs:
-  - get
-  - patch
   - update
 - apiGroups:
   - autoscaling
@@ -174,6 +231,22 @@ rules:
   - update
   - watch
 - apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - discovery.k8s.io
+  resources:
+  - endpointslices
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - events.k8s.io
   resources:
   - events
@@ -245,6 +318,13 @@ rules:
   verbs:
   - get
 - apiGroups:
+  - metrics.k8s.io
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+- apiGroups:
   - moco.cybozu.com
   resources:
   - mysqlclusters
@@ -279,6 +359,15 @@ rules:
 - apiGroups:
   - networking.k8s.io
   resources:
+  - ingressclasses
+  - ingresses/status
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
   - ingresses
   - networkpolicies
   verbs:
@@ -288,14 +377,6 @@ rules:
   - list
   - patch
   - update
-  - watch
-- apiGroups:
-  - networking.k8s.io
-  resources:
-  - ingresses/status
-  verbs:
-  - get
-  - list
   - watch
 - apiGroups:
   - operator.victoriametrics.com
@@ -404,3 +485,10 @@ rules:
   - get
   - list
   - watch
+- apiGroups:
+  - storage.k8s.io
+  resources:
+  - volumeattachments
+  verbs:
+  - get
+  - list

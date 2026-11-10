@@ -10,7 +10,6 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/external"
 	osconn "github.com/wandb/operator/internal/controller/infra/objectstore"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -40,7 +39,7 @@ func WriteState(
 ) ([]metav1.Condition, *apiv2.ObjectStoreConnection) {
 	logger := ctrl.LoggerFrom(ctx)
 
-	fields := map[string]corev1.SecretKeySelector{
+	fields := map[string]apiv2.ValueOrSecret{
 		"Host":           spec.Endpoint,
 		"Port":           spec.Port,
 		"AccessKey":      spec.AccessKey,
@@ -53,7 +52,7 @@ func WriteState(
 		"ForcePathStyle": spec.ForcePathStyle,
 	}
 
-	data, err := external.ResolveFields(ctx, c, wandb.Namespace, fields)
+	data, err := external.ResolveValueFields(ctx, c, wandb.Namespace, fields)
 	if err != nil {
 		logger.Error(err, "failed to resolve external object store fields")
 		return []metav1.Condition{{

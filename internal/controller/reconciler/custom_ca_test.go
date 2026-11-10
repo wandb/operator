@@ -10,7 +10,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
 	ctrlClient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -95,29 +94,16 @@ func TestApplyCustomCACertsToWorkloadAddsGlobalAndInfraMounts(t *testing.T) {
 			MySQLStatus: map[string]apiv2.MysqlInfraStatus{
 				apiv2.DefaultInstanceName: apiv2.MysqlInfraStatus{
 					Connection: apiv2.MysqlConnection{
-						SslCa: corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{Name: "wandb-mysql-connection"},
-							Key:                  "SslCa",
-						},
-						SslCert: corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{Name: "wandb-mysql-connection"},
-							Key:                  "SslCert",
-						},
-						SslKey: corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{Name: "wandb-mysql-connection"},
-							Key:                  "SslKey",
-						},
+						SslCa:   apiv2.ValueFromSecret("wandb-mysql-connection", "SslCa", false),
+						SslCert: apiv2.ValueFromSecret("wandb-mysql-connection", "SslCert", false),
+						SslKey:  apiv2.ValueFromSecret("wandb-mysql-connection", "SslKey", false),
 					},
 				},
 			},
 			RedisStatus: map[string]apiv2.RedisInfraStatus{
 				apiv2.DefaultInstanceName: apiv2.RedisInfraStatus{
 					Connection: apiv2.RedisConnection{
-						SslCa: corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{Name: "wandb-redis-connection"},
-							Key:                  "SslCa",
-							Optional:             ptr.To(true),
-						},
+						SslCa: apiv2.ValueFromSecret("wandb-redis-connection", "SslCa", true),
 					},
 				},
 			},
@@ -182,22 +168,14 @@ func TestApplyCustomCACertsToWorkloadSkipsMissingOptionalInfraKeys(t *testing.T)
 			MySQLStatus: map[string]apiv2.MysqlInfraStatus{
 				apiv2.DefaultInstanceName: apiv2.MysqlInfraStatus{
 					Connection: apiv2.MysqlConnection{
-						SslCa: corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{Name: "wandb-mysql-connection"},
-							Key:                  "SslCa",
-							Optional:             ptr.To(true),
-						},
+						SslCa: apiv2.ValueFromSecret("wandb-mysql-connection", "SslCa", true),
 					},
 				},
 			},
 			RedisStatus: map[string]apiv2.RedisInfraStatus{
 				apiv2.DefaultInstanceName: apiv2.RedisInfraStatus{
 					Connection: apiv2.RedisConnection{
-						SslCa: corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{Name: "wandb-redis-connection"},
-							Key:                  "SslCa",
-							Optional:             ptr.To(true),
-						},
+						SslCa: apiv2.ValueFromSecret("wandb-redis-connection", "SslCa", true),
 					},
 				},
 			},

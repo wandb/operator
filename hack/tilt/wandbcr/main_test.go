@@ -42,21 +42,8 @@ func TestBuildCRDefaultGateway(t *testing.T) {
 	if cr.Spec.Wandb.InternalServiceAuth.Enabled == nil || *cr.Spec.Wandb.InternalServiceAuth.Enabled {
 		t.Fatalf("internal service auth should be explicitly disabled")
 	}
-	if cr.Spec.MySQL[v2.DefaultInstanceName].ManagedMysql == nil || cr.Spec.MySQL[v2.DefaultInstanceName].ManagedMysql.Telemetry.Enabled {
-		t.Fatalf("mysql telemetry should be disabled by default")
-	}
-	if cr.Spec.Redis[v2.DefaultInstanceName].ManagedRedis == nil || cr.Spec.Redis[v2.DefaultInstanceName].ManagedRedis.Telemetry.Enabled {
-		t.Fatalf("redis telemetry should be disabled by default")
-	}
-	if cr.Spec.Kafka.ManagedKafka == nil || cr.Spec.Kafka.ManagedKafka.Telemetry.Enabled {
-		t.Fatalf("kafka telemetry should be disabled by default")
-	}
-	if cr.Spec.ObjectStore[v2.DefaultInstanceName].ManagedObjectStore == nil || cr.Spec.ObjectStore[v2.DefaultInstanceName].ManagedObjectStore.Telemetry.Enabled {
-		t.Fatalf("object store telemetry should be disabled by default")
-	}
-	if cr.Spec.ClickHouse[v2.DefaultInstanceName].ManagedClickHouse == nil || cr.Spec.ClickHouse[v2.DefaultInstanceName].ManagedClickHouse.Telemetry.Enabled {
-		t.Fatalf("clickhouse telemetry should be disabled by default")
-	}
+	// An unset observability mode must match the operator's default, not contradict it.
+	assertManagedTelemetry(t, cr, true)
 	if cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql != nil {
 		t.Fatalf("external mysql should be unset by default")
 	}
@@ -77,6 +64,18 @@ func TestBuildCRDefaultGateway(t *testing.T) {
 	}
 }
 
+func TestBuildCRSupportBundle(t *testing.T) {
+	for _, enabled := range []bool{true, false} {
+		cr, err := BuildCR(Options{SupportBundleEnabled: enabled})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cr.Spec.SupportBundle.Enabled == nil || *cr.Spec.SupportBundle.Enabled != enabled {
+			t.Fatalf("support bundle enabled = %v, want explicit %v", cr.Spec.SupportBundle.Enabled, enabled)
+		}
+	}
+}
+
 func TestBuildCRExternalMySQLOnly(t *testing.T) {
 	cr, err := BuildCR(Options{ExternalMySQL: true})
 	if err != nil {
@@ -89,12 +88,12 @@ func TestBuildCRExternalMySQLOnly(t *testing.T) {
 	if cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql == nil {
 		t.Fatalf("external mysql should be configured")
 	}
-	assertSelector(t, cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql.Host, externalMySQLSecret, "Host")
-	assertSelector(t, cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql.Port, externalMySQLSecret, "Port")
-	assertSelector(t, cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql.Database, externalMySQLSecret, "Database")
-	assertSelector(t, cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql.Username, externalMySQLSecret, "Username")
-	assertSelector(t, cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql.Password, externalMySQLSecret, "Password")
-	assertEmptySelector(t, cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql.SslCa, "mysql sslCa")
+	assertValueSelector(t, cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql.Host, externalMySQLSecret, "Host")
+	assertValueSelector(t, cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql.Port, externalMySQLSecret, "Port")
+	assertValueSelector(t, cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql.Database, externalMySQLSecret, "Database")
+	assertValueSelector(t, cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql.Username, externalMySQLSecret, "Username")
+	assertValueSelector(t, cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql.Password, externalMySQLSecret, "Password")
+	assertEmptyValue(t, cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql.SslCa, "mysql sslCa")
 
 	if cr.Spec.Redis[v2.DefaultInstanceName].ManagedRedis == nil || cr.Spec.Redis[v2.DefaultInstanceName].ExternalRedis != nil {
 		t.Fatalf("redis should remain managed")
@@ -116,10 +115,10 @@ func TestBuildCRExternalRedisOnly(t *testing.T) {
 	if cr.Spec.Redis[v2.DefaultInstanceName].ExternalRedis == nil {
 		t.Fatalf("external redis should be configured")
 	}
-	assertSelector(t, cr.Spec.Redis[v2.DefaultInstanceName].ExternalRedis.Host, externalRedisSecret, "Host")
-	assertSelector(t, cr.Spec.Redis[v2.DefaultInstanceName].ExternalRedis.Port, externalRedisSecret, "Port")
-	assertEmptySelector(t, cr.Spec.Redis[v2.DefaultInstanceName].ExternalRedis.Password, "redis password")
-	assertEmptySelector(t, cr.Spec.Redis[v2.DefaultInstanceName].ExternalRedis.SslCa, "redis sslCa")
+	assertValueSelector(t, cr.Spec.Redis[v2.DefaultInstanceName].ExternalRedis.Host, externalRedisSecret, "Host")
+	assertValueSelector(t, cr.Spec.Redis[v2.DefaultInstanceName].ExternalRedis.Port, externalRedisSecret, "Port")
+	assertEmptyValue(t, cr.Spec.Redis[v2.DefaultInstanceName].ExternalRedis.Password, "redis password")
+	assertEmptyValue(t, cr.Spec.Redis[v2.DefaultInstanceName].ExternalRedis.SslCa, "redis sslCa")
 
 	if cr.Spec.MySQL[v2.DefaultInstanceName].ManagedMysql == nil || cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql != nil {
 		t.Fatalf("mysql should remain managed")
@@ -141,19 +140,49 @@ func TestBuildCRExternalObjectStoreOnly(t *testing.T) {
 	if cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore == nil {
 		t.Fatalf("external object store should be configured")
 	}
-	assertSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.Provider, externalObjectStoreSecret, "Provider")
-	assertSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.Endpoint, externalObjectStoreSecret, "Host")
-	assertSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.Port, externalObjectStoreSecret, "Port")
-	assertSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.Bucket, externalObjectStoreSecret, "Bucket")
-	assertSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.Region, externalObjectStoreSecret, "Region")
-	assertSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.AccessKey, externalObjectStoreSecret, "AccessKey")
-	assertSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.SecretKey, externalObjectStoreSecret, "SecretKey")
+	assertValueSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.Provider, externalObjectStoreSecret, "Provider")
+	assertValueSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.Endpoint, externalObjectStoreSecret, "Host")
+	assertValueSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.Port, externalObjectStoreSecret, "Port")
+	assertValueSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.Bucket, externalObjectStoreSecret, "Bucket")
+	assertValueSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.Region, externalObjectStoreSecret, "Region")
+	assertValueSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.AccessKey, externalObjectStoreSecret, "AccessKey")
+	assertValueSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.SecretKey, externalObjectStoreSecret, "SecretKey")
+	assertValueSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.TlsEnabled, externalObjectStoreSecret, "TlsEnabled")
+	assertValueSelector(t, cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore.ForcePathStyle, externalObjectStoreSecret, "ForcePathStyle")
+	if cr.Spec.Wandb.BucketProxy {
+		t.Fatalf("external object store should use direct presigned URLs")
+	}
 
 	if cr.Spec.MySQL[v2.DefaultInstanceName].ManagedMysql == nil || cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql != nil {
 		t.Fatalf("mysql should remain managed")
 	}
 	if cr.Spec.Redis[v2.DefaultInstanceName].ManagedRedis == nil || cr.Spec.Redis[v2.DefaultInstanceName].ExternalRedis != nil {
 		t.Fatalf("redis should remain managed")
+	}
+}
+
+func TestBuildCRExternalObjectStoreDisablesBaseBucketProxy(t *testing.T) {
+	dir := t.TempDir()
+	crFile := filepath.Join(dir, "base.yaml")
+	base := `apiVersion: apps.wandb.com/v2
+kind: WeightsAndBiases
+metadata:
+  name: custom
+spec:
+  wandb:
+    hostname: http://old.example
+    bucketProxy: true
+`
+	if err := os.WriteFile(crFile, []byte(base), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cr, err := BuildCR(Options{CRFile: crFile, ExternalObjectStore: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cr.Spec.Wandb.BucketProxy {
+		t.Fatalf("external object store should override bucketProxy from the base CR")
 	}
 }
 
@@ -227,8 +256,8 @@ func TestBuildArtifactsExternalInfraWithCustomCA(t *testing.T) {
 	if configMap == nil {
 		t.Fatalf("custom CA ConfigMap should be generated")
 	}
-	assertSelector(t, cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql.SslCa, externalMySQLTLSSecret, "ca.crt")
-	assertSelector(t, cr.Spec.Redis[v2.DefaultInstanceName].ExternalRedis.SslCa, externalRedisTLSSecret, "ca.crt")
+	assertValueSelector(t, cr.Spec.MySQL[v2.DefaultInstanceName].ExternalMysql.SslCa, externalMySQLTLSSecret, "ca.crt")
+	assertValueSelector(t, cr.Spec.Redis[v2.DefaultInstanceName].ExternalRedis.SslCa, externalRedisTLSSecret, "ca.crt")
 	if cr.Spec.ObjectStore[v2.DefaultInstanceName].ExternalObjectStore == nil {
 		t.Fatalf("external object store should be configured")
 	}
@@ -310,6 +339,78 @@ func TestBuildCRInvalidObservabilityModeReturnsError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "observability-mode") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestBuildCRAppliesTelemetryModeWhenBaseCROmitsComponents(t *testing.T) {
+	dir := t.TempDir()
+	crFile := filepath.Join(dir, "base.yaml")
+	base := `apiVersion: apps.wandb.com/v2
+kind: WeightsAndBiases
+metadata:
+  name: custom
+spec:
+  size: dev
+  wandb:
+    hostname: http://old.example
+`
+	if err := os.WriteFile(crFile, []byte(base), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range []struct {
+		mode string
+		want bool
+	}{
+		{mode: "off", want: false},
+		{mode: "full", want: true},
+	} {
+		t.Run(tc.mode, func(t *testing.T) {
+			cr, err := BuildCR(Options{CRFile: crFile, ObservabilityMode: tc.mode})
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertManagedTelemetry(t, cr, tc.want)
+		})
+	}
+}
+
+func assertManagedTelemetry(t *testing.T, cr *v2.WeightsAndBiases, want bool) {
+	t.Helper()
+
+	got := map[string]bool{}
+	for _, spec := range cr.Spec.MySQL {
+		if spec.ManagedMysql != nil {
+			got["mysql"] = spec.ManagedMysql.Telemetry.Enabled
+		}
+	}
+	for _, spec := range cr.Spec.Redis {
+		if spec.ManagedRedis != nil {
+			got["redis"] = spec.ManagedRedis.Telemetry.Enabled
+		}
+	}
+	if cr.Spec.Kafka.ManagedKafka != nil {
+		got["kafka"] = cr.Spec.Kafka.ManagedKafka.Telemetry.Enabled
+	}
+	for _, spec := range cr.Spec.ObjectStore {
+		if spec.ManagedObjectStore != nil {
+			got["objectStore"] = spec.ManagedObjectStore.Telemetry.Enabled
+		}
+	}
+	for _, spec := range cr.Spec.ClickHouse {
+		if spec.ManagedClickHouse != nil {
+			got["clickhouse"] = spec.ManagedClickHouse.Telemetry.Enabled
+		}
+	}
+
+	for _, component := range []string{"mysql", "redis", "kafka", "objectStore", "clickhouse"} {
+		enabled, ok := got[component]
+		if !ok {
+			t.Fatalf("%s managed spec missing, telemetry mode not applied", component)
+		}
+		if enabled != want {
+			t.Fatalf("%s telemetry = %v, want %v", component, enabled, want)
+		}
 	}
 }
 
@@ -491,9 +592,18 @@ func assertSelector(t *testing.T, selector corev1.SecretKeySelector, name, key s
 	}
 }
 
-func assertEmptySelector(t *testing.T, selector corev1.SecretKeySelector, field string) {
+func assertValueSelector(t *testing.T, v v2.ValueOrSecret, name, key string) {
 	t.Helper()
-	if selector.Name != "" || selector.Key != "" {
-		t.Fatalf("%s selector should be empty, got %s/%s", field, selector.Name, selector.Key)
+	ref := v.SecretKeyRef()
+	if ref == nil {
+		t.Fatalf("selector = <nil>, want %s/%s", name, key)
+	}
+	assertSelector(t, *ref, name, key)
+}
+
+func assertEmptyValue(t *testing.T, v v2.ValueOrSecret, field string) {
+	t.Helper()
+	if ref := v.SecretKeyRef(); ref != nil {
+		t.Fatalf("%s selector should be empty, got %s/%s", field, ref.Name, ref.Key)
 	}
 }

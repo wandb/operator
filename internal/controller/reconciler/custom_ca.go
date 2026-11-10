@@ -286,14 +286,18 @@ func setCustomCACertsChecksumAnnotation(podTemplate *corev1.PodTemplateSpec, che
 	podTemplate.SetAnnotations(annotations)
 }
 
-func secretCACertVolumeSource(sel corev1.SecretKeySelector, fileName string) *corev1.SecretVolumeSource {
+func secretCACertVolumeSource(v apiv2.ValueOrSecret, fileName string) *corev1.SecretVolumeSource {
+	ref := v.SecretKeyRef()
+	if ref == nil {
+		return nil
+	}
 	return &corev1.SecretVolumeSource{
-		SecretName: sel.Name,
+		SecretName: ref.Name,
 		Items: []corev1.KeyToPath{{
-			Key:  sel.Key,
+			Key:  ref.Key,
 			Path: fileName,
 		}},
-		Optional: sel.Optional,
+		Optional: ref.Optional,
 	}
 }
 
@@ -317,7 +321,12 @@ func upsertVolumeMount(volumeMounts []corev1.VolumeMount, mount corev1.VolumeMou
 	return append(volumeMounts, mount)
 }
 
-func secretSelectorHasValue(ctx context.Context, c ctrlClient.Client, namespace string, sel corev1.SecretKeySelector) (bool, error) {
+func secretSelectorHasValue(ctx context.Context, c ctrlClient.Client, namespace string, v apiv2.ValueOrSecret) (bool, error) {
+	ref := v.SecretKeyRef()
+	if ref == nil {
+		return false, nil
+	}
+	sel := *ref
 	if !secretSelectorConfigured(sel) {
 		return false, nil
 	}
@@ -377,28 +386,28 @@ func customCACertsChecksum(ctx context.Context, c ctrlClient.Client, wandb *apiv
 		}
 	}
 
-	if sel := mysqlConn.SslCa; hasMySQLCA {
-		_, _ = fmt.Fprintf(hash, "mysql:%s/%s\n", sel.Name, sel.Key)
-		if err := hashSecretKeyData(ctx, c, wandb.Namespace, sel, hashWriteString(hash)); err != nil {
+	if ref := mysqlConn.SslCa.SecretKeyRef(); hasMySQLCA && ref != nil {
+		_, _ = fmt.Fprintf(hash, "mysql:%s/%s\n", ref.Name, ref.Key)
+		if err := hashSecretKeyData(ctx, c, wandb.Namespace, *ref, hashWriteString(hash)); err != nil {
 			return "", err
 		}
 	}
-	if sel := mysqlConn.SslCert; hasMySQLCert {
-		_, _ = fmt.Fprintf(hash, "mysql-cert:%s/%s\n", sel.Name, sel.Key)
-		if err := hashSecretKeyData(ctx, c, wandb.Namespace, sel, hashWriteString(hash)); err != nil {
+	if ref := mysqlConn.SslCert.SecretKeyRef(); hasMySQLCert && ref != nil {
+		_, _ = fmt.Fprintf(hash, "mysql-cert:%s/%s\n", ref.Name, ref.Key)
+		if err := hashSecretKeyData(ctx, c, wandb.Namespace, *ref, hashWriteString(hash)); err != nil {
 			return "", err
 		}
 	}
-	if sel := mysqlConn.SslKey; hasMySQLKey {
-		_, _ = fmt.Fprintf(hash, "mysql-key:%s/%s\n", sel.Name, sel.Key)
-		if err := hashSecretKeyData(ctx, c, wandb.Namespace, sel, hashWriteString(hash)); err != nil {
+	if ref := mysqlConn.SslKey.SecretKeyRef(); hasMySQLKey && ref != nil {
+		_, _ = fmt.Fprintf(hash, "mysql-key:%s/%s\n", ref.Name, ref.Key)
+		if err := hashSecretKeyData(ctx, c, wandb.Namespace, *ref, hashWriteString(hash)); err != nil {
 			return "", err
 		}
 	}
 
-	if sel := redisConn.SslCa; hasRedisCA {
-		_, _ = fmt.Fprintf(hash, "redis:%s/%s\n", sel.Name, sel.Key)
-		if err := hashSecretKeyData(ctx, c, wandb.Namespace, sel, hashWriteString(hash)); err != nil {
+	if ref := redisConn.SslCa.SecretKeyRef(); hasRedisCA && ref != nil {
+		_, _ = fmt.Fprintf(hash, "redis:%s/%s\n", ref.Name, ref.Key)
+		if err := hashSecretKeyData(ctx, c, wandb.Namespace, *ref, hashWriteString(hash)); err != nil {
 			return "", err
 		}
 	}

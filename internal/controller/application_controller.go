@@ -36,6 +36,8 @@ import (
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	corev1apply "k8s.io/client-go/applyconfigurations/core/v1"
+	metav1apply "k8s.io/client-go/applyconfigurations/meta/v1"
 	"knative.dev/pkg/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -233,6 +235,9 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			app.Status.RolloutStatus.Replicas > 0 {
 			app.Status.Ready = true
 		}
+	} else if app.Spec.Kind == "CronJob" {
+		// Only reached after reconcileCronJobs succeeded, so ready means the templates are installed.
+		app.Status.Ready = len(app.Spec.CronJobs) > 0
 	}
 
 	if apiequality.Semantic.DeepEqual(statusBefore, app.Status) {
@@ -353,6 +358,14 @@ func deploymentManagedFieldsEqual(before, after *appsv1.Deployment) bool {
 
 func rolloutManagedFieldsEqual(before, after *v1alpha1.Rollout) bool {
 	return managedObjectMetadataEqual(before, after) && reflect.DeepEqual(before.Spec, after.Spec)
+}
+
+// The apiserver defaults fields the desired CronJob leaves unset, so only compare what we set.
+func cronJobManagedFieldsEqual(current, desired *batchv1.CronJob) bool {
+	return apiequality.Semantic.DeepDerivative(desired.GetLabels(), current.GetLabels()) &&
+		apiequality.Semantic.DeepDerivative(desired.GetAnnotations(), current.GetAnnotations()) &&
+		apiequality.Semantic.DeepEqual(desired.GetOwnerReferences(), current.GetOwnerReferences()) &&
+		apiequality.Semantic.DeepDerivative(desired.Spec, current.Spec)
 }
 
 func statefulSetManagedFieldsEqual(before, after *appsv1.StatefulSet) bool {
@@ -729,6 +742,8 @@ func (r *ApplicationReconciler) deleteJobs(ctx context.Context, app *wandbv2.App
 func (r *ApplicationReconciler) reconcileCronJobs(ctx context.Context, app *wandbv2.Application) error {
 	logger := logx.GetSlog(ctx)
 
+	var statuses map[string]batchv1.CronJobStatus
+
 	for i, cronJob := range app.Spec.CronJobs {
 		cronJobName := cronJob.Name
 		if cronJobName == "" {
@@ -745,6 +760,14 @@ func (r *ApplicationReconciler) reconcileCronJobs(ctx context.Context, app *wand
 			logger.Error("Failed to get CronJob", logx.ErrAttr(err), "CronJob", cronJobName)
 			return err
 		}
+		if !currentCronJob.CreationTimestamp.IsZero() && !metav1.IsControlledBy(currentCronJob, app) {
+			return fmt.Errorf("CronJob %s/%s already exists and is not controlled by Application %s/%s",
+				app.Namespace, cronJobName, app.Namespace, app.Name)
+		}
+		if statuses == nil {
+			statuses = map[string]batchv1.CronJobStatus{}
+		}
+		statuses[cronJobName] = currentCronJob.Status
 
 		// Set up the cronjob with the provided spec
 		cronJobToReconcile := cronJob.DeepCopy()
@@ -772,8 +795,7 @@ func (r *ApplicationReconciler) reconcileCronJobs(ctx context.Context, app *wand
 		} else {
 			// Update existing cronjob
 			cronJobToReconcile.ResourceVersion = currentCronJob.ResourceVersion
-			if managedObjectMetadataEqual(currentCronJob, cronJobToReconcile) &&
-				apiequality.Semantic.DeepEqual(currentCronJob.Spec, cronJobToReconcile.Spec) {
+			if cronJobManagedFieldsEqual(currentCronJob, cronJobToReconcile) {
 				continue
 			}
 			if err := r.Update(ctx, cronJobToReconcile); err != nil {
@@ -784,6 +806,7 @@ func (r *ApplicationReconciler) reconcileCronJobs(ctx context.Context, app *wand
 		}
 	}
 
+	app.Status.CronJobStatuses = statuses
 	return nil
 }
 
@@ -809,6 +832,9 @@ func (r *ApplicationReconciler) deleteCronJobs(ctx context.Context, app *wandbv2
 
 	deletePolicy := client.PropagationPolicy(metav1.DeletePropagationBackground)
 	for _, cronJob := range cronJobList.Items {
+		if !metav1.IsControlledBy(&cronJob, app) {
+			continue
+		}
 		logger.Info("Deleting CronJob", "CronJob", cronJob.Name)
 		if err := r.Delete(ctx, &cronJob, deletePolicy); err != nil {
 			logger.Error("Failed to delete CronJob", logx.ErrAttr(err), "CronJob", cronJob.Name)
@@ -829,136 +855,167 @@ func (r *ApplicationReconciler) reconcileService(ctx context.Context, app *wandb
 		return nil
 	}
 
-	desired := &corev1.Service{}
-	desired.Name = app.Name
-	desired.Namespace = app.Namespace
-
-	// Merge labels/annotations from meta template
-	desired.Labels = utils.MergeMapsStringString(
-		desired.Labels,
+	labels := utils.MergeMapsStringString(
+		nil,
 		app.Spec.MetaTemplate.Labels,
 	)
-	desired.Annotations = utils.MergeMapsStringString(
-		desired.Annotations,
+	annotations := utils.MergeMapsStringString(
+		nil,
 		app.Spec.MetaTemplate.Annotations,
 	)
-	// The API server stores empty annotations as nil; keep them nil so the
-	// steady-state metadata compare below settles.
-	if len(desired.Annotations) == 0 {
-		desired.Annotations = nil
-	}
+	annotations = utils.MergeMapsStringString(annotations, app.Spec.ServiceAnnotations)
 
-	// Copy spec from template, filling the port defaults the API server would
-	// apply (templates written before normalization may lack them).
-	desired.Spec = *app.Spec.ServiceTemplate.DeepCopy()
-	common.NormalizeServicePorts(desired.Spec.Ports)
+	serviceSpec := app.Spec.ServiceTemplate.DeepCopy()
+	common.NormalizeServicePorts(serviceSpec.Ports)
 
 	// Ensure selector targets the application's pods
 	selectorLabels := getSelectorLabels(app)
 	// Merge provided selector with our standard labels
-	desired.Spec.Selector = utils.MergeMapsStringString(desired.Spec.Selector, selectorLabels)
+	serviceSpec.Selector = utils.MergeMapsStringString(serviceSpec.Selector, selectorLabels)
 	// Also add selector labels to the Service's metadata labels so they are queryable on the Service itself
-	desired.Labels = utils.MergeMapsStringString(desired.Labels, selectorLabels)
-
-	if err := controllerutil.SetControllerReference(app, desired, r.Scheme); err != nil {
-		return err
-	}
+	labels = utils.MergeMapsStringString(labels, selectorLabels)
 
 	current := &corev1.Service{}
 	err := r.Get(ctx, client.ObjectKey{Namespace: app.Namespace, Name: app.Name}, current)
+	serviceExists := err == nil
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			logger.Error("Failed to get Service", logx.ErrAttr(err))
 			return err
 		}
-		// Create path
-		logger.Info("Creating Service", "Service", desired.Name)
-		if err := r.Create(ctx, desired); err != nil {
-			logger.Error("Failed to create Service", logx.ErrAttr(err))
-			return err
-		}
-
-		app.Status.ServiceStatus = &desired.Status
-
-		logger.Info("Successfully created Service", "Service", desired.Name)
-		return nil
-	}
-	before := current.DeepCopy()
-
-	// Update path: preserve immutable fields
-	desired.ResourceVersion = current.ResourceVersion
-	desired.Spec.ClusterIP = current.Spec.ClusterIP
-	desired.Spec.ClusterIPs = current.Spec.ClusterIPs
-	desired.Spec.IPFamilies = current.Spec.IPFamilies
-	desired.Spec.IPFamilyPolicy = current.Spec.IPFamilyPolicy
-	desired.Spec.HealthCheckNodePort = current.Spec.HealthCheckNodePort
-	preserveServerDefaultedServiceFields(&desired.Spec, &current.Spec)
-
-	// Only update if there are changes
-	// Apply desired into current to minimize overwrite
-	current.Labels = desired.Labels
-	current.Annotations = desired.Annotations
-	current.Spec.Ports = desired.Spec.Ports
-	current.Spec.Type = desired.Spec.Type
-	current.Spec.Selector = desired.Spec.Selector
-	current.Spec.SessionAffinity = desired.Spec.SessionAffinity
-	current.Spec.ExternalTrafficPolicy = desired.Spec.ExternalTrafficPolicy
-	current.Spec.InternalTrafficPolicy = desired.Spec.InternalTrafficPolicy
-	current.Spec.LoadBalancerClass = desired.Spec.LoadBalancerClass
-	current.Spec.AllocateLoadBalancerNodePorts = desired.Spec.AllocateLoadBalancerNodePorts
-	current.Spec.ExternalIPs = desired.Spec.ExternalIPs
-	current.Spec.LoadBalancerIP = desired.Spec.LoadBalancerIP
-	current.Spec.LoadBalancerSourceRanges = desired.Spec.LoadBalancerSourceRanges
-
-	if !managedObjectMetadataEqual(before, current) || !apiequality.Semantic.DeepEqual(before.Spec, current.Spec) {
-		logger.Info("Updating Service", "Service", current.Name)
-		if err := r.Update(ctx, current); err != nil {
-			logger.Error("Failed to update Service", logx.ErrAttr(err))
-			return err
-		}
-		logger.Info("Successfully updated Service", "Service", current.Name)
+	} else if !metav1.IsControlledBy(current, app) {
+		return fmt.Errorf("service %s/%s already exists and is not controlled by Application %s/%s",
+			current.Namespace, current.Name, app.Namespace, app.Name)
 	}
 
+	desired := buildServiceApplyConfiguration(app, labels, annotations, serviceSpec)
+	var applyOptions []client.ApplyOption
+	if serviceExists {
+		// Existing Services created by older operator versions have fields owned
+		// by the prior Update workflow. Force only the fields present in this
+		// partial apply configuration to transfer those deliberate fields.
+		applyOptions = append(applyOptions, client.ForceOwnership)
+	}
+	logger.Info("Applying Service", "Service", app.Name)
+	if err := r.Apply(ctx, desired, applyOptions...); err != nil {
+		logger.Error("Failed to apply Service", logx.ErrAttr(err))
+		return err
+	}
+
+	if err := r.Get(ctx, client.ObjectKey{Namespace: app.Namespace, Name: app.Name}, current); err != nil {
+		return fmt.Errorf("get applied Service %s/%s: %w", app.Namespace, app.Name, err)
+	}
 	app.Status.ServiceStatus = &current.Status
-
 	return nil
 }
 
-// preserveServerDefaultedServiceFields keeps API-server-defaulted or -allocated
-// values for fields the template leaves unset, so a settled Service compares
-// equal and Update only fires on real changes.
-func preserveServerDefaultedServiceFields(desired, current *corev1.ServiceSpec) {
-	if desired.Type == "" {
-		desired.Type = current.Type
-	}
-	if desired.SessionAffinity == "" {
-		desired.SessionAffinity = current.SessionAffinity
-	}
-	if desired.ExternalTrafficPolicy == "" {
-		desired.ExternalTrafficPolicy = current.ExternalTrafficPolicy
-	}
-	if desired.InternalTrafficPolicy == nil {
-		desired.InternalTrafficPolicy = current.InternalTrafficPolicy
-	}
-	if desired.AllocateLoadBalancerNodePorts == nil {
-		desired.AllocateLoadBalancerNodePorts = current.AllocateLoadBalancerNodePorts
-	}
-	if desired.Type != corev1.ServiceTypeNodePort && desired.Type != corev1.ServiceTypeLoadBalancer {
-		return
-	}
-	// NodePorts are allocated by the API server; keep them unless the template pins one.
-	for i := range desired.Ports {
-		p := &desired.Ports[i]
-		if p.NodePort != 0 {
-			continue
+func buildServiceApplyConfiguration(
+	app *wandbv2.Application,
+	labels map[string]string,
+	annotations map[string]string,
+	spec *corev1.ServiceSpec,
+) *corev1apply.ServiceApplyConfiguration {
+	owner := metav1apply.OwnerReference().
+		WithAPIVersion(wandbv2.GroupVersion.String()).
+		WithKind("Application").
+		WithName(app.Name).
+		WithUID(app.UID).
+		WithController(true).
+		WithBlockOwnerDeletion(true)
+
+	return corev1apply.Service(app.Name, app.Namespace).
+		WithLabels(labels).
+		WithAnnotations(annotations).
+		WithOwnerReferences(owner).
+		WithSpec(buildServiceSpecApplyConfiguration(spec))
+}
+
+func buildServiceSpecApplyConfiguration(spec *corev1.ServiceSpec) *corev1apply.ServiceSpecApplyConfiguration {
+	desired := corev1apply.ServiceSpec().WithSelector(spec.Selector)
+	for i := range spec.Ports {
+		port := spec.Ports[i]
+		applyPort := corev1apply.ServicePort().
+			WithPort(port.Port).
+			WithProtocol(port.Protocol).
+			WithTargetPort(port.TargetPort)
+		if port.Name != "" {
+			applyPort.WithName(port.Name)
 		}
-		for j := range current.Ports {
-			if current.Ports[j].Name == p.Name {
-				p.NodePort = current.Ports[j].NodePort
-				break
+		if port.AppProtocol != nil {
+			applyPort.WithAppProtocol(*port.AppProtocol)
+		}
+		if port.NodePort != 0 {
+			applyPort.WithNodePort(port.NodePort)
+		}
+		desired.WithPorts(applyPort)
+	}
+
+	// Empty scalar values are API defaults and intentionally omitted. Values
+	// explicitly present in the Application template are applied and owned.
+	if spec.ClusterIP != "" {
+		desired.WithClusterIP(spec.ClusterIP)
+	}
+	if len(spec.ClusterIPs) > 0 {
+		desired.WithClusterIPs(spec.ClusterIPs...)
+	}
+	if spec.Type != "" {
+		desired.WithType(spec.Type)
+	}
+	if len(spec.ExternalIPs) > 0 {
+		desired.WithExternalIPs(spec.ExternalIPs...)
+	}
+	if spec.SessionAffinity != "" {
+		desired.WithSessionAffinity(spec.SessionAffinity)
+	}
+	if spec.LoadBalancerIP != "" {
+		desired.WithLoadBalancerIP(spec.LoadBalancerIP)
+	}
+	if len(spec.LoadBalancerSourceRanges) > 0 {
+		desired.WithLoadBalancerSourceRanges(spec.LoadBalancerSourceRanges...)
+	}
+	if spec.ExternalName != "" {
+		desired.WithExternalName(spec.ExternalName)
+	}
+	if spec.ExternalTrafficPolicy != "" {
+		desired.WithExternalTrafficPolicy(spec.ExternalTrafficPolicy)
+	}
+	if spec.HealthCheckNodePort != 0 {
+		desired.WithHealthCheckNodePort(spec.HealthCheckNodePort)
+	}
+	if spec.PublishNotReadyAddresses {
+		desired.WithPublishNotReadyAddresses(true)
+	}
+	if spec.SessionAffinityConfig != nil {
+		affinity := corev1apply.SessionAffinityConfig()
+		if spec.SessionAffinityConfig.ClientIP != nil {
+			clientIP := corev1apply.ClientIPConfig()
+			if spec.SessionAffinityConfig.ClientIP.TimeoutSeconds != nil {
+				clientIP.WithTimeoutSeconds(*spec.SessionAffinityConfig.ClientIP.TimeoutSeconds)
 			}
+			affinity.WithClientIP(clientIP)
 		}
+		desired.WithSessionAffinityConfig(affinity)
 	}
+	if len(spec.IPFamilies) > 0 {
+		desired.WithIPFamilies(spec.IPFamilies...)
+	}
+	if spec.IPFamilyPolicy != nil {
+		desired.WithIPFamilyPolicy(*spec.IPFamilyPolicy)
+	}
+	if spec.AllocateLoadBalancerNodePorts != nil {
+		desired.WithAllocateLoadBalancerNodePorts(*spec.AllocateLoadBalancerNodePorts)
+	}
+	if spec.LoadBalancerClass != nil {
+		desired.WithLoadBalancerClass(*spec.LoadBalancerClass)
+	}
+	if spec.InternalTrafficPolicy != nil {
+		desired.WithInternalTrafficPolicy(*spec.InternalTrafficPolicy)
+	}
+	if spec.TrafficDistribution != nil {
+		desired.WithTrafficDistribution(*spec.TrafficDistribution)
+	}
+
+	return desired
 }
 
 // deleteService deletes the Service associated with the Application
@@ -970,6 +1027,9 @@ func (r *ApplicationReconciler) deleteService(ctx context.Context, app *wandbv2.
 			return nil
 		}
 		return err
+	}
+	if !metav1.IsControlledBy(svc, app) {
+		return nil
 	}
 	deletePolicy := client.PropagationPolicy(metav1.DeletePropagationBackground)
 	if err := r.Delete(ctx, svc, deletePolicy); err != nil {
@@ -1259,6 +1319,7 @@ func (r *ApplicationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&appsv1.StatefulSet{}).
 		Owns(&corev1.Service{}).
 		Owns(&autoscalingv2.HorizontalPodAutoscaler{}).
+		Owns(&batchv1.CronJob{}).
 		Named("application")
 
 	if utils.IsRegistered(r.Scheme, &v1alpha1.Rollout{}) {

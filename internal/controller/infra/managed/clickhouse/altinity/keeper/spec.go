@@ -52,7 +52,10 @@ func ToKeeperVendorSpec(
 	}
 
 	labels := common.BuildWandbLabels(wandb, KeeperModuleName)
+	// Keeper otherwise saves preprocessed configuration beside its immutable
+	// /etc config. Use the existing data PVC for that startup/reload write.
 	settings := chiv1.NewSettings()
+	settings.Set("path", chiv1.NewSettingScalar("/var/lib/clickhouse-keeper/"))
 	settings.Set("keeper_server/enable_reconfiguration", chiv1.NewSettingScalar("true"))
 
 	podSpec := corev1.PodSpec{
@@ -167,6 +170,7 @@ func keeperContainerSecurityContext() *corev1.SecurityContext {
 	sc := &corev1.SecurityContext{
 		RunAsNonRoot:             ptr.To(true),
 		AllowPrivilegeEscalation: ptr.To(false),
+		ReadOnlyRootFilesystem:   ptr.To(true),
 		Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
 		SeccompProfile:           runtimeDefaultSeccompProfile(),
 	}

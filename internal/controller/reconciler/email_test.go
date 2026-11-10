@@ -21,6 +21,12 @@ func emailTestSelector(name, key string) corev1.SecretKeySelector {
 	}
 }
 
+// emailTestValue is the ValueOrSecret counterpart for the notification spec
+// fields (Sink/SMTP/Slack); emailTestSelector remains for status.emailSink.
+func emailTestValue(name, key string) apiv2.ValueOrSecret {
+	return apiv2.ValueFromSecret(name, key, false)
+}
+
 func emailTestWandb(t *testing.T) (*runtime.Scheme, *apiv2.WeightsAndBiases) {
 	t.Helper()
 	scheme := runtime.NewScheme()
@@ -44,7 +50,7 @@ func emailTestWandb(t *testing.T) (*runtime.Scheme, *apiv2.WeightsAndBiases) {
 
 func TestReconcileEmailSinkUsesConfiguredSink(t *testing.T) {
 	scheme, wandb := emailTestWandb(t)
-	selector := emailTestSelector("existing-email", "url")
+	selector := emailTestValue("existing-email", "url")
 	wandb.Spec.Wandb.Notifications.Email = &apiv2.EmailSpec{Sink: &selector}
 	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(wandb).Build()
 
@@ -58,11 +64,11 @@ func TestReconcileEmailSinkUsesConfiguredSink(t *testing.T) {
 
 func TestReconcileEmailSinkDoesNotDeleteConfiguredSink(t *testing.T) {
 	scheme, wandb := emailTestWandb(t)
-	selector := emailTestSelector("wandb-email-sink", "sink")
+	selector := emailTestValue("wandb-email-sink", "sink")
 	wandb.Spec.Wandb.Notifications.Email = &apiv2.EmailSpec{Sink: &selector}
 	configured := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      selector.Name,
+			Name:      selector.SecretKeyRef().Name,
 			Namespace: wandb.Namespace,
 			OwnerReferences: []metav1.OwnerReference{{
 				APIVersion: apiv2.GroupVersion.String(),
@@ -108,11 +114,11 @@ func TestResolveEnvvarsCustomResourceEmailSink(t *testing.T) {
 
 func TestReconcileEmailSinkGeneratesAuthenticatedSMTPURL(t *testing.T) {
 	scheme, wandb := emailTestWandb(t)
-	username := emailTestSelector("smtp", "username")
-	password := emailTestSelector("smtp", "password")
+	username := emailTestValue("smtp", "username")
+	password := emailTestValue("smtp", "password")
 	wandb.Spec.Wandb.Notifications.Email = &apiv2.EmailSpec{SMTP: &apiv2.EmailSMTPSpec{
-		Host:     emailTestSelector("smtp", "host"),
-		Port:     emailTestSelector("smtp", "port"),
+		Host:     emailTestValue("smtp", "host"),
+		Port:     emailTestValue("smtp", "port"),
 		Username: username,
 		Password: password,
 	}}

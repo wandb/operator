@@ -1,6 +1,7 @@
 package telemetry
 
 import (
+	"slices"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -84,6 +85,29 @@ func TestManagedWorkloadEnvVars(t *testing.T) {
 func TestManagedWorkloadEnvVarsDisabled(t *testing.T) {
 	if got := ManagedWorkloadEnvVars("api", TelemetryRuntimeConfig{Enabled: false}); len(got) != 0 {
 		t.Fatalf("disabled telemetry returned sources: %#v", got)
+	}
+}
+
+func TestReadEndpointsAreNotApplicationEnvVars(t *testing.T) {
+	queryFields := []string{"metricsReadEndpoint", "logsReadEndpoint", "tracesReadEndpoint"}
+
+	for _, field := range queryFields {
+		if _, ok := SecretKeyForField(field); ok {
+			t.Errorf("SecretKeyForField(%q) resolved a key; read endpoints must not be env vars", field)
+		}
+	}
+
+	for _, app := range []string{"api", "executor", "anaconda2", "weave-trace"} {
+		for _, envVar := range ManagedWorkloadEnvVars(app, TelemetryRuntimeConfig{Enabled: true}) {
+			if slices.Contains(queryFields, envVar.Name) {
+				t.Errorf("app %q got read endpoint env var %q", app, envVar.Name)
+			}
+			for _, source := range envVar.Sources {
+				if slices.Contains(queryFields, source.Field) {
+					t.Errorf("app %q sources a read endpoint field %q", app, source.Field)
+				}
+			}
+		}
 	}
 }
 
