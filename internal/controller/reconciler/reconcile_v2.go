@@ -433,6 +433,7 @@ func ReconcileWandbManifest(
 	logger.Info("Manifest Features", "features", manifest.Features)
 
 	validateLegacyOverrides(ctx, wandb, manifest)
+	validateApplicationOverrides(ctx, wandb, manifest)
 
 	result, err = reconcileManifestSecrets(ctx, client, wandb, manifest)
 	if err != nil {
