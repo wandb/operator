@@ -202,6 +202,82 @@ func TestConvertTo_CustomCACerts(t *testing.T) {
 	require.Equal(t, "corp-ca-certs", dst.Spec.Global.CACertsConfigMap)
 }
 
+func TestConvertTo_ImageRegistry(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"imageRegistry": "registry.internal.example.com/wandb-mirror",
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	require.Equal(t, "registry.internal.example.com/wandb-mirror", dst.Spec.Global.ImageRegistry)
+}
+
+func TestConvertTo_ImageRegistryAbsent(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{"host": "http://wandb.example.com"},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	require.Empty(t, dst.Spec.Global.ImageRegistry)
+}
+
+// TestConvertTo_ImageRegistryEmptyStringNotCopied: an empty v1 value must not
+// overwrite a registry the CR already carries across a v2 → v1 → v2 bounce.
+func TestConvertTo_ImageRegistryEmptyStringNotCopied(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	dst.Spec.Global.ImageRegistry = "already-set.example.com"
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{"imageRegistry": ""},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	require.Equal(t, "already-set.example.com", dst.Spec.Global.ImageRegistry)
+}
+
+// TestConvertTo_ImageRegistryWithRepositoryPrefix: v1 commonly sets both; only
+// imageRegistry has a v2 home, and it must win.
+func TestConvertTo_ImageRegistryWithRepositoryPrefix(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"imageRegistry":    "us-docker.pkg.dev/wandb-production/public",
+			"repositoryPrefix": "us-docker.pkg.dev/wandb-production/public",
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	require.Equal(t, "us-docker.pkg.dev/wandb-production/public", dst.Spec.Global.ImageRegistry)
+}
+
+// TestConvertTo_RepositoryPrefixOnlyIsNotConverted: repositoryPrefix has no v2
+// equivalent, so it is logged and dropped rather than guessed at.
+func TestConvertTo_RepositoryPrefixOnlyIsNotConverted(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"repositoryPrefix": "us-docker.pkg.dev/wandb-production/public",
+		},
+	})
+	require.NoError(t, src.ConvertTo(dst))
+
+	require.Empty(t, dst.Spec.Global.ImageRegistry)
+}
+
+func TestConvertTo_ImageRegistryNonStringFails(t *testing.T) {
+	dst := &appsv2.WeightsAndBiases{}
+	src := newV1(map[string]interface{}{
+		"global": map[string]interface{}{
+			"imageRegistry": map[string]interface{}{"unexpected": "shape"},
+		},
+	})
+	err := src.ConvertTo(dst)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "spec.values.global.imageRegistry")
+}
+
 func TestConvertTo_VersionFromAppImageTag(t *testing.T) {
 	// A resolvable manifest: these assert version mapping, not per-app overrides.
 	withConversionManifestApps(t)
