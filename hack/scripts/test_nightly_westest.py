@@ -25,6 +25,123 @@ def load(name, path):
 matrix = load("matrix", REPO / "hack/scripts/nightly-westest-matrix.py")
 runner = load("runner", REPO / ".github/actions/westest-run/run.py")
 app_release = load("app_release", REPO / "hack/scripts/nightly-westest-app-version.py")
+changes = load("changes", REPO / "hack/scripts/nightly-westest-changes.py")
+
+
+class NightlyChangesTests(unittest.TestCase):
+    def setUp(self):
+        self.env = {"GITHUB_EVENT_NAME": "schedule", "GITHUB_REF": "refs/heads/main",
+                    "GITHUB_SHA": "a" * 40, "GITHUB_REPOSITORY": "wandb/operator",
+                    "GITHUB_RUN_ID": "200", "GITHUB_RUN_NUMBER": "20"}
+
+    @staticmethod
+    def past_run(number=19, **fields):
+        return {"id": number * 10, "run_number": number, "head_sha": "a" * 40,
+                "event": "schedule", "head_branch": "main", "status": "completed",
+                "conclusion": "success", **fields}
+
+    @staticmethod
+    def gate(conclusion="success"):
+        return {"jobs": [{"name": changes.GATE_JOB_NAME, "conclusion": conclusion}]}
+
+    def test_manual_dispatch_always_runs_without_history_access(self):
+        with patch.object(changes, "api") as api, patch.object(changes.shutil, "which", return_value=None):
+            result = changes.decide({"GITHUB_EVENT_NAME": "workflow_dispatch"})
+        self.assertEqual(result["should_run"], "true")
+        api.assert_not_called()
+
+    def test_first_scheduled_run_runs(self):
+        with patch.object(changes, "api", return_value={"workflow_runs": []}):
+            self.assertEqual(changes.decide(self.env)["should_run"], "true")
+
+    def test_new_commit_runs(self):
+        responses = [{"workflow_runs": [self.past_run(head_sha="b" * 40)]}, self.gate()]
+        with patch.object(changes, "api", side_effect=responses):
+            result = changes.decide(self.env)
+        self.assertEqual(result["should_run"], "true")
+        self.assertEqual(result["previous_sha"], "b" * 40)
+
+    def test_unchanged_commit_skips_even_after_downstream_failure_or_cancellation(self):
+        for conclusion in ["success", "failure", "cancelled", "timed_out"]:
+            responses = [{"workflow_runs": [self.past_run(conclusion=conclusion)]}, self.gate()]
+            with self.subTest(conclusion=conclusion), patch.object(changes, "api", side_effect=responses):
+                self.assertEqual(changes.decide(self.env)["should_run"], "false")
+
+    def test_failed_gate_does_not_hide_changes_that_were_never_admitted(self):
+        responses = [{"workflow_runs": [self.past_run(), self.past_run(18, head_sha="b" * 40)]},
+                     self.gate("failure"), self.gate()]
+        with patch.object(changes, "api", side_effect=responses):
+            result = changes.decide(self.env)
+        self.assertEqual(result["should_run"], "true")
+        self.assertEqual(result["previous_run_id"], "180")
+
+    def test_skipped_nights_preserve_the_same_baseline(self):
+        # A skip completes the gate successfully, carrying the prior commit forward.
+        responses = [{"workflow_runs": [self.past_run(), self.past_run(18)]}, self.gate()]
+        with patch.object(changes, "api", side_effect=responses) as api:
+            self.assertEqual(changes.decide(self.env)["should_run"], "false")
+        self.assertEqual(api.call_count, 2)
+
+    def test_ignores_current_future_manual_and_other_branch_runs(self):
+        runs = [self.past_run(20), self.past_run(21), self.past_run(19, event="workflow_dispatch"),
+                self.past_run(18, head_branch="feature"), self.past_run(17, head_sha="b" * 40)]
+        with patch.object(changes, "api", side_effect=[{"workflow_runs": runs}, self.gate()]) as api:
+            result = changes.decide(self.env)
+        self.assertEqual(result["previous_run_id"], "170")
+        self.assertEqual(api.call_count, 2)
+
+    def test_paginates_runs_and_jobs_including_earlier_attempts(self):
+        responses = [{"workflow_runs": [self.past_run(number) for number in range(20, 120)]},
+                     {"workflow_runs": [self.past_run(19)]},
+                     {"jobs": [{"name": "other", "conclusion": "success"}] * 100}, self.gate()]
+        with patch.object(changes, "api", side_effect=responses) as api:
+            self.assertEqual(changes.decide(self.env)["should_run"], "false")
+        endpoints = [call.args[0] for call in api.call_args_list]
+        self.assertIn("event=schedule&branch=main", endpoints[0])
+        self.assertIn("page=2", endpoints[1])
+        self.assertIn("filter=all", endpoints[2])
+        self.assertIn("page=2", endpoints[3])
+
+    def test_active_previous_nightly_fails_closed(self):
+        with patch.object(changes, "api", return_value={"workflow_runs": [self.past_run(status="in_progress")]}):
+            with self.assertRaisesRegex(RuntimeError, "still active"):
+                changes.decide(self.env)
+
+    def test_truncated_history_fails_closed(self):
+        page = {"workflow_runs": [self.past_run(number) for number in range(20, 120)]}
+        with patch.object(changes, "api", return_value=page):
+            with self.assertRaisesRegex(RuntimeError, "available nightly history"):
+                changes.decide(self.env)
+
+    def test_history_error_writes_no_run_permission(self):
+        with tempfile.TemporaryDirectory() as root:
+            output, summary = Path(root) / "output", Path(root) / "summary"
+            env = dict(self.env, GITHUB_OUTPUT=str(output), GITHUB_STEP_SUMMARY=str(summary))
+            with patch.object(changes.shutil, "which", return_value="/usr/bin/gh"), \
+                    patch.object(changes.subprocess, "run", side_effect=subprocess.CalledProcessError(1, ["gh"])):
+                with self.assertRaisesRegex(RuntimeError, "refusing to start paid work"):
+                    changes.main(env)
+            self.assertFalse(output.exists())
+            self.assertFalse(summary.exists())
+
+    def test_missing_github_cli_writes_no_run_permission_or_starts_subprocess(self):
+        with tempfile.TemporaryDirectory() as root:
+            output, summary = Path(root) / "output", Path(root) / "summary"
+            env = dict(self.env, GITHUB_OUTPUT=str(output), GITHUB_STEP_SUMMARY=str(summary))
+            with patch.object(changes.shutil, "which", return_value=None), \
+                    patch.object(changes.subprocess, "run") as command:
+                with self.assertRaisesRegex(RuntimeError, r"GitHub CLI \(gh\) is required"):
+                    changes.main(env)
+                command.assert_not_called()
+            self.assertFalse(output.exists())
+            self.assertFalse(summary.exists())
+
+    def test_rejects_unexpected_events_and_non_main_schedules(self):
+        for fields in [{"GITHUB_EVENT_NAME": "push"}, {"GITHUB_REF": "refs/heads/feature"}]:
+            with self.subTest(fields=fields), patch.object(changes, "api") as api:
+                with self.assertRaises(ValueError):
+                    changes.decide(dict(self.env, **fields))
+                api.assert_not_called()
 
 
 class ApplicationReleaseTests(unittest.TestCase):
