@@ -1,0 +1,12 @@
+# Webhook listen config only. Do not add a cert Secret volume — OLM mounts
+# serving certs at this path when it installs the CSV.
+- op: add
+  path: /spec/template/spec/containers/0/args/-
+  value: --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
+
+- op: add
+  path: /spec/template/spec/containers/0/ports/-
+  value:
+    containerPort: 9443
+    name: webhook-server
+    protocol: TCP

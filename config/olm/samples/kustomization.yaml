@@ -1,0 +1,7 @@
+## Samples included in the OLM bundle alm-examples.
+## Managed MySQL and object store are omitted — Moco and SeaweedFS are
+## not in the community-operators-prod catalog.
+resources:
+- apps_v1_weightsandbiases.yaml
+- apps_v2_weightsandbiases.yaml
+- apps_v2_application.yaml
