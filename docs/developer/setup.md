@@ -9,10 +9,11 @@ sample if it is absent; preserve an existing settings file.
 
 - A Kubernetes cluster (e.g. [kind](https://kind.sigs.k8s.io/))
 - [Tilt](https://tilt.dev/)
-- [Kubebuilder](https://book.kubebuilder.io/quick-start.html)
-- [Kustomize](https://kustomize.io/)
 - [jq](https://stedolan.github.io/jq/) for some helper scripts
 - [helm](https://github.com/helm/helm)
+- Optional: [Kubebuilder](https://book.kubebuilder.io/quick-start.html) and
+  [Kustomize](https://kustomize.io/) CLIs. `make` downloads its own
+  controller-gen, kustomize, setup-envtest, and golangci-lint into `bin/`.
 
 ### Install Chart Testing
 
@@ -66,6 +67,10 @@ Without a version, kind uses its default image. An existing cluster is reused on
 if its nodes match the requested minor or exact patch version; the script does
 not recreate mismatched clusters automatically.
 
+Unlike plain `kind create cluster`, the script also installs metrics-server with
+`--kubelet-insecure-tls`. It names the cluster `kind` unless `kindClusterName`
+is set in `tilt-settings.star`.
+
 ## Install development tools
 
 ### Tilt
@@ -76,17 +81,17 @@ not recreate mismatched clusters automatically.
 brew install tilt
 ```
 
-### Kubebuilder
+### Kubebuilder (optional)
 
-[kubebuilder](https://book.kubebuilder.io/quick-start.html) is a tool for building Kubernetes operators. Install `kubebuilder`:
+[kubebuilder](https://book.kubebuilder.io/quick-start.html) is only needed to scaffold new APIs or controllers. Install `kubebuilder`:
 
 ```bash
 brew install kubebuilder
 ```
 
-### Kustomize
+### Kustomize (optional)
 
-[kustomize](https://kustomize.io/) is used to build Kubernetes manifests. Install `kustomize`:
+[kustomize](https://kustomize.io/) builds the Kustomize manifests under `config/`; the `make` targets use their own copy in `bin/`. Install `kustomize`:
 
 ```bash
 brew install kustomize
@@ -109,7 +114,7 @@ The default Tilt setup follows the normal operator install path:
 - rewrites non-loopback W&B hostnames through cluster CoreDNS so workloads can
   call the same URL through the local gateway or ingress
 - uses the published server manifest repository by default
-- keeps telemetry off unless `observabilityMode="full"` is set
+- keeps telemetry off unless `observabilityMode` is set to `full` or `forward`
 
 Common W&B CR settings are scalar values such as `wandbHostname`,
 `wandbVersion`, `size`, `retentionPolicy`, `licenseFile`, `manifestSource`,
@@ -170,6 +175,24 @@ For CRC/OpenShift Local, run `./hack/scripts/setup_crc.sh` and use the
 image through CRC's internal registry, and applies the OpenShift Helm profile.
 For other OpenShift clusters, set `openshiftSCC=True` explicitly.
 
+### Chart dependency repositories
+
+Tilt's `Operator-Chart-Deps` resource runs `helm dependency build ./deploy/operator --skip-refresh`,
+which needs the chart's dependency repositories added and indexed locally. Add
+them once, as CI does:
+
+```bash
+helm repo add ci-wandb https://charts.wandb.ai/
+helm repo add ci-moco https://cybozu-go.github.io/moco/
+helm repo add ci-ot-container-kit https://ot-container-kit.github.io/helm-charts
+helm repo add ci-seaweedfs https://seaweedfs.github.io/seaweedfs-operator/
+helm repo add ci-prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo add ci-altinity https://helm.altinity.com
+helm repo add ci-victoria-metrics https://victoriametrics.github.io/helm-charts/
+helm repo add ci-grafana https://grafana.github.io/helm-charts
+helm repo update
+```
+
 ### Running Tilt
 
 ```bash
@@ -206,7 +229,7 @@ then run `tilt down`.
 
 
 Continue with the [development workflow](workflow.md) and [testing](testing.md).
-For specialized environments, see [local webhook development](../../config/local-dev/README.md)
-and [OpenShift local development](../../config/openshift-dev/README.md). The
-colocated webhook guide contains older Tilt instructions; verify its settings
-against the current Tiltfile before using that optional path.
+For OpenShift, see [OpenShift local development](../../config/openshift-dev/README.md).
+The out-of-cluster webhook guide in `config/local-dev/` is out of date: its
+`setup-local-webhook` script is gone and `make run-local-webhook` passes a flag the
+manager no longer defines. Use Tilt instead.

@@ -12,7 +12,7 @@ Use [setup](setup.md) for the local cluster and Tilt environment.
 | Mocked interface | Run `go generate ./...` and inspect the changed fakes |
 | Helm templates or values | Run chart checks and inspect Tilt's Helm release update |
 | Dependency API/CRDs | Follow the dependency's colocated vendoring notes and verify generated/embedded CRDs |
-| Local W&B configuration | Edit `tilt-settings.star` or the `crFile` base; Tilt's scalar settings can override base fields |
+| Local W&B configuration | Edit `tilt-settings.star` or the `crFile` base; Tilt's scalar settings can override base fields. Tilt does not watch `crFile`, so save `tilt-settings.star` or restart Tilt to regenerate the CR |
 | Kustomize configuration | Rebuild the affected Kustomize output; the default Tilt installation uses Helm, so it is not a Kustomize validation path |
 
 ## Code generation and CRD installation
@@ -26,19 +26,25 @@ Operator CRDs used by the installer. Review the diff alongside the source change
 Do not hand-edit generated CRDs or deepcopy methods.
 
 The current Tilt resources are `Operator-Codegen` and `Operator-Build`.
-`Operator-Codegen` runs `make manifests generate` and has no API-file watch list;
-a binary rebuild alone does not prove the installed schema has changed.
-After regenerating, trigger the Operator Helm resource if needed:
+`Operator-Codegen` runs only `make manifests generate` and has no API-file watch
+list. It does not run `sync-crd-embed`, so neither triggering it nor restarting
+Tilt updates the CRDs the installer embeds. A binary rebuild alone does not prove
+the installed schema has changed.
+
+After the full make command, `Operator-Build` sees the changed files under
+`internal/`, rebuilds the manager and CRD installer, and the new image upgrades
+the `wandb-operator` release. Trigger the release manually only if it did not update:
 
 ```bash
-tilt trigger Operator-Codegen
 tilt trigger wandb-operator
 ```
 
-The default Helm release uses the CRD installer hook. Check the hook Job and the
-installed schema with `kubectl explain`; restart Tilt when its configuration or
-dependencies need reevaluation. Do not apply raw CRD bases as a generic substitute
-for the chart's webhook and certificate configuration.
+The default Helm release installs CRDs through a pre-install/pre-upgrade CRD
+installer hook. Its Job is deleted on success, so it is visible only while it
+runs or after it fails. Confirm the installed schema with `kubectl explain`;
+restart Tilt when its configuration or dependencies need reevaluation. Do not
+apply raw CRD bases as a generic substitute for the chart's webhook and
+certificate configuration.
 
 ## Validate and contribute
 

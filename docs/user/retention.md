@@ -8,6 +8,10 @@ infrastructure when the W&B resource is deleted. Its default is `detach`.
 | `detach` | Remove W&B ownership from managed infrastructure so it can survive CR deletion |
 | `purge` | Run the managed infrastructure deletion path; dependent data may be deleted |
 
+Use exactly `detach` or `purge`. The API accepts other values, but they trigger
+neither path, so garbage collection deletes the managed infrastructure along with
+the resource.
+
 A managed instance can override the top-level policy:
 
 ```yaml
@@ -40,8 +44,8 @@ alongside service data when planning recovery.
 1. Record the W&B resource, release values, infrastructure resource names,
    connection Secrets, and PVCs needed for recovery.
 2. Back up the data services and verify that the backups can be restored.
-   Include object storage used by managed ClickHouse, as well as application
-   objects and database state.
+   Include object storage used by managed ClickHouse and managed Kafka
+   (Bufstream), as well as application objects and database state.
 3. Inspect top-level and per-instance retention settings and the backing
    controllers' own PVC retention behavior.
 4. Keep Operator and the backing controllers running while deleting the W&B CR

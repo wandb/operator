@@ -45,8 +45,10 @@ exist and be able to issue a certificate for your hostname.
 Set `spec.networking.ingress.managed: false` when you own the Ingress. Operator
 does not need its name and does not create, update, or delete it. You must route
 the application's paths to the generated Services yourself, including `/console`
-when Console is enabled. `ingressClassName` is still required so Operator can
-configure controller-specific backend Service settings.
+when Console is enabled and infrastructure paths the server manifest declares,
+such as `/bucket` to the managed object store's `<name>-s3` Service.
+`ingressClassName` is still required so Operator can configure
+controller-specific backend Service settings.
 
 Changing an Operator-managed Ingress to `managed: false` removes the consolidated
 Ingress owned by that W&B resource. Arrange the replacement route before changing
@@ -115,21 +117,44 @@ namespace. Configure certificates and listener policy on that external Gateway.
 Operator attaches routes without managing the Gateway. Managed Gateways require
 `gatewayClassName`; external Gateways require `gatewayRef`.
 
+When managed object storage or ClickHouse runs in another namespace, Operator
+creates its infrastructure HTTPRoutes there, so the listener must also accept
+routes from that namespace. A managed Gateway widens its allowed routes for this
+automatically.
+
+## Request body size
+
+Operator raises request body limits only for classes named exactly `nginx`: a
+managed Ingress gets `nginx.ingress.kubernetes.io/proxy-body-size: "0"`, and a
+managed Gateway gets an NGINX Gateway Fabric `ClientSettingsPolicy` (unlimited
+body, 2m body timeout), which requires that controller's CRDs. For other classes,
+set upload limits through `spec.networking.annotations` on a managed resource, or
+directly on your own Ingress, Gateway, or controller policy.
+
 ## Implementation-specific TLS options
 
-An explicit managed listener accepts `tls.options`. For example, the existing
-GKE configuration recipe attaches a Compute SSL certificate using:
+An explicit managed listener accepts `tls.options`. For example, a global GKE
+Gateway attaches a Google-managed Compute SSL certificate using:
 
 ```yaml
-tls:
-  mode: Terminate
-  options:
-    networking.gke.io/pre-shared-certs: wandb-cert
+gateway:
+  managed: true
+  gatewayClassName: gke-l7-global-external-managed
+  listeners:
+    - name: https
+      hostname: wandb.example.com
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        options:
+          networking.gke.io/pre-shared-certs: wandb-cert
 ```
 
-Choose options supported by your Gateway controller and class. Regional GKE
-Certificate Manager certificates use `networking.gke.io/cert-manager-certs`.
-Certificate maps use the `networking.gke.io/certmap` Gateway annotation under
+Choose options supported by your Gateway controller and class. A regional GKE
+Gateway backed by Certificate Manager uses `networking.gke.io/cert-manager-certs`
+instead. Global Certificate Manager certificate maps use the
+`networking.gke.io/certmap` Gateway annotation under
 `spec.networking.annotations`, rather than a listener option.
 
 ## Verify and change routing

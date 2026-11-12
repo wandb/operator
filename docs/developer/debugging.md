@@ -13,7 +13,8 @@ for deployment failures that also occur outside Tilt.
 3. Follow the [generation workflow](workflow.md), then inspect the installed
    schema with `kubectl explain weightsandbiases.spec --api-version=apps.wandb.com/v2`.
 4. Inspect the CRD installer Job and webhook certificate if chart updates or
-   admission fail.
+   admission fail. The hook Job is deleted on success, so it appears only while
+   running or after a failure.
 
 ```bash
 kubectl get jobs,pods,certificate -n wandb-operators
@@ -32,10 +33,10 @@ Use `kubectl describe` for scheduling, PVC, image-pull, and probe events. Check
 application container logs when the controller has successfully created the
 workload but the application is failing.
 
-For host debugging, inspect `make run` and `make run-local-webhook` in the
-[Makefile](../../Makefile). The optional [colocated local webhook guide](../../config/local-dev/README.md)
-contains older Tilt settings; the current manager entrypoint is `cmd/manager`.
-Do not run two controllers against the same test resource while debugging.
+Debug through the Tilt path in [setup](setup.md), which runs `cmd/manager` in
+the cluster with the chart's webhook certificates. `make run` in the
+[Makefile](../../Makefile) runs the same entrypoint from the host. Do not run two
+controllers against the same test resource while debugging.
 
 ## Reset a development environment
 

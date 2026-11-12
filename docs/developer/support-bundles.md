@@ -8,10 +8,11 @@ The implementation is split between
 [the collection package](../../internal/observability/supportbundle).
 
 Reconciliation runs before the main infrastructure readiness gate and retries
-independently of W&B readiness. It needs a resolved default object-store URL
-Secret before installing the collection template. `status.supportBundle` reports
-template readiness, image/version, CronJob name, active collections, and the last
-successful time. Disabling the feature removes its managed installation resources.
+independently of W&B readiness. It applies its ValidatingAdmissionPolicies first;
+without that API it requeues and installs nothing. It then waits for a resolved
+default object-store URL Secret before installing the collection template.
+`status.supportBundle` reports template readiness, image/version, CronJob name,
+whether a collection is `running`, and the last successful time. Disabling the feature removes its managed installation resources.
 
 The collector image is separate from the Operator image. Its pinned version and
 registry rewrite live in [image.go](../../pkg/observability/supportbundle/image.go).

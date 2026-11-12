@@ -8,9 +8,11 @@ explicitly. Collection readiness is separate from W&B readiness.
 ## Configuration and prerequisites
 
 The default object-store connection must be available before the template can
-become ready. The collector uses that connection for bundle storage. The cluster
-must also support `admissionregistration.k8s.io/v1` ValidatingAdmissionPolicy and
-ValidatingAdmissionPolicyBinding resources used to constrain collection helpers.
+become ready. The collector uses that connection for bundle storage. The template
+also requires the `admissionregistration.k8s.io/v1` ValidatingAdmissionPolicy API;
+Operator uses ValidatingAdmissionPolicy and ValidatingAdmissionPolicyBinding
+resources to constrain collection helpers. Without that API, Operator keeps
+retrying and the template stays not ready.
 
 To opt out, merge this fragment into the W&B resource:
 
@@ -22,9 +24,12 @@ spec:
 
 Set `enabled: true` to enable it again. Omit `spec.supportBundle.version` to use
 Operator's pinned Lumen version; an explicit version overrides the collector image
-tag. For a private registry, mirror the selected `wandb/lumen` image and configure
-`spec.global.imageRegistry` and `imagePullSecrets` as described in
-[restricted environments](restricted-environments.md).
+tag. For a private registry, configure `spec.global.imageRegistry` and
+`imagePullSecrets` as described in
+[restricted environments](restricted-environments.md), then mirror the Lumen image
+to the reference shown in `status.supportBundle.image`. The registry is prefixed
+to the full upstream path, for example
+`<imageRegistry>/us-docker.pkg.dev/wandb-production/public/wandb/lumen:<version>`.
 
 ## Launch and inspect a collection
 

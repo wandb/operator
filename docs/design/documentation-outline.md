@@ -28,13 +28,14 @@ Entry points established by the refactor:
 | Root `DEVELOPMENT.md` | Short pointer to the developer guide after its content is consolidated. |
 
 Keep [CLAUDE.md](../../CLAUDE.md) as agent guidance and
-[CHANGELOG.md](../../CHANGELOG.md) as release history. Agent guidance should link
-to the relevant developer procedures. Keep changelog generation under the release
-tooling and link to release history from the user guide. The changelog currently
-covers the v1 release line; clarify the v2 release-note location in that guide.
+[CHANGELOG.md](../../CHANGELOG.md) as v1 release history. Agent guidance should link
+to the relevant developer procedures. No release workflow writes the changelog:
+v2 release notes are generated on GitHub Releases, and v1 entries are written in
+the v1 release pull request. Link to both from the user guide.
 
 The sections below are topic outlines, not a requirement to create one file per
-heading. “Existing” identifies source material, not verified completeness.
+heading. “Existing” identifies source material, not verified completeness;
+removed sources are named in plain text, with a link to where the material now lives.
 Design proposals must be checked against the implementation before their examples
 or behavior are promoted into user instructions. Gaps describe missing coverage
 in the documentation in scope, not necessarily missing product features.
@@ -52,7 +53,7 @@ should work from published releases without requiring a source checkout.
 - Operator version versus W&B version, supported combinations, cluster
   prerequisites, permissions, storage, capacity, hostname, and licensing needs.
 
-**Existing:** [README overview](../user/planning.md), prerequisites in
+**Existing:** the former README overview (now [planning](../user/planning.md)), prerequisites in
 [migration](../user/migrating-v1-to-v2.md) and [Console setup](../user/console.md).
 
 **Work:** Consolidate the concepts and prerequisites. Add verified compatibility
@@ -65,7 +66,7 @@ and capacity guidance; explain what must exist before installation begins.
 - Verify infrastructure, application readiness, hostname access, and initial
   login. Include an OpenShift deployment path.
 
-**Existing:** [README installation](../user/installation.md),
+**Existing:** the former README installation section (now [installation](../user/installation.md)),
 [OpenShift deployment](../user/openshift.md), and installation steps in
 [Console setup](../user/console.md).
 
@@ -94,7 +95,7 @@ integration and cannot serve as the CR configuration reference.
 - Supply connection settings and credentials, configure TLS, and verify
   connectivity. Explain storage endpoint requirements for browser access.
 
-**Existing:** [Infrastructure connection settings](../developer/connection-internals.md),
+**Existing:** the former infrastructure connection settings page (now [connection internals](../developer/connection-internals.md)),
 object-store examples in [OpenShift](../user/openshift.md), connection checks in
 [migration](../user/migrating-v1-to-v2.md), and the
 [value or secret design](wandb_v2/secret_or_value_connection_fields.md).
@@ -111,7 +112,7 @@ keep application parser internals in developer documentation.
   requirements, and how to verify routes.
 
 **Existing:** [Networking](../user/networking.md),
-[README Gateway TLS example](../user/networking.md#implementation-specific-tls-options), and
+the former README Gateway TLS example (now in [networking](../user/networking.md#implementation-specific-tls-options)), and
 [Ingress and Gateway design](networking-plan.md).
 
 **Work:** Retain useful Ingress guidance and write the general Gateway setup
@@ -125,7 +126,7 @@ verification alongside controller-specific recipes.
 - Configure supported proxy settings and custom CAs for Operator and W&B
   workloads, including how to verify access.
 
-**Existing:** [README custom CAs](../user/restricted-environments.md#trust-a-custom-registry-ca)
+**Existing:** the former README custom CA section (now in [restricted environments](../user/restricted-environments.md#trust-a-custom-registry-ca))
 and [private registry design](wandb_v2/private_registry_manifests.md).
 
 **Work:** Write an end-to-end deployment procedure from verified implementation
@@ -139,7 +140,7 @@ guide; proxy guidance is also missing from the main user docs.
   verify that collection and forwarding work.
 
 **Existing:** [Console setup](../user/console.md),
-[Watchtower deployment](../developer/console.md), and
+the former Watchtower deployment page (now [Console integration](../developer/console.md)), and
 [monitoring](../user/monitoring.md).
 
 **Work:** Keep Console and telemetry as distinct guides within this section.
@@ -169,7 +170,7 @@ instructions.
 - Identify backup responsibilities, provider-specific restore prerequisites,
   and supported recovery or reattachment procedures.
 
-**Existing:** Retention examples in [README](../../README.md) and backup and
+**Existing:** Retention examples in the former README and backup and
 ownership cautions in [migration](../user/migrating-v1-to-v2.md).
 
 **Work:** Write lifecycle and recovery guidance. Verify which actions are
@@ -217,7 +218,7 @@ colocated documentation for specialized workflows.
 - Configure local infrastructure and telemetry, use the OpenShift development
   path when needed, and distinguish routine cleanup from a full reset.
 
-**Existing:** [README development and testing](../../README.md#development) and
+**Existing:** the former README development and testing sections (now [setup](../developer/setup.md)) and
 [Tilt dependency guide](wandb_v2/tilt.md).
 
 **Work:** Consolidate onboarding and validate current defaults and commands.
@@ -245,7 +246,7 @@ agent instructions.
 - Document code generation, embedded CRD synchronization, local rebuilds,
   linting, formatting, and contribution conventions.
 
-**Existing:** [Development flow](../developer/workflow.md) and workflow rules in
+**Existing:** the former DEVELOPMENT.md flow guide (now [workflow](../developer/workflow.md)) and workflow rules in
 [CLAUDE.md](../../CLAUDE.md).
 
 **Work:** Replace stale Tilt resource names and paths with the current workflow.
@@ -274,7 +275,7 @@ and alternatives as design history with accurate status labels.
   migrations, application rendering, and cleanup.
 
 **Existing:** Server-manifest explanation in [CLAUDE.md](../../CLAUDE.md), local
-manifest setup in [README](../../README.md), and
+manifest setup in the former README, and
 [private registry design](wandb_v2/private_registry_manifests.md).
 
 **Work:** Write the contributor guide around the current code path. Distinguish
@@ -290,7 +291,7 @@ editing local test fixtures from publishing upstream W&B manifests.
 **Existing:** [Infrastructure reconciliation](wandb_v2/infra_reconciliation.md),
 [connection internals](../developer/connection-internals.md),
 [networking plan](networking-plan.md), [monitoring](../user/monitoring.md),
-[Watchtower deployment](../developer/console.md),
+the former Watchtower deployment page (now [Console integration](../developer/console.md)),
 [Watchtower research](watchtower-history.md), and [Config API](legacy-config-api.md).
 
 **Work:** Separate current implementation contracts from historical research.
@@ -304,9 +305,9 @@ Keep user configuration examples in the user guides and link to them.
 - Cover managed/external infrastructure, networking, migration, custom CAs,
   and application data verification; explain test artifact inspection.
 
-**Existing:** Testing sections in [README](../../README.md) and
-[DEVELOPMENT.md](../developer/workflow.md),
-[nightly WESTest plan and runbook](../developer/nightly-westest.md), and the
+**Existing:** Testing sections in the former README and DEVELOPMENT.md (now
+[testing](../developer/testing.md)), the [nightly WESTest plan](nightly-westest-plan.md)
+(now superseded by the [nightly runbook](../developer/nightly-westest.md)), and the
 application test data inventory (the earlier working draft is no longer present;
 see the [coverage tracker](../developer/documentation.md#remaining-coverage)).
 
@@ -320,8 +321,8 @@ contract in the working tree, not evidence of an implemented generator.
   through status and logs, and distinguish stale CRDs from code failures.
 - Diagnose Tilt build and deployment issues and reset local state safely.
 
-**Existing:** [Development troubleshooting](../developer/workflow.md),
-[README cleanup](../developer/setup.md#cleaning-up-tilt), and
+**Existing:** troubleshooting in the former DEVELOPMENT.md (now [debugging](../developer/debugging.md)),
+the former README cleanup section (now in [setup](../developer/setup.md#cleaning-up-tilt)), and
 [Tilt dependencies](wandb_v2/tilt.md).
 
 **Work:** Update obsolete commands and add a reproducible debugging workflow.
@@ -335,7 +336,7 @@ the developer toolchain.
   v2 release procedures from v1 maintenance.
 
 **Existing:** [v2 releasing](../developer/releasing.md), [v1 releasing](../developer/releasing-v1.md),
-packaging details in [Watchtower deployment](../developer/console.md), and
+packaging details in the former Watchtower deployment page (now [Console integration](../developer/console.md)), and
 release conventions in [CLAUDE.md](../../CLAUDE.md).
 
 **Work:** Use the current release workflows as the authority. Resolve the

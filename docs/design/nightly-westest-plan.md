@@ -242,6 +242,8 @@ critical path.
 
 ## 7. Prerequisites checklist (must be done before Phase 1)
 
+> Superseded; see the current [nightly runbook](../developer/nightly-westest.md#first-run-prerequisites-and-validation).
+
 - [ ] **A token that can read `wandb/westest` releases.** `wandb/operator` is
       **public**, so it can't `uses:` the private `wandb/westest` action (GitHub
       only shares a private repo's actions with private/internal consumers). Instead
@@ -327,6 +329,8 @@ advancing that pointer; nothing needs to be un-published.
 ---
 
 ## 11. On-demand PR testing (related, not nightly)
+
+> Superseded; see the current [nightly runbook](../developer/nightly-westest.md) and [PR testing](../developer/pr-westest-testing.md).
 
 For testing an operator **branch** before it's published, WESTest builds from a
 local checkout — no GAR write needed:
@@ -508,7 +512,7 @@ name: Nightly WESTest
 
 on:
   workflow_dispatch: {}
-  # Enable only after the prerequisites in docs/nightly-westest-testing.md §7:
+  # Enable only after the prerequisites in §7 of this plan:
   # schedule:
   #   - cron: "0 7 * * *"   # 07:00 UTC daily
 
@@ -614,6 +618,8 @@ jobs:
 ---
 
 ## 13. Runbook
+
+> Superseded; see the current [nightly runbook](../developer/nightly-westest.md).
 
 **A nightly went red — is it a regression or flake?**
 1. Open the failed `test` job; download its `westest-<scenario>` artifact

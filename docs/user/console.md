@@ -22,8 +22,11 @@ kubectl patch weightsandbiases wandb -n wandb --type=merge \
 ```
 
 Console is disabled by default. Enabling it grants authenticated administrators
-cluster-wide read access and access to modify the W&B resource. With an external
-Ingress, add its `/console` route to your routing configuration.
+cluster-wide read access to workloads, Pods, logs, Services, and events, and
+update access to every `WeightsAndBiases` resource in the cluster. In the W&B
+namespace it can also read all Secrets and create ActionRuns. With an external
+Ingress, route the `/console` path prefix to Service `<cr>-watchtower` on port
+`8080`.
 
 ## Verify and sign in
 
@@ -84,6 +87,7 @@ required admission policy and binding are in place.
 | Symptom | Check |
 | --- | --- |
 | Console pod is absent | `spec.adminConsoleEnabled` and Operator logs |
+| Operator logs `OPERATOR_IMAGE is unset` | Operator was installed without the Helm chart, which sets this variable; install it with the chart |
 | Status URL is empty | `spec.wandb.hostname` |
 | `/console` returns 404 | Routing mode, route creation, and any external Ingress rules |
 | W&B login is rejected | The W&B account must be an administrator |

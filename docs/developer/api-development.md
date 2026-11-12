@@ -9,11 +9,14 @@ v1 conversion logic lives under [api/v1](../../api/v1).
 1. Define the JSON shape and optionality in the Go API type.
 2. Add appropriate schema markers, webhook defaults, and validation. Distinguish
    a value that is omitted from a value explicitly supplied by the user.
+   Defaulting and validation live in
+   [weightsandbiases_webhook.go](../../internal/webhook/v2/weightsandbiases_webhook.go).
 3. Trace how the reconciler consumes the field and reports status.
 4. Check v1/v2 conversion and existing persisted objects when changing an
    established field or representation.
 5. Cover defaulting, invalid values, updates, and relevant conversion round trips
-   in the API/webhook tests.
+   in the API/webhook tests: the envtest suite in [internal/webhook/v2](../../internal/webhook/v2)
+   and the `*_conversion*_test.go` files in [api/v1](../../api/v1).
 6. Regenerate, test, and update the user configuration examples and reference.
 
 Schema acceptance does not replace webhook validation, and a successful

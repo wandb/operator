@@ -17,10 +17,14 @@ spec:
 ```
 
 `size` accepts `dev`, `micro`, `small`, `medium`, `large`, `xlarge`, and `xxlarge`;
-the default is `dev`. The selected server manifest supplies the size profile.
-Set the size deliberately for your deployment and check resource requests and
-storage before changing it. `requireLimits` controls whether generated workloads
-also receive resource limits. See [upgrades](upgrades.md) before changing version.
+the default is `dev`. The selected server manifest supplies the size profile; a
+size the manifest does not define gets only its `default` profile. Set the size
+deliberately for your deployment and check resource requests and storage before
+changing it. Any size other than `dev` enables Redis Sentinel for managed Redis,
+and Sentinel mode cannot change after creation, so a managed-Redis deployment
+created at `dev` without Sentinel cannot later move to another size. `requireLimits` controls
+whether generated workloads also receive resource limits. See
+[upgrades](upgrades.md) before changing version.
 
 ## License
 
@@ -92,8 +96,8 @@ spec:
 ```
 
 Use an application name present in your server manifest. Unknown names are
-ignored with a log message. Minimum and maximum replicas must be at least one,
-and the minimum cannot exceed the maximum. `legacyOverrides` carries migrated
+silently ignored, so check them against the manifest. Minimum and maximum
+replicas must be at least one, and the minimum cannot exceed the maximum. `legacyOverrides` carries migrated
 v1 settings; prefer the current fields for new deployments.
 
 ## Workload security

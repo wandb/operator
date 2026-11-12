@@ -23,10 +23,10 @@ Helm/Kustomize; developed locally with Kind + Tilt.
 | `internal/controller/common/` | Shared reconcile helpers — conditions, labels, retention, detach, state. |
 | `internal/webhook/v2/` | Defaulting + validation + conversion webhooks for the CRDs. |
 | `pkg/wandb/` | W&B server spec/manifest/status handling (manifest source resolution, channels). |
-| `pkg/vendored/` | **Generated/vendored** third-party operator types & CRDs (Moco, Strimzi-Kafka, SeaweedFS, Altinity-ClickHouse, Argo-Rollouts, Redis, Gateway API). Do not hand-edit. |
+| `pkg/vendored/` | **Generated/vendored** third-party operator types & CRDs (Moco, SeaweedFS, Altinity-ClickHouse, Argo-Rollouts, Redis, KEDA, Gateway API). Do not hand-edit. |
 | `config/` | Kustomize bases, CRD bases/patches, RBAC, manager config. |
 | `hack/testing-manifests/` | Local-dev/test fixtures: sample `WeightsAndBiases` CRs (`wandb/`), a Helm chart for external infra (`test-infra/`), cert-manager/seaweedfs/telemetry manifests, and versioned local server manifests (`server-manifest/`). Used by Tilt and tests, not shipped. |
-| `docs/design/wandb_v2/` | Design docs for the v2 architecture and infra reconciliation. |
+| `docs/` | `user/` (deploy and operate), `developer/` (setup, workflow, internals, releases), `design/` (rationale and historical proposals). |
 
 ## The server manifest
 
@@ -48,7 +48,7 @@ flags, and shared env-var/volume groups (see `Manifest` in
   [wandb/core `onprem/server-manifest`](https://github.com/wandb/core/tree/master/onprem/server-manifest)
   and published as OCI artifacts — they are **not** authored in this repo.
 - For local work, `hack/testing-manifests/server-manifest/<version>/` holds
-  checked-in copies (e.g. `0.79.0`). Set `manifestSource="local"` in
+  checked-in copies (e.g. `0.86.0`, `manifest.next`). Set `manifestSource="local"` in
   `tilt-settings.star` (with a matching `wandbVersion`) to reconcile against them
   instead of the published repository.
 
@@ -60,10 +60,13 @@ flags, and shared env-var/volume groups (see `Manifest` in
   make manifests generate sync-crd-embed
   ```
   This regenerates deepcopy methods, the CRD YAML in `config/crd/bases/`, and the
-  embedded CRDs used by the crd-installer. CI fails if these are out of date.
-- **Tilt does NOT regenerate CRDs automatically** when API types change — it only
-  recompiles the controller binary. See the [development workflow](docs/developer/workflow.md) for the
-  current code generation and deployment steps. When in doubt, restart Tilt.
+  embedded CRDs used by the crd-installer. CI regenerates before testing but does
+  not fail on drift, so commit the regenerated files yourself.
+- **Tilt does NOT fully regenerate CRDs** when API types change — its
+  `Operator-Codegen` resource runs only `make manifests generate`, and the installed
+  CRDs come from the crd-installer's embedded copies. Run the full command above;
+  restarting Tilt alone leaves the installed schema stale. See the
+  [development workflow](docs/developer/workflow.md).
 - **Don't edit generated files**: `zz_generated.deepcopy.go`, `config/crd/bases/*`,
   `internal/crdinstaller/crds/*`, and anything under `pkg/vendored/`. Edit the
   source and regenerate.
@@ -89,8 +92,9 @@ flags, and shared env-var/volume groups (see `Manifest` in
   `feat: Add retention policy validation`).
 - Releases use reviewed version changes and annotated tags. Follow
   [the v2 release procedure](docs/developer/releasing.md) or
-  [v1 maintenance procedure](docs/developer/releasing-v1.md). Keep release history
-  under the release workflow; do not rewrite `CHANGELOG.md` as part of documentation edits.
+  [v1 maintenance procedure](docs/developer/releasing-v1.md). v2 release notes are
+  generated on the GitHub Release; `CHANGELOG.md` on `main` is frozen v1 history —
+  do not edit it.
 
 ## Code style
 

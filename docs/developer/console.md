@@ -7,7 +7,8 @@ Older `spec.watchtower` examples are historical.
 ## Packaging
 
 The Operator image contains `/manager`, `/crd-installer`, and `/watchtower`.
-Console uses the same image with `command: ["/watchtower"]` and port 8080.
+Console uses the same image with `command: ["/watchtower"]` and passes
+`--port 8080` explicitly so the container matches its Service and probes.
 The Watchtower binary embeds its frontend, so it is downloaded from a reviewed
 Watchtower GitHub release rather than built from this repository's Go sources.
 
@@ -28,23 +29,31 @@ matches the local manager architecture. The image also carries Grafana plugins;
 `make download-grafana-plugins` prepares them before a Docker build. Tilt has a
 `Grafana-Plugins-Download` resource for its telemetry setup.
 
-The chart supplies `OPERATOR_IMAGE`; `watchtowerImage()` uses it so the Console
-image follows the installed Operator image and registry override. An unset value
-is an error. The frontend's base path is compiled into its assets and must match
+The chart supplies `OPERATOR_IMAGE` as `wandb-operator.image.repository:tag`, and
+`watchtowerImage()` uses it verbatim. An image digest or `global.repositoryPrefix`
+applied to the Operator container is not reflected, and the CR's image registry
+is not applied. An unset value is an error. The frontend's base path is compiled into its assets and must match
 the runtime `/console` path.
 
 ## Reconciliation and ownership
 
 [watchtower.go](../../internal/controller/reconciler/watchtower.go) synthesizes an
-Application, ServiceAccount, password Secret, and namespace/cluster RBAC. Generated
-names derive from the W&B CR; cluster-scoped names include its namespace, and long
-names use the shared hashing helper to fit the DNS label limit.
+Application, ServiceAccount, password Secret, and namespace/cluster RBAC. Long
+names are hashed by `common.FitDefaultInfraName` rather than truncated:
+
+| Resources | Name | Limit |
+| --- | --- | --- |
+| Application, Service, ServiceAccount, Role, RoleBinding | `<cr>-watchtower` | 63 |
+| Password Secret | `<cr>-watchtower-auth` | 63 |
+| ClusterRole, ClusterRoleBinding | `<namespace>.<cr>-watchtower` | 253 |
 
 The Application's component label protects it from manifest-driven pruning.
 Console has one replica because deployment jobs and event streams are held in
 the serving process. Probes use `/console/healthz` and `/console/ready`.
 
-Networking and Console reconcile before the infrastructure readiness gate.
+Networking and Console reconcile before the infrastructure readiness gate, so
+[resolveInfraRoutes](../../internal/controller/reconciler/infra_routes.go) skips
+any infra route whose Service does not exist yet; a later pass publishes it.
 Console errors produce a retry without blocking application reconciliation.
 Its status is published in `status.watchtowerStatus`, independently of W&B
 readiness. Disabling Console removes its resources and password Secret.
@@ -62,8 +71,11 @@ namespace ActionRun creation/deletion for administrator-published actions.
 Cluster-wide Pod metrics reads support the Metrics tab when metrics-server is
 available. [Support-bundle grants](support-bundles.md#permissions-and-console)
 are conditional on the expected admission policy and binding being installed.
-The generated ClusterRole omits CRD discovery and pod port-forwarding. Expanding
-Console grants also requires Operator to possess those permissions.
+The generated ClusterRole omits CRD discovery and pod port-forwarding. Operator
+already holds CRD `get/list` for support bundles, so only `pods/portforward`
+needs Operator widening. Operator can delegate only what it holds: widen both its
+kubebuilder RBAC markers and the hand-maintained chart roles in
+`deploy/operator/templates/wandb-operator-*-role.yaml`.
 
 Two deployment-level environment switches on Operator add separate capabilities:
 

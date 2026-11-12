@@ -19,11 +19,15 @@ helm show values \
   --version "$OPERATOR_VERSION"
 ```
 
+This prints only the parent chart's values. Subchart defaults, such as
+`telemetry.logAgent` and `telemetry.grafana.pluginImage`, are in the subchart
+values files; use `helm pull --untar` and read `charts/telemetry/values.yaml`.
+
 ## W&B desired state
 
 | Field under `spec` | Purpose and important behavior |
 | --- | --- |
-| `size` | Manifest sizing profile; defaults to `dev` |
+| `size` | Manifest sizing profile; defaults to `dev`. Sizes other than `dev` enable Sentinel for managed Redis, so a managed-Redis resource created at `dev` without Sentinel cannot move to another size |
 | `requireLimits` | Include resource limits in generated workload sizing |
 | `retentionPolicy.onDelete` | `detach` by default; `purge` requests infrastructure deletion |
 | `wandb.hostname` | Required public W&B URL |
@@ -40,7 +44,7 @@ helm show values \
 | `wandb.migrations` | Security profiles for named migration Jobs, applied to new Jobs |
 | `wandb.probes` | Defaults for generated application health probes |
 | `wandb.serviceAccount` | Application workload identity |
-| `mysql`, `redis`, `objectStore`, `clickhouse` | Instance maps requiring a `default` entry |
+| `mysql`, `redis`, `objectStore`, `clickhouse` | Instance maps; an omitted map gets one managed `default` instance, and a `default` key is required once you define any instance |
 | `kafka.managedKafka` | Managed Bufstream configuration |
 | `networking.mode` | Empty, `ingress`, or `gateway` |
 | `adminConsoleEnabled` | Enable Console; disabled when omitted |
@@ -54,7 +58,8 @@ See [configuration](configuration.md), [infrastructure](infrastructure.md), and
 [networking](networking.md) for examples. Connection booleans and ports inside
 `value` must be strings. Some fields are immutable after creation: the current
 validator rejects changing managed Redis storage size, namespace, or Sentinel
-mode, and rejects reducing an established managed MySQL replica count.
+mode (enabled by any size other than `dev`), and rejects reducing an established managed MySQL
+replica count.
 
 ## Helm settings
 
@@ -66,7 +71,8 @@ mode, and rejects reducing an established managed MySQL replica count.
 | `openshift.enabled` and the OpenShift profile values | OpenShift-specific security and RBAC configuration |
 | `telemetry` | Collection mode, CRDs, forwarding, retention, and runtime settings |
 | `telemetry.logAgent` | Pod-log collection, extra namespaces, resources, and tolerations |
-| `global.image.registry`, `global.imagePullSecrets` | Telemetry registry prefix and pull credentials; separate from CR workload settings |
+| `global.image.registry` | Telemetry image registry prefix |
+| `global.imagePullSecrets` | Pull Secrets for the Operator pod, CRD installer Job, and telemetry; separate from the CR's `spec.global` settings |
 | `telemetry.grafana.pluginImage` | Optional bundled-plugin image override; defaults to the installed Operator image |
 | `victoria-metrics-operator.enabled`, `grafana-operator.enabled` | Telemetry controller dependencies |
 

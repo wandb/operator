@@ -13,8 +13,9 @@ repository as well as version so equal tags in different registries do not share
 content accidentally.
 
 For local fixture work, set `manifestSource="local"` and choose a `wandbVersion`
-directory under `localManifestPath` in `tilt-settings.star`. Tilt mounts that
-directory tree and sets the CR's file repository. In published mode it leaves
+directory under `localManifestPath` in `tilt-settings.star`. Tilt copies that
+directory tree into the operator image at `/server-manifest`, rebuilds on fixture
+changes, and sets the CR's repository to `file:///server-manifest`. In published mode it leaves
 the repository to admission defaults. See [setup](setup.md).
 
 When adding a manifest field, update the loader/merge behavior and consumers,
@@ -56,8 +57,9 @@ The Application controller renders the workload and supporting Services, routes,
 jobs, and autoscaling resources. Keep resources for operator-owned integrations
 such as Console out of manifest-driven pruning.
 
-Ingress mode consolidates application paths into one Ingress resource; Gateway mode uses
-HTTPRoutes attached to the selected Gateway. Networking and Console run before
+Ingress mode consolidates application paths into one Ingress resource, or removes
+it when `networking.ingress.managed` is `false`; Gateway mode uses HTTPRoutes
+attached to the selected Gateway. Networking and Console run before
 the infrastructure readiness gate so administration remains reachable during an
 infrastructure outage. Preserve that ordering when moving reconcile steps.
 

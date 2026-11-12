@@ -23,7 +23,7 @@ when it knows it is running on OpenShift, driven by two switches:
 
 | Switch | Where | Effect |
 | --- | --- | --- |
-| `OPENSHIFT=true` env on the operator | OpenShift values file | Makes managed infrastructure omit fixed UID/GID and gives Kafka a dedicated ServiceAccount bound to `nonroot-v2`. |
+| `OPENSHIFT=true` env on the operator | OpenShift values file | Makes managed infrastructure omit fixed UID/GID and binds Kafka's ServiceAccount to `nonroot-v2`. |
 | `openshift.enabled=true` chart value | OpenShift values file | Enables the OpenShift-specific RBAC and SCC grants. |
 
 Both are included in the values file below and the chart's OpenShift profile.
@@ -52,20 +52,22 @@ a tested OpenShift Route recipe is still tracked in the
 
 | Component | Limitation | Status / workaround |
 | --- | --- | --- |
-| **Ingress / Frontend (`frontend-nginx`)** | The bundled frontend image runs as a fixed, non-numeric user (`nginx`) that owns `/usr/share/nginx/html` and rewrites files there at startup. `restricted-v2`'s arbitrary UID cannot write, and `nonroot-v2` rejects the pod because the kubelet cannot verify a non-numeric user is non-root. | **BYO ingress required.** Front W&B with your own ingress/route. |
-| **Kafka (bufstream)** | The distroless broker image ships a `0700` binary owned by a fixed UID (65532) that can only be executed as that exact user, so it cannot run under `restricted-v2`. | Currently runs under `nonroot-v2` (via a dedicated ServiceAccount) rather than `restricted-v2`. |
+| **Frontend (`frontend-nginx`)** | The bundled frontend image runs as a fixed, non-numeric user (`nginx`) that owns `/usr/share/nginx/html` and rewrites files there at startup. `restricted-v2`'s arbitrary UID cannot write, and `nonroot-v2` rejects the pod because the kubelet cannot verify a non-numeric user is non-root. | **Unverified for current images.** Recent server manifests request non-root, read-only-root settings for this app. The frontend Pod runs in every networking mode, so check its SCC admission and startup with your release. |
+| **Kafka (bufstream)** | The distroless broker image ships a `0700` binary owned by a fixed UID (65532) that can only be executed as that exact user, so it cannot run under `restricted-v2`. | Currently runs under `nonroot-v2` (via its ServiceAccount's `nonroot-v2` binding) rather than `restricted-v2`. |
 | **Pod-log agent** | Node log files need root and hostPath access, which `restricted-v2` blocks. | Disabled by the OpenShift Helm profile; use application OTLP logging or a platform-approved log collector. |
 | **SeaweedFS** | The pinned image declares root; non-root runtime and SCC acceptance are not established by the read-only-root changes. | Use a validated image/platform combination or an external object store. |
 | **Cluster-scoped install** | The chart creates SCC grants and cluster-scoped RBAC. | Requires `cluster-admin` at install time. |
 
 ## Required: bring your own ingress
 
-On OpenShift you **must** supply your own ingress/edge. The bundled frontend does
-not run under OpenShift's `restricted-v2` SCC (see
-[Known limitations](#known-limitations)).
+On OpenShift you **must** supply your own ingress/edge. This is separate from the
+frontend runtime note in [Known limitations](#known-limitations): your edge
+routes to the frontend Pod, it does not replace it.
 
-- **Ingress (BYO required).** Front W&B with the cluster's own edge — an
-  OpenShift `Route` or your ingress controller.
+- **Ingress (BYO required).** Set `spec.networking.ingress.managed: false` and
+  front W&B with the cluster's own edge — an OpenShift `Route` or your ingress
+  controller — routing the paths listed in
+  [external Ingress](networking.md#external-ingress).
 - **Object storage.** Use an external object store unless your managed SeaweedFS
   image and SCC behavior have been validated. Set
   `spec.objectStore.default.externalObjectStore` as described in
@@ -175,9 +177,9 @@ kubectl apply -f wandb.yaml
 ```
 
 On OpenShift you must front the deployment with the cluster's own edge — an
-OpenShift `Route` or your ingress controller — not a bundled load balancer or
-the bundled frontend. See [networking](networking.md) for routing and
-[infrastructure](infrastructure.md) for object-store connections.
+OpenShift `Route` or your ingress controller — that routes to the generated
+Services. See [networking](networking.md#external-ingress) for the required paths
+and [infrastructure](infrastructure.md) for object-store connections.
 
 ### 3. Verify
 
@@ -204,12 +206,13 @@ cluster policy and selected images.
   `fsGroup`, so OpenShift assigns compliant IDs at admission.
 - **MySQL (moco)** runs the controller with `--disable-default-security-context`
   so it does not inject a fixed UID/GID (10000) that `restricted-v2` rejects.
-- **Kafka (bufstream)** gets a dedicated ServiceAccount bound to the
-  `nonroot-v2` SCC, because its distroless broker image ships a `0700` binary
-  owned by a fixed UID (65532) that can only be executed as that exact user.
+- **Kafka (bufstream)** has its ServiceAccount bound to the `nonroot-v2` SCC,
+  because its distroless broker image ships a `0700` binary owned by a fixed UID
+  (65532) that can only be executed as that exact user. The chart grants the
+  Operator `use` of `nonroot-v2` so it can create that binding.
 - **Pod-log collection** is disabled because the telemetry log agent requires
   root access and hostPath mounts.
-- **OwnerReferencesPermissionEnforcement** RBAC is rendered so the built-in
-  StatefulSet controller (moco PVCs) can set finalizers on the resources it owns
-  — OpenShift's admission plugin requires this and it is a no-op on upstream
-  Kubernetes.
+- **OwnerReferencesPermissionEnforcement** RBAC lets the built-in StatefulSet
+  controller (moco PVCs) and the SeaweedFS operator set finalizers on the
+  resources they own, as OpenShift's admission plugin requires. These grants are
+  rendered only when `openshift.enabled=true`.

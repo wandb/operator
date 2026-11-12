@@ -28,10 +28,11 @@ helm upgrade wandb-operator \
 kubectl rollout status deployment/wandb-operator -n wandb-operators --timeout=300s
 ```
 
-The chart's CRD installer updates CRDs. Inspect its Job if the upgrade fails;
-resolve the reported ownership or RBAC problem rather than deleting existing
-CRDs. Verify every W&B resource managed by the upgraded controller, not just the
-Operator Deployment.
+The chart's pre-upgrade CRD installer Job updates CRDs. If the hook fails, read
+`kubectl logs -n wandb-operators job/wandb-operator-crd-installer` promptly: the
+Job is removed five minutes after it finishes. Resolve the reported problem, such
+as missing RBAC, rather than deleting existing CRDs. Verify every W&B resource
+managed by the upgraded controller, not just the Operator Deployment.
 
 ## Upgrade W&B
 

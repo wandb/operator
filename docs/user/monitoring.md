@@ -10,8 +10,9 @@ connection and readiness in `status.telemetryStatus`.
 | `full` | In-cluster Victoria stack with Grafana dashboards and datasources |
 
 Both enabled modes include metrics, logs, traces, and an OTLP gateway. Scrapes and
-alerting are controlled independently; Grafana is installed only in `full` mode.
-Retention defaults to `1d`.
+alerting are controlled independently by `telemetry.scrape.enabled` (default
+`true`) and `telemetry.alerting.enabled` (default `false`); Grafana is installed
+only in `full` mode. Retention defaults to `1d`.
 
 ## Enable the full stack
 
@@ -29,12 +30,20 @@ telemetry:
     secretName: wandb-otel-connection
     protocol: http/protobuf
     serviceName: wandb-service
+  scrape:
+    kubeStateMetrics: true
   retentionPeriod: 1d
 victoria-metrics-operator:
   enabled: true
 grafana-operator:
   enabled: true
 ```
+
+`telemetry.otel.resourceAttributes` sets `OTEL_RESOURCE_ATTRIBUTES` for W&B
+workloads, for example `deployment.environment=prod`. The `kubeStateMetrics`
+scrape only targets an existing kube-state-metrics Service labeled
+`app.kubernetes.io/name: kube-state-metrics`; it does not install one, and it
+defaults to `false`.
 
 For an existing release that has telemetry off, install the required CRDs first:
 
@@ -81,8 +90,10 @@ grafana-operator:
   enabled: false
 ```
 
-Keep `telemetry.otel.secretName` set. Supply any required authentication headers
-through your protected Helm values workflow. For an existing `off` installation,
+Keep `telemetry.otel.secretName` set. `forwarding.otlp.protocol` accepts
+`http/protobuf` or `grpc`; `forwarding.otlp.tls.insecure` applies only to `grpc`.
+Supply any required authentication headers through your protected Helm values
+workflow. For an existing `off` installation,
 perform the CRD preparation upgrade above with only VictoriaMetrics enabled.
 
 ## Collect Pod logs
@@ -116,10 +127,12 @@ kubectl get grafana,grafanadatasource -n wandb
 kubectl get services -n wandb
 ```
 
-Run the Grafana query only for `full` mode. With Console enabled, Grafana uses
-`/console/grafana/`. Dashboards include managed MySQL activity and connection
-metrics, buffer-pool and row-lock panels, and deployment availability; verify
-the corresponding scrapes and metrics are available in your deployment.
+Run the Grafana query only for `full` mode. Grafana always serves under the
+`/console/grafana/` sub-path, whether or not Console is enabled. Dashboards include
+managed MySQL activity and connection metrics, buffer-pool and row-lock panels,
+and deployment availability. The availability panels need kube-state-metrics and
+the `kubeStateMetrics` scrape; verify the corresponding scrapes and metrics are
+available in your deployment.
 
 Grafana plugins are bundled in the Operator image and copied at Pod startup;
 Grafana does not download them at runtime. See
@@ -127,9 +140,9 @@ Grafana does not download them at runtime. See
 for mirroring settings.
 
 Use the listed Grafana Service and its port to access the dashboard through your
-approved cluster access method,
-such as `kubectl port-forward`. Verify data arrives from an application; resource
-existence alone does not prove successful collection. In `forward` mode, also
+approved cluster access method, such as `kubectl port-forward`; include the
+`/console/grafana/` path in the local URL. Verify data arrives from an
+application; resource existence alone does not prove successful collection. In `forward` mode, also
 check the receiving endpoint.
 
 The connection includes Datadog-compatible local gateway endpoints for W&B

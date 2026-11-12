@@ -152,7 +152,8 @@ provides the recorded artifact identity; setup does not look up the Core commit.
 
 ## Cloud authentication
 
-Only the cloud test job requests `id-token: write`. Each matrix entry selects its
+Among the test jobs, only the cloud test job requests `id-token: write`; the build
+job also requests it to publish to Artifact Registry. Each matrix entry selects its
 GitHub environment before requesting credentials. Environments provide a place
 for deployment branch restrictions, reviewers and other protections; cloud trust
 also independently checks the main branch.
@@ -289,7 +290,8 @@ Follow-up work includes a secure recovery mechanism for failed teardown and the
 etcd PVC cleanup issue observed during local AWS/GCP validation. Keep the cron
 disabled until cleanup behavior is acceptable for unattended runs.
 
-Offline wrapper and matrix checks run in the regular PR test workflow:
+The offline wrapper and matrix checks have a job in the regular PR test workflow,
+but that job is paused while AWS scenarios are disabled. Run them locally:
 
 ```bash
 python3 -B -m unittest discover -s hack/scripts -p test_nightly_westest.py

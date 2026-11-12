@@ -1,8 +1,12 @@
 # Telemetry internals
 
 For deployment settings, use [monitoring](../user/monitoring.md). The Operator
-chart writes runtime telemetry settings into its release-namespace ConfigMap;
-the controller reads it and reconciles W&B connection Secrets and status.
+chart writes runtime telemetry settings into the `wandb-operator-telemetry-config`
+ConfigMap in its release namespace, rendered only when `telemetry.mode` is not
+`off`. The controller reads it and reconciles W&B connection Secrets and status;
+a missing ConfigMap means telemetry is disabled. The controller watches it and
+re-enqueues every W&B resource on change. `--telemetry-config-name` and
+`--telemetry-config-namespace` override its location ([main.go](../../cmd/manager/main.go)).
 The charts live in [deploy/operator](../../deploy/operator) and
 [deploy/telemetry](../../deploy/telemetry).
 

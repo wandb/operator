@@ -48,6 +48,7 @@ evidence or operational validation:
 | Workload security | CR precedence, manifest merge rules, and managed-service implementation records | Exercise supported images, writable paths, restarts, migration Jobs, and platform admission |
 | Support bundles | Template configuration, launch/status checks, and permission model | Validate collection, redaction, object-store delivery, retrieval, and cleanup on supported clusters |
 | CI integration | Current PR and nightly WESTest runbooks | Complete cloud cleanup validation and secure failed-teardown recovery before enabling unattended schedules |
+| Routine upgrades | Separate Operator and W&B procedures, verification, recovery limits | Verify supported rollback and downgrade behavior per release and document the constraints |
 | v1 migration | Preserved preflight, ownership caveats, cutover checks | Validate release-specific controller handoff, resource adoption, downtime, cleanup, and rollback sequence |
 | Restore and recovery | Retention semantics and ownership checks | Exercise provider-specific backup/restore and detached-resource recovery |
 | Reference | Main field index and installed-schema lookup | Decide whether to generate and publish a full versioned API/Helm reference |

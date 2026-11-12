@@ -30,7 +30,9 @@ It must be a specific version; an empty value or `latest` is rejected.
 
 Use the release documentation and your deployment's tested version combination.
 This repository does not currently publish a comprehensive Operator/W&B/Kubernetes
-compatibility matrix or production capacity table. A size name such as `small`
+compatibility matrix or production capacity table. A server manifest declares a
+`requiredOperatorVersion` range; Operator does not enforce it, so check it
+yourself. A size name such as `small`
 is a manifest sizing profile, not a guarantee that a particular cluster is large
 enough. Review the release's workload requests and persistent storage needs.
 
@@ -42,8 +44,8 @@ enough. Review the release's workload requests and persistent storage needs.
   operators, plus namespace-level permissions to create the deployment.
 - Install cert-manager with its CRDs. The Operator chart requires its
   `Certificate` and `Issuer` resources for the admission webhook.
-- Provide dynamic persistent storage for managed services, normally through a
-  default `StorageClass`.
+- Provide dynamic persistent storage for managed services through a default
+  `StorageClass`. The resource has no per-service storage-class setting.
 - Install an Ingress controller, or Gateway API CRDs and a Gateway controller,
   and identify the corresponding class. Operator creates routing resources;
   the installation guide assumes the routing controller already exists.

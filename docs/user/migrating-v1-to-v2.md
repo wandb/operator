@@ -3,7 +3,16 @@
 Operator v2 adopts an existing v1 `WeightsAndBiases` resource in place: a
 conversion webhook converts it to `apps.wandb.com/v2`, and the operator
 reconnects to the same backing services without migrating data. MySQL, Redis,
-and object storage convert to their external connection specs automatically.
+and object storage convert to their external connection specs automatically, as
+does ClickHouse when the v1 values set `global.clickhouse` connection fields.
+Conversion also carries over the hostname, license, size, OIDC settings, custom CA
+certificates, ServiceAccount annotations, the v1 ingress settings (as
+`spec.networking` in `ingress` mode), and `spec.wandb.version` from the v1 `app`
+(or `api`) image tag.
+
+Kafka is not converted. v2 always runs an Operator-managed Kafka (Bufstream),
+provisioned by Operator itself rather than a chart subchart. It stores data under
+its own prefix in the default bucket and metadata on etcd PersistentVolumes.
 
 Operator v2 does not uninstall the v1 Helm releases or modify migration
 metadata inside MySQL or ClickHouse. Those actions can destroy data or make
@@ -58,6 +67,14 @@ commands below.
      export before applying it as desired state.
    - Make sure the wandb server manifest is pinned to a specific version. If version is `latest` or empty, it will fail.
 
+   Literal (non-`valueFrom`) v1 connection values are not placed in the converted
+   spec. They are held in `legacy.operator.wandb.com/<service>-pending` annotations
+   (`mysql`, `redis`, `bucket`, `clickhouse`, `oidc`) until the first reconcile
+   writes them to `<name>-<service>-converted` Secrets and points the selectors
+   there. A freshly converted resource can therefore show, for example, a Redis
+   password selector without a host; check the annotations before treating it as
+   incomplete.
+
 5. Determine whether the v1 W&B Helm release owns Redis or another dependency
    that v2 will continue using:
 
@@ -87,10 +104,10 @@ change plan.
 
 ## Install Operator v2 and apply the resource
 
-Each managed backing service is provisioned by a component operator that the v2
-chart installs as a subchart (and whose CRDs its bundled crd-installer applies).
-If your v1 environment already runs one of these operators cluster-wide — most
-commonly a standalone Altinity ClickHouse operator — disable the overlapping
+Each managed backing service other than Kafka is provisioned by a component
+operator that the v2 chart installs as a subchart. If your v1 environment
+already runs one of these operators cluster-wide — most commonly a standalone
+Altinity ClickHouse operator — disable the overlapping
 component operator so the chart reuses your existing one instead of fighting it
 for CRD ownership. A conflict looks like:
 
@@ -109,8 +126,12 @@ Disable the conflicting component operator with the matching toggle:
 | VictoriaMetrics (telemetry) | `victoria-metrics-operator.enabled` | `false` |
 | Grafana (telemetry) | `grafana-operator.enabled` | `false` |
 
-Disabling a component operator also drops its CRDs from the bundled
-crd-installer. Supply an existing compatible controller and CRDs, or provision
+CRD installation differs by component. The bundled crd-installer applies the
+Redis and ClickHouse CRDs only while their operator toggles are enabled. Moco and
+SeaweedFS CRDs come from their subcharts, so disabling the subchart drops them.
+For VictoriaMetrics and Grafana, the crd-installer follows
+`telemetry.crds.victoriaMetrics` and `telemetry.crds.grafana` rather than the
+operator toggles. Supply an existing compatible controller and CRDs, or provision
 that backing service externally and point the `WeightsAndBiases` CR at it (see
 [Infrastructure Connection Settings](infrastructure.md)).
 

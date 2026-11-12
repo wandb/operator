@@ -22,7 +22,7 @@ An old successful status is not evidence that the newest change has completed.
 | Server manifest cannot be fetched | Pinned W&B version, repository, registry credentials, and Operator CA trust |
 | Pods report image pull failures | Mirrored image layout, workload pull credentials, and node registry trust |
 | Infrastructure is not ready | Per-instance status, backing controller logs, PVC binding, resource capacity, and connection Secrets |
-| Migration blocks rollout | The migration Job's status, container logs, and requested W&B version |
+| Migration blocks rollout | Managed MySQL init Job and migration Job status, container logs, and requested W&B version |
 | Application pods are not ready | Deployment rollout, pod events, probes, and application logs |
 | Public URL fails | Ingress/Gateway status, HTTPRoute acceptance, DNS, certificates, and backend Services |
 | Artifact browser download fails | Presigned URL host, external reachability, TLS trust, and CORS |
@@ -39,6 +39,15 @@ Set `MIGRATION_JOB` to the failed Job name from that list, then inspect it:
 ```bash
 kubectl describe job/"$MIGRATION_JOB" -n wandb
 kubectl logs job/"$MIGRATION_JOB" -n wandb -c migrate
+```
+
+Each managed MySQL instance first runs an init Job, reported in
+`status.wandb.mysqlInit`. The `migration` selector does not match it; list it
+separately and read logs from container `moco-init`:
+
+```bash
+kubectl get jobs -n wandb \
+  -l app.kubernetes.io/instance=wandb,app.kubernetes.io/component=moco-init
 ```
 
 A similarly named Deployment is not evidence of migration success. Do not edit

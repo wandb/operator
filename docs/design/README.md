@@ -12,7 +12,7 @@ code snippets and package paths may differ from the current implementation.
 | [Struct usage mapping](wandb_v2/struct_usage_mapping.md) and [graph](wandb_v2/struct_usage_graph.md) | Historical package/type snapshots; not maintained as a current API reference |
 | [Tilt dependency graph](wandb_v2/tilt.md) | Dependency snapshot; use [setup](../developer/setup.md) and [workflow](../developer/workflow.md) for current commands |
 | [Legacy overrides](wandb_v2/legacy_overrides.md) | Design history for implemented compatibility behavior; see [API development](../developer/api-development.md) |
-| [Legacy environment mapping](wandb_v2/legacy_env_var_mapping.md) and [implementation plan](wandb_v2/legacy_env_var_mapping_plan.md) | Original proposal; related implementation now exists in `legacy_env_mapping.go`; verify details against current code |
+| [Legacy environment mapping](wandb_v2/legacy_env_var_mapping.md) and [implementation plan](wandb_v2/legacy_env_var_mapping_plan.md) | Implemented (Option A) as the reconcile-time registry in `internal/controller/reconciler/legacy_env_mapping.go`; verify details against current code |
 | [Value or secret connection fields](wandb_v2/secret_or_value_connection_fields.md) | Implemented design record; current examples are in [configuration](../user/configuration.md) |
 | [Private registry manifests](wandb_v2/private_registry_manifests.md) | Original design; authenticated manifest retrieval is implemented; see [restricted environments](../user/restricted-environments.md) |
 | [Ingress and Gateway plan](networking-plan.md) | Historical implementation plan; use [networking](../user/networking.md) for current API values |

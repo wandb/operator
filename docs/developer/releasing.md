@@ -50,7 +50,9 @@ creates the matching GitHub Release.
 Tagged versions are immutable. Never move, delete, reuse, or overwrite a
 `v2.x.y` or `v2.x.y-<prerelease>` tag or its matching image/chart tags. If a
 release is incorrect or only partially publishes, fix it with a new version.
-The release workflow does not publish a `latest` tag.
+The workflow does not currently enforce this: its check that rejects existing
+image and chart tags is commented out. The release workflow
+does not publish a `latest` tag.
 
 Every version offered to users must use the tagged release workflow so the OCI
 chart version, operator image tag, and GitHub Release stay aligned. Operator v2
@@ -70,3 +72,7 @@ It accepts only a development version already declared in
 versions and release prereleases such as `-beta.2` or `-rc.1`, and refuses to
 overwrite an existing development chart tag. Do not offer these chart-only
 builds to users; publish a tagged release instead.
+
+The [nightly WESTest build](nightly-westest.md) also publishes
+`<base>-nightly-<timestamp>` and `<base>-dev-…` images and charts to the same
+public repositories. These are test artifacts; do not offer them to users either.

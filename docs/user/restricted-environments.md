@@ -8,7 +8,7 @@ Inventory all of these for your selected release before installing.
 ## Registry configuration
 
 Mirror the release's artifacts using your registry tooling. W&B's `wsm registry
-mirror` workflow places the server manifest beside the workload images at
+mirror` workflow places the server manifest in the same registry at
 `<imageRegistry>/wandb/server-manifest`. Configure W&B to use that registry:
 
 ```yaml
@@ -26,16 +26,34 @@ Create `registry-credentials` as a `kubernetes.io/dockerconfigjson` Secret in th
 W&B namespace using your credential-management process. These references are used
 for both the Operator's manifest retrieval and the workload image pulls.
 
+For a `manifestRepository` other than the public default, Operator also tries its
+own pod's cloud identity after any pull Secrets: ECR through IRSA or EKS Pod
+Identity, Artifact Registry or GCR through GKE Workload Identity, and ACR through
+Entra Workload or Managed Identity. This covers only the manifest pull; workload
+image pulls still need pull Secrets or node credentials.
+
 For a new resource, omitting `manifestRepository` derives it from `imageRegistry`.
 On an existing resource, the previously defaulted repository is already stored;
-update it explicitly when changing registries. Preserve the image repository
-layout expected by the mirror workflow.
+update it explicitly when changing registries.
+
+Operator prefixes each image's full source reference, including its source
+registry host, with `imageRegistry`. For example,
+`us-docker.pkg.dev/wandb-production/public/wandb/megabinary:<tag>` is pulled as
+`registry.example.com/wandb-mirror/us-docker.pkg.dev/wandb-production/public/wandb/megabinary:<tag>`.
+Only the manifest uses the shorter `<imageRegistry>/wandb/server-manifest` path;
+preserve both layouts when mirroring with other tooling.
 
 The CR's registry settings do not configure the Helm chart's own controller
 images. Install from your mirrored chart and set its Operator and dependency image
 repositories and pull credentials separately. Obtain the exact values supported by
 your selected chart with `helm show values`. A single universal set of image
 overrides for every dependency is not defined in this guide.
+
+Console, when enabled, runs the Operator image exactly as set by
+`wandb-operator.image.repository` and `tag`, in the W&B namespace. It is not
+retargeted by `spec.global.imageRegistry` and its Pod receives no
+`spec.global.imagePullSecrets`, so nodes must be able to pull that image with
+their own credentials.
 
 ## Telemetry images and plugins
 
@@ -53,7 +71,9 @@ global:
 
 The telemetry templates apply this prefix to the OTEL collectors, Victoria
 components and config reloaders, alerting, and Grafana. Pull Secrets must exist
-in each namespace where the corresponding Pods run. Configure the Operator and
+in each namespace where the corresponding Pods run. `global.imagePullSecrets` is
+chart-wide: the Operator Deployment, the CRD-installer hook, and the
+VictoriaMetrics operator chart also use it. Configure the Operator and
 component-controller images using their own chart values as well.
 
 The full-stack Grafana Pod copies its bundled plugins from the installed Operator
@@ -124,7 +144,9 @@ Use `valueFrom.secretKeyRef` for a proxy URL containing credentials. Each
 in-cluster exclusions and the cloud metadata address `169.254.169.254`, then
 injects both uppercase and lowercase proxy variables
 into application workloads, including init containers and migration Jobs. This
-CR setting does not configure the Operator process's own egress proxy.
+CR setting does not configure the Operator process's own egress proxy; set proxy
+variables for it under `wandb-operator.containers.operator.env` in the chart
+values, with a `NO_PROXY` that covers the Kubernetes API and in-cluster addresses.
 
 ## Verify access
 

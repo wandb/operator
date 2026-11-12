@@ -20,7 +20,10 @@ go tool cover -html=cover.out
 and the Go tests outside the e2e and vendored packages. It writes `cover.out`.
 Use the Go version in [go.mod](../../go.mod); CI tool versions are recorded in
 [run-tests.yaml](../../.github/workflows/run-tests.yaml). Downloads may be needed
-on the first run. After changing a mocked interface, regenerate its fakes:
+on the first run. To run one envtest package directly, run `make setup-envtest`
+first; the suites find its binaries under `bin/k8s`, for example
+`go test ./internal/webhook/v2/...`. After changing a mocked interface,
+regenerate its fakes:
 
 ```bash
 go generate ./...
@@ -28,7 +31,8 @@ go generate ./...
 
 ## Chart checks
 
-Install Helm and chart-testing, configure the chart dependency repositories, and
+Install Helm and chart-testing, add the
+[chart dependency repositories](setup.md#chart-dependency-repositories), and
 resolve dependencies before checking templates:
 
 ```bash
@@ -57,9 +61,13 @@ To exercise reuse of detached infrastructure in an isolated development cluster:
 
 1. Start a W&B CR with `retentionPolicy="detach"`.
 2. Delete that CR and wait for finalization while the controllers are running.
-3. Run `./hack/scripts/managed-connections-to-external.sh` to prepare external
-   connection Secrets.
+3. Run `./hack/scripts/managed-connections-to-external.sh <wandbName> <wandbNamespace>`
+   (`wandb wandb` for the Tilt defaults). It renames each `<wandbName>-*-connection`
+   Secret to `external-*`; without arguments it searches the `default` namespace.
 4. Set `crFile` to a CR using those external connections and bring it up in Tilt.
+   [wandb-external-v2.yaml](../../hack/testing-manifests/test-infra/examples/wandb-external-v2.yaml)
+   and the `external-*` overlays under `hack/testing-manifests/wandb/kustomize/overlays/`
+   reference those Secret names.
 5. Verify readiness and actual application data access.
 
 `make test-e2e` and `make test-e2e-retention` use a real cluster and change
@@ -88,7 +96,9 @@ application version and manifest digest for each run. The operator-upgrade
 scenario holds the application version fixed across its two phases. Review the
 workflow-specific guides for credentials, parameters, timeouts, and cleanup.
 
-Offline runner and matrix checks run in the regular PR test workflow:
+The offline runner and matrix checks are defined in
+[run-tests.yaml](../../.github/workflows/run-tests.yaml), but that job is
+currently disabled. Run them locally:
 
 ```bash
 python3 -B -m unittest discover -s hack/scripts -p test_nightly_westest.py

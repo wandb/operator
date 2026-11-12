@@ -7,6 +7,7 @@ connector defaults need review when W&B versions change. Use the
 In particular, the Kafka entries below describe application connection formats;
 the current W&B CR exposes managed Kafka only.
 
+The parsers and paths below are in upstream `wandb/core`, not this repository.
 All Go URL spec components are parsed by the shared `connectors.ParseConnectionString()` into `connectors.ConnectionInfo`.
 Query params are parsed per-connector via `queryparams.ParseAndValidate()` into typed structs (e.g., `RedisQueryParams`).
 Weave-python env vars are defined in `services/weave-python/weave-public/weave/trace_server/environment.py`.

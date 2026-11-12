@@ -27,10 +27,13 @@ is broadly:
 1. Handle deletion and retention finalizers, reconcile support-bundle templates,
    and normalize legacy conversion state.
 2. Resolve the server manifest and the deployment's infrastructure configuration.
-3. Reconcile backing services and infer their connection information and status.
+3. Reconcile backing services, infer their connection information and status,
+   and reconcile the telemetry connection Secret.
 4. Publish networking and reconcile Console before the infrastructure readiness gate.
-5. Wait for infrastructure, reconcile manifest Secrets, and complete MySQL initialization.
-6. Reconcile migration identities and run W&B migrations for the requested version.
+5. Wait for infrastructure, reconcile manifest Secrets and the email sink, create
+   Kafka topics, and complete MySQL initialization.
+6. Reconcile the shared application ServiceAccount/RBAC and custom CA certificates,
+   then migration identities, and run W&B migrations for the requested version.
 7. Reconcile Applications, wait for live Deployment readiness, and clean up the
    known obsolete v1 application Deployments.
 8. Publish W&B readiness for the observed generation.
