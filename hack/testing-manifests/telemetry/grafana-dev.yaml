@@ -23,7 +23,7 @@ spec:
             - name: grafana
               env:
                 - name: GF_INSTALL_PLUGINS
-                  value: "victoriametrics-metrics-datasource,victoriametrics-logs-datasource"
+                  value: "victoriametrics-logs-datasource"
 ---
 apiVersion: grafana.integreatly.org/v1beta1
 kind: GrafanaDatasource
@@ -36,7 +36,7 @@ spec:
       dashboards: "grafana"
   datasource:
     name: VictoriaMetrics
-    type: victoriametrics-metrics-datasource
+    type: prometheus
     access: proxy
     url: http://vmsingle-victoria-instance:8428
     isDefault: true
@@ -71,6 +71,6 @@ spec:
       dashboards: "grafana"
   datasource:
     name: VictoriaTraces
-    type: jaeger
+    type: tempo
     access: proxy
-    url: http://vtsingle-victoria-traces:10428/select/jaeger
+    url: http://vtsingle-victoria-traces:10428/select/tempo

@@ -80,14 +80,14 @@ var legacyEnvMappings = []legacyEnvMapping{
 		env:   envClickHouseReplicated,
 		scope: scopeDatastore,
 		apply: externalClickHouseSelector(convertedClickHouseReplicatedKey,
-			func(c *apiv2.ClickHouseConnection) *corev1.SecretKeySelector { return &c.Replicated },
+			func(c *apiv2.ClickHouseConnection) *apiv2.ValueOrSecret { return &c.Replicated },
 			overrideConversionDerived),
 	},
 	{
 		env:   envClickHouseReplicatedCluster,
 		scope: scopeDatastore,
 		apply: externalClickHouseSelector(convertedClickHouseClusterKey,
-			func(c *apiv2.ClickHouseConnection) *corev1.SecretKeySelector { return &c.ClusterName },
+			func(c *apiv2.ClickHouseConnection) *apiv2.ValueOrSecret { return &c.ClusterName },
 			keepCR),
 	},
 }
@@ -187,7 +187,7 @@ func sameEnvBody(a, b corev1.EnvVar) bool {
 // at the user's Secret; any other valueFrom shape passes through untouched.
 func externalClickHouseSelector(
 	dataKey string,
-	pick func(*apiv2.ClickHouseConnection) *corev1.SecretKeySelector,
+	pick func(*apiv2.ClickHouseConnection) *apiv2.ValueOrSecret,
 	policy conflictPolicy,
 ) applyFn {
 	return func(ctx context.Context, c ctrlClient.Client, w *apiv2.WeightsAndBiases, env corev1.EnvVar) (bool, error) {
@@ -207,19 +207,23 @@ func externalClickHouseSelector(
 		}
 
 		secretName := clickHouseConvertedSecretName(w)
-		userOwned := target.Name != "" && target.Name != secretName
-		if (policy == keepCR && target.Name != "") || (policy == overrideConversionDerived && userOwned) {
+		existingName := ""
+		if ref := target.SecretKeyRef(); ref != nil {
+			existingName = ref.Name
+		}
+		userOwned := existingName != "" && existingName != secretName
+		if (policy == keepCR && !target.IsZero()) || (policy == overrideConversionDerived && userOwned) {
 			return true, nil // field already authoritative; just drop the env
 		}
 
 		if hasSecretRef {
-			*target = *env.ValueFrom.SecretKeyRef // point directly at the user's Secret
+			*target = apiv2.ValueFromSelector(*env.ValueFrom.SecretKeyRef) // point directly at the user's Secret
 			return true, nil
 		}
 		if err := upsertConvertedSecretKeys(ctx, c, w, secretName, map[string][]byte{dataKey: []byte(env.Value)}); err != nil {
 			return false, err
 		}
-		*target = secretSelector(secretName, dataKey)
+		*target = apiv2.ValueFromSecret(secretName, dataKey, false)
 		return true, nil
 	}
 }

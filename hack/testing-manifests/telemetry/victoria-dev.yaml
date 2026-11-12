@@ -33,4 +33,7 @@ metadata:
   name: victoria-traces
   namespace: default
 spec:
+  # VictoriaTraces UI requires v0.12.0 or newer.
+  image:
+    tag: v0.12.1
   retentionPeriod: "1d"

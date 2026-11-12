@@ -16,20 +16,42 @@ import (
 
 const appWorkloadCapabilityAll v1.Capability = "ALL"
 
-func resolvePodSecurityContext() *v1.PodSecurityContext {
-	return &v1.PodSecurityContext{
-		SeccompProfile: resolveRuntimeDefaultSeccompProfile(),
+func applyWorkloadSecurityProfile(pod *v1.PodSpec, profile v2.WorkloadSecurityProfile) {
+	pod.SecurityContext = resolvePodSecurityContext(profile)
+	for i := range pod.Containers {
+		pod.Containers[i].SecurityContext = resolveContainerSecurityContext(profile)
+	}
+	for i := range pod.InitContainers {
+		pod.InitContainers[i].SecurityContext = resolveContainerSecurityContext(profile)
 	}
 }
 
-func resolveContainerSecurityContext() *v1.SecurityContext {
-	return &v1.SecurityContext{
-		AllowPrivilegeEscalation: ptr.To(false),
+func resolvePodSecurityContext(profile v2.WorkloadSecurityProfile) *v1.PodSecurityContext {
+	securityContext := &v1.PodSecurityContext{
+		SeccompProfile: resolveRuntimeDefaultSeccompProfile(),
+	}
+	if profile.RunAsNonRoot != nil {
+		securityContext.RunAsNonRoot = new(*profile.RunAsNonRoot)
+	}
+	return securityContext
+}
+
+func resolveContainerSecurityContext(profile v2.WorkloadSecurityProfile) *v1.SecurityContext {
+	securityContext := &v1.SecurityContext{
+		AllowPrivilegeEscalation: new(false),
 		Capabilities: &v1.Capabilities{
 			Drop: []v1.Capability{appWorkloadCapabilityAll},
 		},
 		SeccompProfile: resolveRuntimeDefaultSeccompProfile(),
 	}
+	if profile.ReadOnlyRootFilesystem != nil {
+		securityContext.ReadOnlyRootFilesystem = ptr.To(*profile.ReadOnlyRootFilesystem)
+	}
+	return securityContext
+}
+
+func hasWorkloadSecurityProfile(profile v2.WorkloadSecurityProfile) bool {
+	return profile.RunAsNonRoot != nil || profile.ReadOnlyRootFilesystem != nil
 }
 
 func resolveRuntimeDefaultSeccompProfile() *v1.SeccompProfile {
@@ -47,13 +69,12 @@ func resolveInitContainers(app serverManifest.Application, wandb *v2.WeightsAndB
 				continue
 			}
 			initContainer := v1.Container{
-				Name:            initContainerSpec.Name,
-				Image:           initContainerSpec.Image.GetImage(wandb.Spec.Global.ImageRegistry),
-				Env:             envVars,
-				Args:            initContainerSpec.Args,
-				Command:         initContainerSpec.Command,
-				VolumeMounts:    volumeMounts,
-				SecurityContext: resolveContainerSecurityContext(),
+				Name:         initContainerSpec.Name,
+				Image:        initContainerSpec.Image.GetImage(wandb.Spec.Global.ImageRegistry),
+				Env:          envVars,
+				Args:         initContainerSpec.Args,
+				Command:      initContainerSpec.Command,
+				VolumeMounts: volumeMounts,
 			}
 			initContainers = append(initContainers, initContainer)
 		}
@@ -92,14 +113,13 @@ func resolveContainers(app serverManifest.Application, wandb *v2.WeightsAndBiase
 			}
 
 			c := v1.Container{
-				Name:            container.Name,
-				Image:           img,
-				Env:             envVars,
-				Args:            args,
-				Command:         cmd,
-				Ports:           containerPorts,
-				VolumeMounts:    volumeMounts,
-				SecurityContext: resolveContainerSecurityContext(),
+				Name:         container.Name,
+				Image:        img,
+				Env:          envVars,
+				Args:         args,
+				Command:      cmd,
+				Ports:        containerPorts,
+				VolumeMounts: volumeMounts,
 			}
 
 			if resources := ResolveResources(app, wandb, container.Resources); resources != nil {
@@ -121,13 +141,12 @@ func resolveContainers(app serverManifest.Application, wandb *v2.WeightsAndBiase
 	} else {
 		// Backward-compatible single-container behavior
 		c := v1.Container{
-			Name:            app.Name,
-			Image:           app.Image.GetImage(wandb.Spec.Global.ImageRegistry),
-			Env:             envVars,
-			Args:            app.Args,
-			Command:         app.Command,
-			VolumeMounts:    volumeMounts,
-			SecurityContext: resolveContainerSecurityContext(),
+			Name:         app.Name,
+			Image:        app.Image.GetImage(wandb.Spec.Global.ImageRegistry),
+			Env:          envVars,
+			Args:         app.Args,
+			Command:      app.Command,
+			VolumeMounts: volumeMounts,
 		}
 
 		if resources := ResolveResources(app, wandb, nil); resources != nil {
@@ -215,7 +234,11 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 				if !ok {
 					continue
 				}
-				selector := status.Connection.URL
+				ref := status.Connection.URL.SecretKeyRef()
+				if ref == nil {
+					continue
+				}
+				selector := *ref
 				// Record for potential direct assignment case
 				singleSecretSelector = selector
 				secretOnlyCount++
@@ -225,7 +248,11 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 				if !ok {
 					continue
 				}
-				selector := status.Connection.URL
+				ref := status.Connection.URL.SecretKeyRef()
+				if ref == nil {
+					continue
+				}
+				selector := *ref
 				singleSecretSelector = selector
 				secretOnlyCount++
 				addSecretComponent(selector, idx)
@@ -234,8 +261,12 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 				if !ok {
 					continue
 				}
+				urlRef := status.Connection.URL.SecretKeyRef()
+				if urlRef == nil {
+					continue
+				}
 				selector := v1.SecretKeySelector{
-					LocalObjectReference: status.Connection.URL.LocalObjectReference,
+					LocalObjectReference: urlRef.LocalObjectReference,
 				}
 				switch src.Field {
 				case "host":
@@ -262,8 +293,12 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 				if !ok {
 					continue
 				}
+				urlRef := status.Connection.URL.SecretKeyRef()
+				if urlRef == nil {
+					continue
+				}
 				selector := v1.SecretKeySelector{
-					LocalObjectReference: status.Connection.URL.LocalObjectReference,
+					LocalObjectReference: urlRef.LocalObjectReference,
 				}
 				switch src.Field {
 				case "host":
@@ -288,10 +323,11 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 					if src.Field == "replicated-cluster" {
 						topology = status.Connection.ClusterName
 					}
-					if topology.Name == "" || topology.Key == "" {
+					ref := topology.SecretKeyRef()
+					if ref == nil || ref.Key == "" {
 						continue
 					}
-					selector.Key = topology.Key
+					selector.Key = ref.Key
 				default:
 					// Unrecognized field; skip
 					continue
@@ -301,15 +337,19 @@ func resolveEnvvars(ctx context.Context, client ctrlClient.Client, wandb *v2.Wei
 				addSecretComponent(selector, idx)
 			case "kafka":
 				// kafka can be referenced as a full URL (no field) or by specific fields (host/port)
+				urlRef := wandb.Status.KafkaStatus.Connection.URL.SecretKeyRef()
+				if urlRef == nil {
+					continue
+				}
 				if src.Field == "" {
-					selector := wandb.Status.KafkaStatus.Connection.URL
+					selector := *urlRef
 					singleSecretSelector = selector
 					secretOnlyCount++
 					addSecretComponent(selector, idx)
 					break
 				}
 				selector := v1.SecretKeySelector{
-					LocalObjectReference: wandb.Status.KafkaStatus.Connection.URL.LocalObjectReference,
+					LocalObjectReference: urlRef.LocalObjectReference,
 				}
 				switch src.Field {
 				case "host":

@@ -5,17 +5,10 @@ helmHooks:
 openshift:
   enabled: false
 
-wandb:
-  install: true
-  size: small
-  namespace: wandb
-  version: 0.83.1
-  internalServiceAuth: false
-
 wandb-operator:
   image:
     repository: us-docker.pkg.dev/wandb-production/public/wandb/operator
-    tag: 2.0.0-beta.3
+    tag: 2.0.0-beta.10
   containers:
     operator:
       command:
@@ -136,6 +129,10 @@ moco:
 
 redis-operator:
   enabled: true
+  # Required by managed Redis read-only roots: generate config on an emptyDir
+  # and bypass image entrypoints that append to /etc/redis at every startup.
+  featureGates:
+    GenerateConfigInInitContainer: true
   podSecurityContext:
     runAsNonRoot: true
     runAsUser: 1000
@@ -224,6 +221,9 @@ victoria-metrics-operator:
   podSecurityContext:
     seccompProfile:
       type: RuntimeDefault
+  # Its webhook isn't serving yet when Helm creates the telemetry CRs on first install
+  admissionWebhooks:
+    policy: Ignore
   crds:
     # Install Victoria CRDs through Helm's CRD phase so telemetry resources
     # in this chart can be created in the same release.
@@ -247,6 +247,9 @@ telemetry:
   # full: run the in-cluster Victoria stack and local Grafana
   # forward: run the in-cluster Victoria stack and forward OTLP data externally
   mode: "off"
+  crds:
+    victoriaMetrics: false
+    grafana: false
   namespace: wandb
   otel:
     secretName: wandb-otel-connection

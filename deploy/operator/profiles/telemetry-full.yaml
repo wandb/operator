@@ -1,5 +1,8 @@
 telemetry:
   mode: "full"
+  crds:
+    victoriaMetrics: true
+    grafana: true
   scrape:
     kubeStateMetrics: true
 

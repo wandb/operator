@@ -10,6 +10,15 @@
     "namespace": {
       "type": "string"
     },
+    "grafana": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pluginImage": {
+          "type": "string"
+        }
+      }
+    },
     "forwarding": {
       "type": "object",
       "additionalProperties": false,
@@ -57,6 +66,28 @@
           "additionalProperties": true
         },
         "securityContext": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "logAgent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "extraNamespaces": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "tolerations": {
+          "type": "array"
+        },
+        "resources": {
           "type": "object",
           "additionalProperties": true
         }

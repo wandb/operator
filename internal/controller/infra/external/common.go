@@ -130,6 +130,40 @@ func ResolveFields(
 	return data, nil
 }
 
+// ResolveValue returns a ValueOrSecret's literal value, or reads the referenced
+// Secret key. An unset value yields "".
+func ResolveValue(ctx context.Context, c client.Client, namespace string, v apiv2.ValueOrSecret) (string, error) {
+	if v.Value != "" {
+		return v.Value, nil
+	}
+	if ref := v.SecretKeyRef(); ref != nil {
+		return ResolveSecretKey(ctx, c, namespace, *ref)
+	}
+	return "", nil
+}
+
+// ResolveValueFields resolves a map of ValueOrSecret into a flat string map,
+// dropping fields that resolve to "". It is the ValueOrSecret counterpart of
+// ResolveFields.
+func ResolveValueFields(
+	ctx context.Context,
+	c client.Client,
+	namespace string,
+	fields map[string]apiv2.ValueOrSecret,
+) (map[string]string, error) {
+	data := map[string]string{}
+	for key, v := range fields {
+		val, err := ResolveValue(ctx, c, namespace, v)
+		if err != nil {
+			return nil, fmt.Errorf("field %q: %w", key, err)
+		}
+		if val != "" {
+			data[key] = val
+		}
+	}
+	return data, nil
+}
+
 func InferExternalStatus(
 	oldConditions, newConditions []metav1.Condition,
 	generation int64,

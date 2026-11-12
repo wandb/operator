@@ -74,6 +74,8 @@ spec:
     version: <wandb-version>
   networking:
     mode: ingress
+    ingress:
+      ingressClassName: nginx
 ```
 
 ```bash
@@ -81,8 +83,43 @@ kubectl apply -f wandb.yaml
 ```
 
 The operator reconciles the resource, brings up the requested backing services,
-and rolls out the W&B application. See [`deploy/operator/values.yaml`](deploy/operator/values.yaml)
-for the available chart options and which component operators are enabled.
+and rolls out the W&B application. See [networking configuration](docs/networking.md)
+for managed and external Ingress behavior, and
+[`deploy/operator/values.yaml`](deploy/operator/values.yaml) for the available
+chart options and which component operators are enabled.
+
+### Gateway API TLS options
+
+Implementation-specific Gateway TLS settings can be passed through an explicit
+listener's `tls.options` map. For example, a Google-managed Compute SSL
+certificate can be attached to a global GKE Gateway as follows:
+
+```yaml
+spec:
+  wandb:
+    hostname: https://wandb.example.com
+  networking:
+    mode: gateway
+    gatewayAPI:
+      listenerName: https
+      gateway:
+        managed: true
+        gatewayClassName: gke-l7-global-external-managed
+        listeners:
+          - name: https
+            hostname: wandb.example.com
+            port: 443
+            protocol: HTTPS
+            tls:
+              mode: Terminate
+              options:
+                networking.gke.io/pre-shared-certs: wandb-cert
+```
+
+For a regional GKE Gateway backed by Certificate Manager, use
+`networking.gke.io/cert-manager-certs` instead. Global Certificate Manager
+certificate maps remain Gateway metadata annotations and should be configured
+under `spec.networking.annotations` with the key `networking.gke.io/certmap`.
 
 ### Custom CA certificates (air-gapped / private registry)
 
@@ -129,6 +166,7 @@ trust a CA on the W&B **application** workloads instead, use
 - [Migrating from Operator v1 to v2](docs/migrating-v1-to-v2.md)
 - [Monitoring and Telemetry Guide](docs/monitoring.md)
 - [Deploying on OpenShift](docs/openshift.md)
+- [Setting Up Console v2](docs/console-v2-setup.md)
 - [Deploying Watchtower](docs/watchtower-deployment.md)
 
 ## Development
@@ -179,9 +217,21 @@ Alternatively, you can use the provided scripts to manage the kind cluster.
 # Create cluster
 ./hack/scripts/setup_kind.sh
 
+# Create a cluster with a specific Kubernetes version and two worker nodes
+./hack/scripts/setup_kind.sh 2 --kubernetes-version 1.35
+
+# Select an exact patch version
+./hack/scripts/setup_kind.sh --kubernetes-version v1.35.2
+
 # Delete cluster
 ./hack/scripts/teardown_kind.sh
 ```
+
+The optional version selects a `kindest/node` image; `1.35` selects `v1.35.0`.
+Use an image supported by your installed [kind release](https://github.com/kubernetes-sigs/kind/releases).
+Without a version, kind uses its default image. An existing cluster is reused only
+if its nodes match the requested minor or exact patch version; the script does
+not recreate mismatched clusters automatically.
 
 #### Install Tilt
 
@@ -221,6 +271,8 @@ The default Tilt setup follows the normal operator install path:
 - builds the local controller image as `controller:latest`
 - creates a `WeightsAndBiases` CR in `wandb`
 - uses `networkMode="gateway"` with `http://localhost:8080`
+- rewrites non-loopback W&B hostnames through cluster CoreDNS so workloads can
+  call the same URL through the local gateway or ingress
 - uses the published server manifest repository by default
 - keeps telemetry off unless `observabilityMode="full"` is set
 
@@ -230,6 +282,23 @@ and `networkMode`.
 Set `networkMode="ingress"` to use the local ingress-nginx path instead of
 Gateway API; if `wandbHostname` is not set explicitly, ingress mode uses
 `http://wandb.localhost:8080`.
+
+`enableCoreDNSRewrite=True` makes the hostname from `wandbHostname` resolve to
+the local Gateway or ingress-nginx Service from inside the cluster. This is
+enabled by default for non-loopback hostnames such as `wandb.localhost`. Tilt
+updates its marked CoreDNS rules without replacing other CoreDNS configuration.
+The rules remain in the development cluster after Tilt stops. Set the option to
+`False` when cluster DNS is managed outside this local development setup.
+OpenShift is excluded because its DNS Operator owns cluster DNS configuration.
+
+Gateway mode defaults to the loopback-only `http://localhost:8080`. To use the
+same external-style URL from the host and from workloads, override it locally:
+
+```python
+SETTINGS = {
+    "wandbHostname": "http://wandb.localhost:8080",
+}
+```
 
 Tilt defaults `manifestSource="published"`, which leaves
 `spec.wandb.manifestRepository` empty so the W&B CR webhook applies the same
@@ -241,6 +310,15 @@ when using that local source.
 
 Use `crFile` for custom CR shapes; Tilt treats it as a base CR and still
 applies the scalar settings above.
+
+When `useExternalObjectStore=True`, Tilt exposes the test SeaweedFS S3 API at
+`http://s3.localhost:8333` by default. The connection Secret uses that same
+hostname for direct presigned URLs, Tilt forwards the port for host access, and
+CoreDNS resolves it to the SeaweedFS Service for cluster workloads. Override
+`externalObjectStoreHostname` or `externalObjectStorePort` if the defaults
+conflict with another local service. Keep `enableCoreDNSRewrite=True` unless
+the configured hostname already resolves to the SeaweedFS Service in the
+cluster. This automatic DNS setup is not supported on OpenShift.
 
 By default, Tilt is configured to only allow connections to the following Kubernetes contexts:
 

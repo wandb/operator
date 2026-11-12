@@ -264,6 +264,12 @@ type LivenessProbeOverride struct {
 
 // ComponentSpec is the base spec of each component
 type ComponentSpec struct {
+	// Supported by seaweedfs-operator chart 0.1.35 (controller 1.0.32).
+	// +optional
+	PodSecurityContext *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
+	// +optional
+	ContainerSecurityContext *corev1.SecurityContext `json:"containerSecurityContext,omitempty"`
+
 	Version                       *string                              `json:"version,omitempty"`
 	ImagePullPolicy               *corev1.PullPolicy                   `json:"imagePullPolicy,omitempty"`
 	ImagePullSecrets              []corev1.LocalObjectReference        `json:"imagePullSecrets,omitempty"`
@@ -306,6 +312,8 @@ type PersistenceSpec struct {
 	DataSource       *corev1.TypedLocalObjectReference   `json:"dataSource,omitempty"`
 }
 
+// +kubebuilder:object:root=true
+
 // Seaweed is the Schema for the seaweeds API
 type Seaweed struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -314,6 +322,8 @@ type Seaweed struct {
 	Spec   SeaweedSpec   `json:"spec,omitempty"`
 	Status SeaweedStatus `json:"status,omitempty"`
 }
+
+// +kubebuilder:object:root=true
 
 // SeaweedList contains a list of Seaweed
 type SeaweedList struct {

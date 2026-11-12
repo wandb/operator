@@ -18,11 +18,13 @@ package controller
 
 import (
 	"context"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
+	"github.com/wandb/operator/internal/observability/supportbundle"
 	"github.com/wandb/operator/pkg/vendored/argo-rollouts/argoproj.io.rollouts/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
@@ -33,6 +35,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"knative.dev/pkg/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -45,6 +48,19 @@ type serviceUpdateCounter struct {
 
 func (c *serviceUpdateCounter) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 	if _, ok := obj.(*corev1.Service); ok {
+		c.updates++
+	}
+	return c.Client.Update(ctx, obj, opts...)
+}
+
+// cronJobUpdateCounter counts CronJob Update calls passing through the client.
+type cronJobUpdateCounter struct {
+	client.Client
+	updates int
+}
+
+func (c *cronJobUpdateCounter) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	if _, ok := obj.(*batchv1.CronJob); ok {
 		c.updates++
 	}
 	return c.Client.Update(ctx, obj, opts...)
@@ -102,7 +118,7 @@ var _ = Describe("Application Controller", func() {
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
 			controllerReconciler := &ApplicationReconciler{
-				Client: k8sClient,
+				Client: client.WithFieldOwner(k8sClient, ApplicationFieldManager),
 				Scheme: k8sClient.Scheme(),
 			}
 
@@ -157,7 +173,7 @@ var _ = Describe("Application Controller", func() {
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
 			controllerReconciler := &ApplicationReconciler{
-				Client: k8sClient,
+				Client: client.WithFieldOwner(k8sClient, ApplicationFieldManager),
 				Scheme: k8sClient.Scheme(),
 			}
 
@@ -221,7 +237,7 @@ var _ = Describe("Application Controller", func() {
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
 			controllerReconciler := &ApplicationReconciler{
-				Client: k8sClient,
+				Client: client.WithFieldOwner(k8sClient, ApplicationFieldManager),
 				Scheme: k8sClient.Scheme(),
 			}
 
@@ -295,7 +311,7 @@ var _ = Describe("Application Controller", func() {
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
 			controllerReconciler := &ApplicationReconciler{
-				Client: k8sClient,
+				Client: client.WithFieldOwner(k8sClient, ApplicationFieldManager),
 				Scheme: k8sClient.Scheme(),
 			}
 
@@ -356,7 +372,7 @@ var _ = Describe("Application Controller", func() {
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
 			controllerReconciler := &ApplicationReconciler{
-				Client: k8sClient,
+				Client: client.WithFieldOwner(k8sClient, ApplicationFieldManager),
 				Scheme: k8sClient.Scheme(),
 			}
 
@@ -401,7 +417,7 @@ var _ = Describe("Application Controller", func() {
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
 			controllerReconciler := &ApplicationReconciler{
-				Client: k8sClient,
+				Client: client.WithFieldOwner(k8sClient, ApplicationFieldManager),
 				Scheme: k8sClient.Scheme(),
 			}
 
@@ -448,7 +464,7 @@ var _ = Describe("Application Controller", func() {
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
 			controllerReconciler := &ApplicationReconciler{
-				Client: k8sClient,
+				Client: client.WithFieldOwner(k8sClient, ApplicationFieldManager),
 				Scheme: k8sClient.Scheme(),
 			}
 
@@ -494,7 +510,7 @@ var _ = Describe("Application Controller", func() {
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
 			controllerReconciler := &ApplicationReconciler{
-				Client: k8sClient,
+				Client: client.WithFieldOwner(k8sClient, ApplicationFieldManager),
 				Scheme: k8sClient.Scheme(),
 			}
 
@@ -581,7 +597,10 @@ var _ = Describe("Application Controller", func() {
 			// call still fires the Owns(Service) watch and re-queues the
 			// Application — the hot loop this test pins.
 			counter := &serviceUpdateCounter{Client: k8sClient}
-			controllerReconciler := &ApplicationReconciler{Client: counter, Scheme: k8sClient.Scheme()}
+			controllerReconciler := &ApplicationReconciler{
+				Client: client.WithFieldOwner(counter, ApplicationFieldManager),
+				Scheme: k8sClient.Scheme(),
+			}
 
 			// 1. Add finalizer; 2. create Deployment and Service.
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
@@ -591,6 +610,7 @@ var _ = Describe("Application Controller", func() {
 
 			svc := &corev1.Service{}
 			Expect(k8sClient.Get(ctx, typeNamespacedName, svc)).To(Succeed())
+			resourceVersion := svc.ResourceVersion
 
 			// Steady state: the API server has defaulted fields the template leaves
 			// unset (protocol, targetPort, sessionAffinity, type, ...); reconciling
@@ -602,6 +622,144 @@ var _ = Describe("Application Controller", func() {
 			}
 			Expect(counter.updates).To(BeZero(),
 				"steady-state reconciles must not update the Service")
+			Expect(k8sClient.Get(ctx, typeNamespacedName, svc)).To(Succeed())
+			Expect(svc.ResourceVersion).To(Equal(resourceVersion),
+				"an unchanged SSA intent must not change the Service resourceVersion")
+		})
+
+		It("uses SSA to preserve external Service fields and prune operator annotations", func() {
+			resourceName := "test-service-ssa"
+			key := types.NamespacedName{Name: resourceName, Namespace: "default"}
+			resource := &apiv2.Application{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: "default"},
+				Spec: apiv2.ApplicationSpec{
+					Kind: "Deployment",
+					PodTemplate: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{Name: "web", Image: "nginx"}},
+					}},
+					ServiceTemplate: &corev1.ServiceSpec{
+						Ports: []corev1.ServicePort{{Name: "http", Port: 80}},
+					},
+					ServiceAnnotations: map[string]string{"operator.example/health": "/ready"},
+				},
+			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+
+			reconciler := &ApplicationReconciler{
+				Client: client.WithFieldOwner(k8sClient, ApplicationFieldManager),
+				Scheme: k8sClient.Scheme(),
+			}
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+			Expect(err).NotTo(HaveOccurred())
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+			Expect(err).NotTo(HaveOccurred())
+
+			service := &corev1.Service{}
+			Expect(k8sClient.Get(ctx, key, service)).To(Succeed())
+			clusterIP := service.Spec.ClusterIP
+			service.Annotations["external.example/owner"] = "preserve-me"
+			Expect(k8sClient.Update(ctx, service)).To(Succeed())
+
+			Expect(k8sClient.Get(ctx, key, resource)).To(Succeed())
+			resource.Spec.ServiceAnnotations = nil
+			Expect(k8sClient.Update(ctx, resource)).To(Succeed())
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(k8sClient.Get(ctx, key, service)).To(Succeed())
+			Expect(service.Annotations).To(HaveKeyWithValue("external.example/owner", "preserve-me"))
+			Expect(service.Annotations).NotTo(HaveKey("operator.example/health"))
+			Expect(service.Spec.ClusterIP).To(Equal(clusterIP))
+
+			var foundFieldManager bool
+			for _, fields := range service.ManagedFields {
+				if fields.Manager == ApplicationFieldManager && fields.Operation == metav1.ManagedFieldsOperationApply {
+					foundFieldManager = true
+					break
+				}
+			}
+			Expect(foundFieldManager).To(BeTrue())
+		})
+
+		It("preserves an API-allocated NodePort across SSA reconciles", func() {
+			resourceName := "test-service-nodeport-ssa"
+			key := types.NamespacedName{Name: resourceName, Namespace: "default"}
+			resource := &apiv2.Application{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: "default"},
+				Spec: apiv2.ApplicationSpec{
+					Kind: "Deployment",
+					PodTemplate: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{Name: "web", Image: "nginx"}},
+					}},
+					ServiceTemplate: &corev1.ServiceSpec{
+						Type:  corev1.ServiceTypeNodePort,
+						Ports: []corev1.ServicePort{{Name: "http", Port: 80}},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+
+			reconciler := &ApplicationReconciler{
+				Client: client.WithFieldOwner(k8sClient, ApplicationFieldManager),
+				Scheme: k8sClient.Scheme(),
+			}
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+			Expect(err).NotTo(HaveOccurred())
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+			Expect(err).NotTo(HaveOccurred())
+
+			service := &corev1.Service{}
+			Expect(k8sClient.Get(ctx, key, service)).To(Succeed())
+			allocatedNodePort := service.Spec.Ports[0].NodePort
+			Expect(allocatedNodePort).To(BeNumerically(">", 0))
+
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Get(ctx, key, service)).To(Succeed())
+			Expect(service.Spec.Ports[0].NodePort).To(Equal(allocatedNodePort))
+		})
+
+		It("refuses to adopt an existing Service owned outside the Application", func() {
+			resourceName := "test-service-foreign"
+			key := types.NamespacedName{Name: resourceName, Namespace: "default"}
+			resource := &apiv2.Application{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: "default"},
+				Spec: apiv2.ApplicationSpec{
+					Kind: "Deployment",
+					PodTemplate: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{Name: "web", Image: "nginx"}},
+					}},
+					ServiceTemplate: &corev1.ServiceSpec{Ports: []corev1.ServicePort{{Port: 80}}},
+				},
+			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+			foreignService := &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: "default"},
+				Spec:       corev1.ServiceSpec{Ports: []corev1.ServicePort{{Port: 9000}}},
+			}
+			Expect(k8sClient.Create(ctx, foreignService)).To(Succeed())
+			DeferCleanup(deleteIfPresent, ctx, foreignService)
+
+			reconciler := &ApplicationReconciler{
+				Client: client.WithFieldOwner(k8sClient, ApplicationFieldManager),
+				Scheme: k8sClient.Scheme(),
+			}
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+			Expect(err).NotTo(HaveOccurred())
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("is not controlled by Application"))
+
+			service := &corev1.Service{}
+			Expect(k8sClient.Get(ctx, key, service)).To(Succeed())
+			Expect(service.Spec.Ports[0].Port).To(Equal(int32(9000)))
+
+			Expect(k8sClient.Get(ctx, key, resource)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Get(ctx, key, service)).To(Succeed())
+			Expect(service.Spec.Ports[0].Port).To(Equal(int32(9000)))
 		})
 
 		It("should successfully reconcile Jobs and CronJobs", func() {
@@ -659,7 +817,7 @@ var _ = Describe("Application Controller", func() {
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
 			controllerReconciler := &ApplicationReconciler{
-				Client: k8sClient,
+				Client: client.WithFieldOwner(k8sClient, ApplicationFieldManager),
 				Scheme: k8sClient.Scheme(),
 			}
 
@@ -680,6 +838,228 @@ var _ = Describe("Application Controller", func() {
 			err = k8sClient.Get(ctx, types.NamespacedName{Name: "test-cronjob", Namespace: "default"}, foundCronJob)
 			Expect(err).NotTo(HaveOccurred())
 		})
+		It("marks a CronJob-only Application ready without creating a workload", func() {
+			key := types.NamespacedName{Name: "test-cronjob-only", Namespace: "default"}
+			resource := &apiv2.Application{
+				ObjectMeta: metav1.ObjectMeta{Name: key.Name, Namespace: key.Namespace},
+				Spec: apiv2.ApplicationSpec{
+					Kind: "CronJob",
+					// The CRD rejects a null containers list, even when no pod workload is wanted.
+					PodTemplate: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{}}},
+					CronJobs:    []batchv1.CronJob{suspendedCronJob("test-cronjob-only-template")},
+				},
+			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+
+			counter := &cronJobUpdateCounter{Client: k8sClient}
+			reconciler := &ApplicationReconciler{
+				Client: client.WithFieldOwner(counter, ApplicationFieldManager),
+				Scheme: k8sClient.Scheme(),
+			}
+			for i := 0; i < 2; i++ {
+				_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+				Expect(err).NotTo(HaveOccurred())
+			}
+
+			Expect(k8sClient.Get(ctx, key, resource)).To(Succeed())
+			Expect(resource.Status.Ready).To(BeTrue())
+			Expect(resource.Status.DeploymentStatus).To(BeNil())
+			Expect(apierrors.IsNotFound(k8sClient.Get(ctx, key, &appsv1.Deployment{}))).To(BeTrue())
+
+			cronJobKey := types.NamespacedName{Name: "test-cronjob-only-template", Namespace: "default"}
+			cronJob := &batchv1.CronJob{}
+			Expect(k8sClient.Get(ctx, cronJobKey, cronJob)).To(Succeed())
+			Expect(*cronJob.Spec.Suspend).To(BeTrue())
+
+			By("staying quiet once the server has defaulted the CronJob")
+			resourceVersion := cronJob.ResourceVersion
+			counter.updates = 0
+			for i := 0; i < 3; i++ {
+				_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+				Expect(err).NotTo(HaveOccurred())
+			}
+			Expect(counter.updates).To(BeZero())
+			Expect(k8sClient.Get(ctx, cronJobKey, cronJob)).To(Succeed())
+			Expect(cronJob.ResourceVersion).To(Equal(resourceVersion))
+
+			By("re-suspending a manually unsuspended CronJob")
+			cronJob.Spec.Suspend = ptr.Bool(false)
+			Expect(k8sClient.Update(ctx, cronJob)).To(Succeed())
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Get(ctx, cronJobKey, cronJob)).To(Succeed())
+			Expect(*cronJob.Spec.Suspend).To(BeTrue())
+
+			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(apierrors.IsNotFound(k8sClient.Get(ctx, cronJobKey, cronJob))).To(BeTrue())
+		})
+
+		It("copies each CronJob's run status onto the Application", func() {
+			key := types.NamespacedName{Name: "test-cronjob-status", Namespace: "default"}
+			resource := &apiv2.Application{
+				ObjectMeta: metav1.ObjectMeta{Name: key.Name, Namespace: key.Namespace},
+				Spec: apiv2.ApplicationSpec{
+					Kind:        "CronJob",
+					PodTemplate: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{}}},
+					CronJobs:    []batchv1.CronJob{suspendedCronJob("test-cronjob-status-template")},
+				},
+			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+			reconciler := &ApplicationReconciler{
+				Client: client.WithFieldOwner(k8sClient, ApplicationFieldManager),
+				Scheme: k8sClient.Scheme(),
+			}
+			for i := 0; i < 2; i++ {
+				_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+				Expect(err).NotTo(HaveOccurred())
+			}
+
+			cronJob := &batchv1.CronJob{}
+			cronJobKey := types.NamespacedName{Name: "test-cronjob-status-template", Namespace: "default"}
+			Expect(k8sClient.Get(ctx, cronJobKey, cronJob)).To(Succeed())
+			lastSuccess := metav1.NewTime(time.Now().Truncate(time.Second))
+			cronJob.Status = batchv1.CronJobStatus{
+				Active:             []corev1.ObjectReference{{Kind: "Job", Namespace: "default", Name: "run-1"}},
+				LastSuccessfulTime: &lastSuccess,
+			}
+			Expect(k8sClient.Status().Update(ctx, cronJob)).To(Succeed())
+
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Get(ctx, key, resource)).To(Succeed())
+			status := resource.Status.CronJobStatuses["test-cronjob-status-template"]
+			Expect(status.Active).To(HaveLen(1))
+			Expect(status.Active[0].Name).To(Equal("run-1"))
+			Expect(status.LastSuccessfulTime.Equal(&lastSuccess)).To(BeTrue())
+
+			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("does not update a Deployment Application's CronJob on a steady-state reconcile", func() {
+			key := types.NamespacedName{Name: "test-cronjob-steady", Namespace: "default"}
+			resource := &apiv2.Application{
+				ObjectMeta: metav1.ObjectMeta{Name: key.Name, Namespace: key.Namespace},
+				Spec: apiv2.ApplicationSpec{
+					Kind: "Deployment",
+					PodTemplate: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "web", Image: "nginx"}}},
+					},
+					CronJobs: []batchv1.CronJob{suspendedCronJob("test-cronjob-steady-template")},
+				},
+			}
+			resource.Spec.CronJobs[0].Spec.Suspend = nil
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+
+			counter := &cronJobUpdateCounter{Client: k8sClient}
+			reconciler := &ApplicationReconciler{
+				Client: client.WithFieldOwner(counter, ApplicationFieldManager),
+				Scheme: k8sClient.Scheme(),
+			}
+			for i := 0; i < 2; i++ {
+				_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+				Expect(err).NotTo(HaveOccurred())
+			}
+
+			counter.updates = 0
+			for i := 0; i < 3; i++ {
+				_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+				Expect(err).NotTo(HaveOccurred())
+			}
+			Expect(counter.updates).To(BeZero())
+
+			Expect(k8sClient.Get(ctx, key, resource)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("refuses to adopt an existing CronJob owned outside the Application", func() {
+			key := types.NamespacedName{Name: "test-cronjob-foreign", Namespace: "default"}
+			resource := &apiv2.Application{
+				ObjectMeta: metav1.ObjectMeta{Name: key.Name, Namespace: key.Namespace},
+				Spec: apiv2.ApplicationSpec{
+					Kind: "CronJob",
+					// The CRD rejects a null containers list, even when no pod workload is wanted.
+					PodTemplate: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{}}},
+					CronJobs:    []batchv1.CronJob{suspendedCronJob(key.Name)},
+				},
+			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+			foreign := suspendedCronJob(key.Name)
+			foreign.Namespace = key.Namespace
+			foreign.Spec.Schedule = "30 1 * * *"
+			foreign.Labels = map[string]string{
+				"app.kubernetes.io/name":       key.Name,
+				"app.kubernetes.io/instance":   key.Namespace,
+				"app.kubernetes.io/managed-by": "application-controller",
+			}
+			Expect(k8sClient.Create(ctx, &foreign)).To(Succeed())
+			DeferCleanup(deleteIfPresent, ctx, &foreign)
+
+			reconciler := &ApplicationReconciler{
+				Client: client.WithFieldOwner(k8sClient, ApplicationFieldManager),
+				Scheme: k8sClient.Scheme(),
+			}
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+			Expect(err).NotTo(HaveOccurred())
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("is not controlled by Application"))
+
+			Expect(k8sClient.Get(ctx, key, resource)).To(Succeed())
+			Expect(resource.Status.Ready).To(BeFalse())
+
+			found := &batchv1.CronJob{}
+			Expect(k8sClient.Get(ctx, key, found)).To(Succeed())
+			Expect(found.Spec.Schedule).To(Equal("30 1 * * *"))
+			Expect(found.OwnerReferences).To(BeEmpty())
+
+			By("leaving the foreign CronJob in place when the Application is deleted")
+			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Get(ctx, key, found)).To(Succeed())
+		})
+
+		It("keeps the support-bundle CronJob template quiet after creation", func() {
+			wandb := &apiv2.WeightsAndBiases{ObjectMeta: metav1.ObjectMeta{Name: "sb", Namespace: "default"}}
+			wandb.Spec.Global.ImagePullSecrets = []corev1.LocalObjectReference{{Name: "pull"}}
+			bucket := supportbundle.BucketConnection{
+				URL:    &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "conn"}, Key: "url"},
+				Region: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "conn"}, Key: "Region"},
+			}
+			resource := supportbundle.Application(wandb, bucket)
+			key := types.NamespacedName{Name: resource.Name, Namespace: resource.Namespace}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+
+			counter := &cronJobUpdateCounter{Client: k8sClient}
+			reconciler := &ApplicationReconciler{
+				Client: client.WithFieldOwner(counter, ApplicationFieldManager),
+				Scheme: k8sClient.Scheme(),
+			}
+			for i := 0; i < 2; i++ {
+				_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+				Expect(err).NotTo(HaveOccurred())
+			}
+			Expect(k8sClient.Get(ctx, key, resource)).To(Succeed())
+			Expect(resource.Status.Ready).To(BeTrue())
+
+			counter.updates = 0
+			for i := 0; i < 3; i++ {
+				_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+				Expect(err).NotTo(HaveOccurred())
+			}
+			Expect(counter.updates).To(BeZero())
+
+			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+			Expect(err).NotTo(HaveOccurred())
+		})
+
 		It("should successfully delete resources when Application is deleted", func() {
 			resourceName := "test-deletion"
 			typeNamespacedName := types.NamespacedName{
@@ -707,7 +1087,7 @@ var _ = Describe("Application Controller", func() {
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
 			controllerReconciler := &ApplicationReconciler{
-				Client: k8sClient,
+				Client: client.WithFieldOwner(k8sClient, ApplicationFieldManager),
 				Scheme: k8sClient.Scheme(),
 			}
 
@@ -741,3 +1121,23 @@ var _ = Describe("Application Controller", func() {
 		})
 	})
 })
+
+func suspendedCronJob(name string) batchv1.CronJob {
+	return batchv1.CronJob{
+		ObjectMeta: metav1.ObjectMeta{Name: name},
+		Spec: batchv1.CronJobSpec{
+			Schedule: "0 0 * * *",
+			Suspend:  ptr.Bool(true),
+			JobTemplate: batchv1.JobTemplateSpec{
+				Spec: batchv1.JobSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							RestartPolicy: corev1.RestartPolicyNever,
+							Containers:    []corev1.Container{{Name: "collector", Image: "busybox", Args: []string{"true"}}},
+						},
+					},
+				},
+			},
+		},
+	}
+}

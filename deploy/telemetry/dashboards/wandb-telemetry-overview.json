@@ -4,15 +4,15 @@
       "name": "DS_VICTORIAMETRICS",
       "label": "VictoriaMetrics",
       "type": "datasource",
-      "pluginId": "victoriametrics-metrics-datasource",
-      "pluginName": "VictoriaMetrics"
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
     },
     {
       "name": "DS_VICTORIATRACES",
       "label": "VictoriaTraces",
       "type": "datasource",
-      "pluginId": "jaeger",
-      "pluginName": "Jaeger"
+      "pluginId": "tempo",
+      "pluginName": "Tempo"
     }
   ],
   "annotations": {
@@ -47,9 +47,9 @@
     },
     {
       "type": "stat",
-      "title": "Scrape Success",
+      "title": "Telemetry Retrieval Successful",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
@@ -103,9 +103,9 @@
     },
     {
       "type": "stat",
-      "title": "Down Targets",
+      "title": "Unsuccessful Retrieval",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
@@ -156,7 +156,7 @@
       "type": "stat",
       "title": "HTTP Requests / sec",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
@@ -190,7 +190,7 @@
       "type": "stat",
       "title": "API P95 Latency",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
@@ -230,7 +230,7 @@
       "type": "stat",
       "title": "MySQL Questions / sec",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
@@ -264,7 +264,7 @@
       "type": "stat",
       "title": "Spans Exported / sec",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
@@ -310,7 +310,7 @@
       "type": "stat",
       "title": "HTTP 4xx / sec",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
@@ -344,7 +344,7 @@
       "type": "stat",
       "title": "HTTP 5xx / sec",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
@@ -399,7 +399,7 @@
       "type": "stat",
       "title": "Avg API Latency",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
@@ -439,7 +439,7 @@
       "type": "stat",
       "title": "GraphQL Calls / sec",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
@@ -473,7 +473,7 @@
       "type": "stat",
       "title": "Range GraphQL Calls",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
@@ -507,7 +507,7 @@
       "type": "stat",
       "title": "Range Metadata Ops",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
@@ -541,7 +541,7 @@
       "type": "timeseries",
       "title": "Responses by Status Code",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
@@ -562,7 +562,7 @@
       "type": "timeseries",
       "title": "Request Rate by Method",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
@@ -583,7 +583,7 @@
       "type": "timeseries",
       "title": "GraphQL Operation Call Rate",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
@@ -604,7 +604,7 @@
       "type": "timeseries",
       "title": "GraphQL Avg Duration by Operation",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
@@ -643,7 +643,7 @@
       "type": "timeseries",
       "title": "Metadata Operation Call Rate",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
@@ -664,7 +664,7 @@
       "type": "timeseries",
       "title": "Metadata Avg Duration",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
@@ -691,7 +691,7 @@
       "type": "timeseries",
       "title": "MySQL Query P95 by Service",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
@@ -718,7 +718,7 @@
       "type": "timeseries",
       "title": "Redis Pool Usage by Service",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
@@ -739,7 +739,7 @@
       "type": "timeseries",
       "title": "Redis Pool Capacity by Service",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
@@ -760,7 +760,7 @@
       "type": "timeseries",
       "title": "Redis Pool P95 Use Time",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
@@ -799,7 +799,7 @@
       "type": "stat",
       "title": "MySQL Exporter Up",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
@@ -850,7 +850,7 @@
       "type": "stat",
       "title": "Threads Connected",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
@@ -884,7 +884,7 @@
       "type": "stat",
       "title": "Threads Running",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
@@ -918,7 +918,7 @@
       "type": "stat",
       "title": "InnoDB Writes / sec",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
@@ -952,7 +952,7 @@
       "type": "stat",
       "title": "Slow Queries / sec",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
@@ -1007,7 +1007,7 @@
       "type": "stat",
       "title": "Fsync / sec",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
@@ -1041,7 +1041,7 @@
       "type": "timeseries",
       "title": "MySQL Throughput",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
@@ -1065,14 +1065,20 @@
           "expr": "sum(rate(mysql_global_status_innodb_os_log_fsyncs{job=~\"$namespace/mysql-(moco|innodb)\"}[$__rate_interval]))",
           "legendFormat": "fsyncs",
           "refId": "C"
+        },
+        {
+          "expr": "sum(rate(mysql_global_status_queries{job=~\"$namespace/mysql-(moco|innodb)\"}[$__rate_interval]))",
+          "legendFormat": "queries (total QPS)",
+          "refId": "D"
         }
+
       ]
     },
     {
       "type": "timeseries",
       "title": "MySQL Network Bytes",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
@@ -1104,7 +1110,7 @@
       "type": "timeseries",
       "title": "Row Lock Pressure",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
@@ -1130,7 +1136,7 @@
       "type": "timeseries",
       "title": "MySQL Read vs Write Rate",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
@@ -1152,6 +1158,67 @@
         }
       ]
     },
+   {
+      "type": "timeseries",
+      "title": "Connections vs max_connections",
+      "datasource": { "type": "prometheus", "uid": "${DS_VICTORIAMETRICS}" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 72 },
+      "targets": [
+        {
+          "expr": "max(mysql_global_status_threads_connected{job=~\"$namespace/mysql-(moco|innodb)\"})",
+          "legendFormat": "connected",
+          "refId": "A"
+        },
+        {
+          "expr": "max(mysql_global_status_threads_running{job=~\"$namespace/mysql-(moco|innodb)\"})",
+          "legendFormat": "running",
+          "refId": "B"
+        },
+        {
+          "expr": "max(mysql_global_variables_max_connections{job=~\"$namespace/mysql-(moco|innodb)\"})",
+          "legendFormat": "max_connections",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "InnoDB Buffer Pool Hit %",
+      "datasource": { "type": "prometheus", "uid": "${DS_VICTORIAMETRICS}" },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 72 },
+      "targets": [
+        {
+          "expr": "100 * (1 - sum(rate(mysql_global_status_innodb_buffer_pool_reads{job=~\"$namespace/mysql-(moco|innodb)\"}[$__rate_interval])) / (sum(rate(mysql_global_status_innodb_buffer_pool_read_requests{job=~\"$namespace/mysql-(moco|innodb)\"}[$__rate_interval])) + 0.0001))",
+          "legendFormat": "hit %",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percent", "max": 100 }, "overrides": [] }
+    },
+    {
+      "type": "timeseries",
+      "title": "InnoDB Row Lock Time",
+      "datasource": { "type": "prometheus", "uid": "${DS_VICTORIAMETRICS}" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 72 },
+      "targets": [
+        {
+          "expr": "sum(rate(mysql_global_status_innodb_row_lock_time{job=~\"$namespace/mysql-(moco|innodb)\"}[$__rate_interval])) or vector(0)",
+          "legendFormat": "lock time ms / sec",
+          "refId": "A"
+        },
+        {
+          "expr": "max(mysql_global_status_innodb_row_lock_time_avg{job=~\"$namespace/mysql-(moco|innodb)\"})",
+          "legendFormat": "avg ms",
+          "refId": "B"
+        },
+        {
+          "expr": "max(mysql_global_status_innodb_row_lock_time_max{job=~\"$namespace/mysql-(moco|innodb)\"})",
+          "legendFormat": "max ms",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] }
+    },
 
     {
       "type": "row",
@@ -1160,7 +1227,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 72
+        "y": 80
       },
       "collapsed": false
     },
@@ -1168,14 +1235,14 @@
       "type": "stat",
       "title": "Connected Clients",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
         "h": 4,
         "w": 4,
         "x": 0,
-        "y": 73
+        "y": 81
       },
       "targets": [
         {
@@ -1202,14 +1269,14 @@
       "type": "stat",
       "title": "Redis Commands / sec",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
         "h": 4,
         "w": 4,
         "x": 4,
-        "y": 73
+        "y": 81
       },
       "targets": [
         {
@@ -1236,14 +1303,14 @@
       "type": "stat",
       "title": "Redis Errors / sec",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
         "h": 4,
         "w": 4,
         "x": 8,
-        "y": 73
+        "y": 81
       },
       "targets": [
         {
@@ -1291,14 +1358,14 @@
       "type": "stat",
       "title": "Redis Memory Used",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
         "h": 4,
         "w": 4,
         "x": 12,
-        "y": 73
+        "y": 81
       },
       "targets": [
         {
@@ -1331,14 +1398,14 @@
       "type": "stat",
       "title": "Redis Input Bps",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
         "h": 4,
         "w": 4,
         "x": 16,
-        "y": 73
+        "y": 81
       },
       "targets": [
         {
@@ -1371,14 +1438,14 @@
       "type": "stat",
       "title": "Redis Output Bps",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
         "h": 4,
         "w": 4,
         "x": 20,
-        "y": 73
+        "y": 81
       },
       "targets": [
         {
@@ -1411,14 +1478,14 @@
       "type": "timeseries",
       "title": "Redis Traffic",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 77
+        "y": 85
       },
       "targets": [
         {
@@ -1442,14 +1509,14 @@
       "type": "timeseries",
       "title": "Redis Memory Breakdown",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 77
+        "y": 85
       },
       "targets": [
         {
@@ -1479,14 +1546,14 @@
       "type": "timeseries",
       "title": "Redis Keyspace Activity",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 85
+        "y": 93
       },
       "targets": [
         {
@@ -1510,14 +1577,14 @@
       "type": "timeseries",
       "title": "Redis Connection Create P95 by Service",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 85
+        "y": 93
       },
       "targets": [
         {
@@ -1541,7 +1608,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 93
+        "y": 101
       },
       "collapsed": false
     },
@@ -1549,14 +1616,14 @@
       "type": "timeseries",
       "title": "CPU by Pod",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
         "h": 9,
         "w": 12,
         "x": 0,
-        "y": 94
+        "y": 102
       },
       "targets": [
         {
@@ -1570,14 +1637,14 @@
       "type": "timeseries",
       "title": "Memory by Pod",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
         "h": 9,
         "w": 12,
         "x": 12,
-        "y": 94
+        "y": 102
       },
       "targets": [
         {
@@ -1601,7 +1668,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 103
+        "y": 111
       },
       "collapsed": false
     },
@@ -1609,14 +1676,14 @@
       "type": "stat",
       "title": "Spans Accepted / sec",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
         "h": 4,
         "w": 4,
         "x": 0,
-        "y": 104
+        "y": 112
       },
       "targets": [
         {
@@ -1643,14 +1710,14 @@
       "type": "stat",
       "title": "Spans Exported / sec",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
         "h": 4,
         "w": 4,
         "x": 4,
-        "y": 104
+        "y": 112
       },
       "targets": [
         {
@@ -1677,14 +1744,14 @@
       "type": "stat",
       "title": "Failed Span Exports / sec",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
         "h": 4,
         "w": 4,
         "x": 8,
-        "y": 104
+        "y": 112
       },
       "targets": [
         {
@@ -1735,7 +1802,7 @@
         "h": 4,
         "w": 12,
         "x": 12,
-        "y": 104
+        "y": 112
       },
       "options": {
         "content": "<ul><li>Use the dashboard header link or <a href=\"/explore?panes=%7B%22A%22:%7B%22datasource%22:%22${DS_VICTORIATRACES}%22,%22queries%22:[],%22range%22:%7B%22from%22:%22now-1h%22,%22to%22:%22now%22%7D%7D%7D&schemaVersion=1&orgId=1\" target=\"_blank\" rel=\"noopener noreferrer\"><b>open VictoriaTraces in Explore</b></a> for span search.</li><li>Current traced services typically include <code>gorilla</code>, <code>gorilla-executor</code>, <code>gorilla-filemeta</code>, <code>gorilla-flat-run-fields-updater</code>, <code>gorilla-glue</code>, <code>gorilla-metric-observer</code>, and <code>gorilla-parquet</code>.</li><li>The HTTP panels in this dashboard are keyed off <code>service_name=&quot;gorilla&quot;</code>; deeper workload breakdown is best seen in traces and DB/pool telemetry until more services publish first-class HTTP metrics.</li></ul>",
@@ -1746,14 +1813,14 @@
       "type": "timeseries",
       "title": "Span Flow",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 108
+        "y": 116
       },
       "targets": [
         {
@@ -1781,7 +1848,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 116
+        "y": 124
       },
       "collapsed": false
     },
@@ -1789,14 +1856,14 @@
       "type": "stat",
       "title": "ClickHouse Memory Tracking",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
         "h": 4,
         "w": 4,
         "x": 0,
-        "y": 117
+        "y": 125
       },
       "targets": [
         {
@@ -1829,14 +1896,14 @@
       "type": "stat",
       "title": "ClickHouse HTTP Connections",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
         "h": 4,
         "w": 4,
         "x": 4,
-        "y": 117
+        "y": 125
       },
       "targets": [
         {
@@ -1863,14 +1930,14 @@
       "type": "stat",
       "title": "Kafka Requests / sec",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
         "h": 4,
         "w": 4,
         "x": 8,
-        "y": 117
+        "y": 125
       },
       "targets": [
         {
@@ -1897,14 +1964,14 @@
       "type": "stat",
       "title": "Bufstream Status",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
         "h": 4,
         "w": 4,
         "x": 12,
-        "y": 117
+        "y": 125
       },
       "targets": [
         {
@@ -1948,14 +2015,14 @@
       "type": "stat",
       "title": "SeaweedFS Requests / sec",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
         "h": 4,
         "w": 4,
         "x": 16,
-        "y": 117
+        "y": 125
       },
       "targets": [
         {
@@ -1982,14 +2049,14 @@
       "type": "stat",
       "title": "SeaweedFS Free Capacity",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
         "h": 4,
         "w": 4,
         "x": 20,
-        "y": 117
+        "y": 125
       },
       "targets": [
         {
@@ -2022,14 +2089,14 @@
       "type": "timeseries",
       "title": "ClickHouse Activity",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 121
+        "y": 129
       },
       "targets": [
         {
@@ -2048,14 +2115,14 @@
       "type": "timeseries",
       "title": "Kafka Consumer Lag by Topic",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 121
+        "y": 129
       },
       "targets": [
         {
@@ -2070,14 +2137,14 @@
       "type": "timeseries",
       "title": "SeaweedFS Capacity Used %",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 121
+        "y": 129
       },
       "targets": [
         {
@@ -2096,14 +2163,14 @@
       "type": "timeseries",
       "title": "ClickHouse Memory Tracking",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 129
+        "y": 137
       },
       "targets": [
         {
@@ -2123,14 +2190,14 @@
       "type": "timeseries",
       "title": "SeaweedFS Request Rate",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 129
+        "y": 137
       },
       "targets": [
         {
@@ -2143,14 +2210,14 @@
     {
       "type": "row",
       "title": "Telemetry Self-Health (can I trust this data?)",
-      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 137},
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 145},
       "collapsed": false
     },
     {
       "type": "timeseries",
       "title": "Span Export Failure %",
-      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
-      "gridPos": {"h": 8, "w": 16, "x": 0, "y": 138},
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 8, "w": 16, "x": 0, "y": 146},
       "targets": [
         {
           "expr": "sum(rate(otelcol_exporter_send_failed_spans[$__rate_interval])) / clamp_min(sum(rate(otelcol_exporter_sent_spans[$__rate_interval])) + sum(rate(otelcol_exporter_send_failed_spans[$__rate_interval])), 1)",
@@ -2165,17 +2232,17 @@
     {
       "type": "text",
       "title": "About: Telemetry Self-Health",
-      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 138},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 146},
       "options": {
         "mode": "markdown",
-        "content": "### Read this FIRST when a dashboard looks wrong\n\n**What it shows** — the fraction of trace spans the collector failed to export to storage. If this is non-zero, the trace/RED panels across every dashboard are **undercounting** — the data itself is lossy, not the app.\n\n**What bad looks like** — sustained > ~1%. Above ~5% treat trace-derived numbers as unreliable.\n\n**Do next** — if failures are high, check the `victoria-otlp-gateway` collector pod and the VictoriaTraces backend before trusting any trace panel. Also cross-check **Scrape Success** / **Down Targets** at the top of this dashboard for metric-side gaps."
+        "content": "### Read this FIRST when a dashboard looks wrong\n\n**What it shows** — the fraction of trace spans the collector failed to export to storage. If this is non-zero, the trace/RED panels across every dashboard are **undercounting** — the data itself is lossy, not the app.\n\n**What bad looks like** — sustained > ~1%. Above ~5% treat trace-derived numbers as unreliable.\n\n**Do next** — if failures are high, check the `victoria-otlp-gateway` collector pod and the VictoriaTraces backend before trusting any trace panel. Also cross-check **Telemetry Retrieval Success** / **Unsuccessful Retrieval** at the top of this dashboard for metric-side gaps."
       }
     },
     {
       "type": "timeseries",
       "title": "Trace ingestion by receiver (DataDog / OTLP)",
-      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
-      "gridPos": {"h": 8, "w": 16, "x": 0, "y": 146},
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 8, "w": 16, "x": 0, "y": 154},
       "targets": [
         {
           "expr": "sum by (receiver) (rate(otelcol_receiver_accepted_spans[$__rate_interval]))",
@@ -2190,7 +2257,7 @@
     {
       "type": "text",
       "title": "About: Ingestion by receiver",
-      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 146},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 154},
       "options": {
         "mode": "markdown",
         "content": "**What it shows** — whether each ingestion path on the gateway is receiving data. This is how you confirm **DataDog** traces/metrics are populated.\n\n- **`datadog`** — DataDog-APM traces (port 8126). A non-zero line here means DataDog-protocol tracing is flowing; downstream it appears as `traces_spanmetrics_calls_milliseconds_total` for the SDK services.\n- **`otlp`** — the main gorilla OpenTelemetry path (the bulk of spans/metrics).\n- **`statsd`** — DogStatsD metrics (port 8125). Gorilla emits these via `GORILLA_STATSD_ADDRESS` regardless of the `GORILLA_STATSD_PORT` setting (`GORILLA_STATSD_PORT=0` is a vestigial no-op), so datagrams do reach the collector. This line can look thin on an idle cluster because gorilla emits most app metrics only under traffic — not because DogStatsD is disabled.\n\n**What bad looks like** — a receiver you expect traffic on flatlining at 0, or `otelcol_receiver_refused_*` climbing (data arriving but rejected)."
@@ -2199,8 +2266,8 @@
     {
       "type": "timeseries",
       "title": "Metric-point ingestion by receiver (DogStatsD / OTLP)",
-      "datasource": {"type": "victoriametrics-metrics-datasource", "uid": "${DS_VICTORIAMETRICS}"},
-      "gridPos": {"h": 8, "w": 16, "x": 0, "y": 154},
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 8, "w": 16, "x": 0, "y": 162 },
       "targets": [
         {
           "expr": "sum by (receiver) (rate(otelcol_receiver_accepted_metric_points[$__rate_interval]))",
@@ -2215,7 +2282,7 @@
     {
       "type": "text",
       "title": "About: Receiver errors",
-      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 154},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 162},
       "options": {
         "mode": "markdown",
         "content": "**Pairs with the panel to the left.** If a receiver shows accepted traffic but data still isn't landing in dashboards, check the refused counters:\n\n- `sum by (receiver) (rate(otelcol_receiver_refused_spans[$__rate_interval]))`\n- `sum by (receiver) (rate(otelcol_receiver_refused_metric_points[$__rate_interval]))`\n\n**Accepted > 0, refused ≈ 0** = healthy ingestion. **Refused climbing** = the gateway is receiving but rejecting (bad payloads, queue full) — check the `victoria-otlp-gateway` collector logs."
@@ -2237,7 +2304,7 @@
         "label": "W&B Namespace",
         "type": "query",
         "datasource": {
-          "type": "victoriametrics-metrics-datasource",
+          "type": "prometheus",
           "uid": "${DS_VICTORIAMETRICS}"
         },
         "definition": "label_values(wandb_application_info, namespace)",

@@ -7,10 +7,8 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/infra/external"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -39,7 +37,7 @@ func WriteState(
 ) []metav1.Condition {
 	logger := ctrl.LoggerFrom(ctx)
 
-	fields := map[string]corev1.SecretKeySelector{
+	fields := map[string]apiv2.ValueOrSecret{
 		"Host":     spec.Host,
 		"Port":     spec.Port,
 		"Database": spec.Database,
@@ -51,7 +49,7 @@ func WriteState(
 		"SslKey":   spec.SslKey,
 	}
 
-	data, err := external.ResolveFields(ctx, c, wandb.Namespace, fields)
+	data, err := external.ResolveValueFields(ctx, c, wandb.Namespace, fields)
 	if err != nil {
 		logger.Error(err, "failed to resolve external mysql fields")
 		return []metav1.Condition{{
@@ -104,18 +102,17 @@ func ReadState(
 		return conditions, nil
 	}
 
-	localRef := corev1.LocalObjectReference{Name: nsName.Name}
 	return conditions, &apiv2.MysqlConnection{
-		URL:      corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "url", Optional: ptr.To(false)},
-		Host:     corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Host", Optional: ptr.To(false)},
-		Port:     corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Port", Optional: ptr.To(false)},
-		Database: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Database", Optional: ptr.To(false)},
-		Username: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Username", Optional: ptr.To(false)},
-		Password: corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Password", Optional: ptr.To(false)},
-		Tls:      corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "Tls", Optional: ptr.To(true)},
-		SslCa:    corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "SslCa", Optional: ptr.To(true)},
-		SslCert:  corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "SslCert", Optional: ptr.To(true)},
-		SslKey:   corev1.SecretKeySelector{LocalObjectReference: localRef, Key: "SslKey", Optional: ptr.To(true)},
+		URL:      apiv2.ValueFromSecret(nsName.Name, "url", false),
+		Host:     apiv2.ValueFromSecret(nsName.Name, "Host", false),
+		Port:     apiv2.ValueFromSecret(nsName.Name, "Port", false),
+		Database: apiv2.ValueFromSecret(nsName.Name, "Database", false),
+		Username: apiv2.ValueFromSecret(nsName.Name, "Username", false),
+		Password: apiv2.ValueFromSecret(nsName.Name, "Password", false),
+		Tls:      apiv2.ValueFromSecret(nsName.Name, "Tls", true),
+		SslCa:    apiv2.ValueFromSecret(nsName.Name, "SslCa", true),
+		SslCert:  apiv2.ValueFromSecret(nsName.Name, "SslCert", true),
+		SslKey:   apiv2.ValueFromSecret(nsName.Name, "SslKey", true),
 	}
 }
 

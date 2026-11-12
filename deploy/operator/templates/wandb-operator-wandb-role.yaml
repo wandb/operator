@@ -4,6 +4,15 @@ kind: ClusterRole
 metadata:
   name: {{ .Release.Name }}-wandb
 rules:
+  # Pod CPU/memory usage from metrics-server, surfaced by Watchtower's Metrics tab.
+  # The operator must hold this to delegate it to the Watchtower ClusterRole.
+  - apiGroups:
+      - metrics.k8s.io
+    resources:
+      - pods
+    verbs:
+      - get
+      - list
   - apiGroups:
       - storage.k8s.io
     resources:
@@ -28,6 +37,16 @@ rules:
   - apiGroups:
       - apps.wandb.com
     resources:
+      - actionruns
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - apps.wandb.com
+    resources:
       - applications/finalizers
       - weightsandbiases/finalizers
     verbs:
@@ -36,6 +55,7 @@ rules:
       - apps.wandb.com
     resources:
       - applications/status
+      - actionruns/status
       - weightsandbiases/status
     verbs:
       - get
@@ -102,6 +122,7 @@ rules:
   - apiGroups:
       - networking.k8s.io
     resources:
+      - ingressclasses
       - ingresses/status
     verbs:
       - get

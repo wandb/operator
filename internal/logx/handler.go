@@ -10,14 +10,21 @@ const LoggerKey = "LOGGER"
 func NewHandler(opts *Options, loggerName string) *Handler {
 	opts = withDefaults(opts)
 
+	// Layer secret redaction onto ReplaceAttr in a local copy so repeated
+	// NewHandler calls never wrap the shared opts more than once. redact runs
+	// first: masq reflects on the struct's tags, so a caller ReplaceAttr must
+	// not flatten the value before secrets are stripped.
+	ho := *opts.HandlerOptions
+	ho.ReplaceAttr = chainReplaceAttr(redact, opts.HandlerOptions.ReplaceAttr)
+
 	var baseHandler slog.Handler
 	switch opts.Format {
 	case JsonFormat:
-		baseHandler = slog.NewJSONHandler(opts.Output, opts.HandlerOptions)
+		baseHandler = slog.NewJSONHandler(opts.Output, &ho)
 	case PrettyFormat:
-		baseHandler = BuildPrettyHandler(opts)
+		baseHandler = BuildPrettyHandler(opts, redact)
 	default:
-		baseHandler = slog.NewTextHandler(opts.Output, opts.HandlerOptions)
+		baseHandler = slog.NewTextHandler(opts.Output, &ho)
 	}
 
 	defaultLevel := slog.LevelInfo

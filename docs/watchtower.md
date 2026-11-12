@@ -154,10 +154,25 @@ anyone holding a W&B session, so turning it on is an explicit decision.
 | `Application` | `wandb-watchtower` | `Kind: Deployment`, `replicas: 1`, labelled `weightsandbiases.apps.wandb.com/component=watchtower` so manifest-driven pruning skips it |
 | `Service` | `wandb-watchtower` | ClusterIP `8080`, derived from the Application by the application controller |
 | `ServiceAccount` | `wandb-watchtower` | Token automounted — unlike the W&B app pods, Watchtower calls the Kubernetes API |
-| `Role` / `RoleBinding` | `wandb-watchtower` | Namespaced reads: secrets, configmaps, jobs, ingresses |
+| `Role` / `RoleBinding` | `wandb-watchtower` | Namespaced reads: secrets, configmaps, jobs, ingresses. Secret **writes** are opt-in via `WATCHTOWER_ENABLE_SECRET_WRITES` — see the warning below |
 | `ClusterRole` / `ClusterRoleBinding` | `<namespace>-<cr-name>-watchtower` | Cluster-wide reads plus `weightsandbiases` `update/patch` |
 | Ingress path | `/watchtower` on the consolidated Ingress | Added in `reconcileConsolidatedIngress` |
 | `HTTPRoute` | via `Application.spec.httpRouteTemplate` | Gateway API mode only, same hostnames as the app |
+
+### Optional grants
+
+Two capabilities are off by default and enabled by setting an env var on the
+**operator** deployment, which forwards it to Watchtower:
+
+| Env | Grants | Risk |
+|---|---|---|
+| `WATCHTOWER_ENABLE_SECRET_WRITES` | `create/update/patch/delete` on Secrets in the install namespace | **Broad.** That namespace holds the database, object-store, OIDC, license and operator-managed credentials. A compromised Watchtower could replace any of them. Enable only if you want Watchtower's secret manager to create credential material; without it Watchtower can still *reference* Secrets an admin created out of band, which is all the CR ever stores. |
+| `WATCHTOWER_ENABLE_DB_ADMIN` | Watchtower's email-domain migration, which writes directly to the W&B application database | Irreversible bulk rewrite of user records. Requires cluster mode. |
+
+They are separate switches on purpose: enabling the secret manager should not also
+hand over the application database, and vice versa. Neither is needed for normal
+operation — Watchtower is read-only against the cluster without them, apart from
+the `weightsandbiases` CR it exists to edit.
 
 `replicas` is deliberately **not** configurable: in-flight deploy jobs and their
 SSE streams live in the serving pod's memory, so a reconnect landing on a second

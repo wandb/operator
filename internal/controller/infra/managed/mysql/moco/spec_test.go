@@ -8,9 +8,9 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/samber/lo"
 	apiv2 "github.com/wandb/operator/api/v2"
-	"github.com/wandb/operator/pkg/wandb/manifest"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/pkg/utils"
+	"github.com/wandb/operator/pkg/wandb/manifest"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -47,10 +47,11 @@ var _ = Describe("Moco MySQL specs", func() {
 		Expect(*podSpec.Containers[0].Name).To(Equal("mysqld"))
 		expectMocoContainerSecurityContext(podSpec.Containers[0].SecurityContext)
 
-		Expect(cluster.Spec.PodTemplate.OverwriteContainers).To(HaveLen(4))
+		Expect(cluster.Spec.PodTemplate.OverwriteContainers).To(HaveLen(5))
 		for _, overwrite := range cluster.Spec.PodTemplate.OverwriteContainers {
 			Expect(overwrite.Name).To(BeElementOf(
 				mocov1beta2.AgentContainerName,
+				mocoCopyInitContainerName,
 				mocov1beta2.InitContainerName,
 				mocov1beta2.SlowQueryLogAgentContainerName,
 				mocov1beta2.ExporterContainerName,
@@ -81,6 +82,23 @@ var _ = Describe("Moco MySQL specs", func() {
 		podSpec := cluster.Spec.PodTemplate.Spec
 		expectMocoOpenShiftPodSecurityContext(podSpec.SecurityContext)
 		expectMocoOpenShiftContainerSecurityContext(podSpec.Containers[0].SecurityContext)
+		for _, overwrite := range cluster.Spec.PodTemplate.OverwriteContainers {
+			expectMocoOpenShiftContainerSecurityContext((*corev1ac.SecurityContextApplyConfiguration)(overwrite.SecurityContext))
+		}
+	})
+
+	It("enables local_infile for LOAD DATA LOCAL INFILE bulk writes", func() {
+		_, cm, err := ToMocoMySQLClusterSpec(
+			context.Background(),
+			apiv2.ManagedMysqlSpec{
+				Name: "mysql", Namespace: "wandb", Replicas: 3, StorageSize: "10Gi",
+			},
+			mocoWandb(),
+			mocoScheme(),
+			manifest.Manifest{},
+		)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(cm.Data).To(HaveKeyWithValue("local_infile", "ON"))
 	})
 
 	It("sets mysqld_exporter collectors only when telemetry is enabled", func() {
@@ -255,6 +273,7 @@ func expectMocoContainerSecurityContext(securityContext *corev1ac.SecurityContex
 	Expect(*securityContext.RunAsNonRoot).To(BeTrue())
 	Expect(securityContext.AllowPrivilegeEscalation).NotTo(BeNil())
 	Expect(*securityContext.AllowPrivilegeEscalation).To(BeFalse())
+	Expect(securityContext.ReadOnlyRootFilesystem).To(HaveValue(BeTrue()))
 	Expect(securityContext.Capabilities).NotTo(BeNil())
 	Expect(securityContext.Capabilities.Drop).To(ContainElement(mocoMySQLCapabilityAll))
 	Expect(securityContext.SeccompProfile).NotTo(BeNil())
@@ -283,6 +302,7 @@ func expectMocoOpenShiftContainerSecurityContext(securityContext *corev1ac.Secur
 	Expect(*securityContext.RunAsNonRoot).To(BeTrue())
 	Expect(securityContext.AllowPrivilegeEscalation).NotTo(BeNil())
 	Expect(*securityContext.AllowPrivilegeEscalation).To(BeFalse())
+	Expect(securityContext.ReadOnlyRootFilesystem).To(HaveValue(BeTrue()))
 	Expect(securityContext.Capabilities).NotTo(BeNil())
 	Expect(securityContext.Capabilities.Drop).To(ContainElement(mocoMySQLCapabilityAll))
 	Expect(securityContext.SeccompProfile).NotTo(BeNil())

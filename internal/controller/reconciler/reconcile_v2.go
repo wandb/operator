@@ -33,7 +33,6 @@ import (
 	"github.com/wandb/operator/internal/logx"
 	wmetrics "github.com/wandb/operator/internal/observability/metrics"
 	"github.com/wandb/operator/internal/observability/telemetry"
-	oputils "github.com/wandb/operator/pkg/utils"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
 	"github.com/wandb/operator/pkg/wandb/manifest/registryauth"
 	batchv1 "k8s.io/api/batch/v1"
@@ -108,6 +107,10 @@ func Reconcile(
 	if isFlaggedForDeletion && !wandb.GetDeletionTimestamp().IsZero() {
 		if ctrlqueue.ContainsString(wandb.GetFinalizers(), CleanupFinalizer) {
 
+			if err := finalizeManifestSecrets(ctx, client, wandb); err != nil {
+				return ctrl.Result{}, err
+			}
+
 			// Multi-instance infra: the per-type retention dispatcher applies the
 			// configured policy to each managed or external instance.
 			for key, spec := range wandb.Spec.ObjectStore {
@@ -142,6 +145,9 @@ func Reconcile(
 			if err = deleteWatchtower(ctx, client, wandb); err != nil {
 				return ctrl.Result{}, err
 			}
+			if _, err = deleteSupportBundle(ctx, client, wandb, false); err != nil {
+				return ctrl.Result{}, err
+			}
 			if wandb.Spec.Networking.Mode == apiv2.NetworkingModeIngress {
 				if err = deleteConsolidatedIngress(ctx, client, wandb); err != nil {
 					return ctrl.Result{}, err
@@ -165,6 +171,8 @@ func Reconcile(
 		// continue post-finalizer logic in a future pass of the reconciliation loop
 		return ctrl.Result{}, nil
 	}
+
+	supportBundleResult := reconcileSupportBundle(ctx, client, wandb, telemetryConfig)
 
 	/////////////////////////
 	// Migrate legacy v1 conversion annotations into typed spec fields
@@ -312,6 +320,8 @@ func Reconcile(
 	}
 	ctrlResults = append(ctrlResults, res)
 
+	ctrlResults = append(ctrlResults, supportBundleResult)
+
 	redisReady := redisAllReady(wandb)
 	mysqlReady := mysqlAllReady(wandb)
 	kafkaReady := wandb.Status.KafkaStatus.Ready
@@ -398,8 +408,13 @@ func ReconcileNetworkingAndWatchtower(
 		}
 	case apiv2.NetworkingModeIngress:
 		wandb.Status.IngressStatus = nil
-		if err := reconcileConsolidatedIngress(ctx, client, wandb, manifest); err != nil {
-			log.Error("Failed to reconcile consolidated Ingress", logx.ErrAttr(err))
+		if ingressManaged(wandb) {
+			if err := reconcileConsolidatedIngress(ctx, client, wandb, manifest); err != nil {
+				log.Error("Failed to reconcile consolidated Ingress", logx.ErrAttr(err))
+				return ctrl.Result{}, err
+			}
+		} else if err := deleteConsolidatedIngress(ctx, client, wandb); err != nil {
+			log.Error("Failed to delete previously managed consolidated Ingress", logx.ErrAttr(err))
 			return ctrl.Result{}, err
 		}
 	}
@@ -458,7 +473,7 @@ func ReconcileWandbManifest(
 
 	validateLegacyOverrides(ctx, wandb, manifest)
 
-	result, err = generateSecrets(ctx, client, wandb, manifest)
+	result, err = reconcileManifestSecrets(ctx, client, wandb, manifest)
 	if err != nil {
 		return result, err
 	}
@@ -575,6 +590,10 @@ func reconcileApplications(
 	logger := logx.GetSlog(ctx)
 	logger.Info("Reconciling applications")
 	serviceAccountName := wandb.Spec.Wandb.ServiceAccount.ServiceAccountName
+	usesAWSIngress, err := ingressUsesAWSLoadBalancerController(ctx, client, wandb)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 
 	if wandb.Spec.Wandb.InternalServiceAuth.Enabled != nil && *wandb.Spec.Wandb.InternalServiceAuth.Enabled {
 		if err := createOrUpdateOIDCDiscoveryClusterRoleBinding(ctx, client, wandb); err != nil {
@@ -639,6 +658,8 @@ func reconcileApplications(
 		// Applied last so legacy overrides beat manifest and injected env, as in v1.
 		envVars = applyLegacyOverrideEnv(ctx, wandb, app.Name, envVars)
 
+		app.SecurityProfile = resolveWorkloadSecurityProfile(app.SecurityProfile,
+			wandb.Spec.Wandb.SecurityProfile, wandb.Spec.Wandb.Applications[app.Name].SecurityProfile)
 		containers := resolveContainers(app, wandb, envVars, volumeMounts)
 
 		initContainers := resolveInitContainers(app, wandb, envVars, volumeMounts)
@@ -661,13 +682,14 @@ func reconcileApplications(
 		// across updates (e.g., duplicate "files-inline" volume names).
 		application.Spec.PodTemplate.Spec.Volumes = volumes
 		application.Spec.PodTemplate.Spec.InitContainers = initContainers
-		application.Spec.PodTemplate.Spec.SecurityContext = resolvePodSecurityContext()
+		applyWorkloadSecurityProfile(&application.Spec.PodTemplate.Spec, app.SecurityProfile)
 		application.Spec.PodTemplate.Spec.Affinity = wandb.Spec.Affinity
 		application.Spec.PodTemplate.Spec.Tolerations = *wandb.Spec.Tolerations
 		application.Spec.PodTemplate.Spec.ImagePullSecrets = wandb.Spec.Global.ImagePullSecrets
 		setCustomCACertsChecksumAnnotation(&application.Spec.PodTemplate, caChecksum)
 
 		application.Spec.HpaTemplate = ResolveAutoscaling(app, wandb)
+		application.Spec.Triage = resolveApplicationTriage(app.Triage)
 
 		// Set shared service account for all W&B applications
 		application.Spec.PodTemplate.Spec.ServiceAccountName = serviceAccountName
@@ -690,6 +712,10 @@ func reconcileApplications(
 		} else {
 			// No service declared in manifest; ensure we clear any previous template
 			application.Spec.ServiceTemplate = nil
+		}
+		application.Spec.ServiceAnnotations = nil
+		if usesAWSIngress && app.Ingress != nil && application.Spec.ServiceTemplate != nil {
+			application.Spec.ServiceAnnotations = awsLoadBalancerHealthCheckAnnotations(containers)
 		}
 
 		if wandb.Spec.Networking.Mode == apiv2.NetworkingModeGatewayAPI && app.Ingress != nil &&
@@ -1074,6 +1100,9 @@ func resolveInlineFiles(ctx context.Context, client ctrlClient.Client, wandb *ap
 }
 
 func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (ctrl.Result, error) {
+	if err := reconcileMigrationServiceAccounts(ctx, client, wandb, manifest); err != nil {
+		return ctrl.Result{}, err
+	}
 	statusBefore := wandb.DeepCopy().Status
 	version := wandb.Spec.Wandb.Version
 
@@ -1199,6 +1228,12 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 					ImagePullSecrets:   wandb.Spec.Global.ImagePullSecrets,
 				},
 			}
+			applyMigrationServiceAccount(wandb, name, migrationTask.ServiceAccount, &podTemplate.Spec)
+			profile := resolveWorkloadSecurityProfile(migrationTask.SecurityProfile,
+				wandb.Spec.Wandb.SecurityProfile, wandb.Spec.Wandb.Migrations[name].SecurityProfile)
+			if hasWorkloadSecurityProfile(profile) {
+				applyWorkloadSecurityProfile(&podTemplate.Spec, profile)
+			}
 			setCustomCACertsChecksumAnnotation(&podTemplate, caChecksum)
 
 			job = &batchv1.Job{
@@ -1312,89 +1347,6 @@ func runMigrations(ctx context.Context, client ctrlClient.Client, wandb *apiv2.W
 	return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 }
 
-func generateSecrets(ctx context.Context, client ctrlClient.Client, wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (ctrl.Result, error) {
-	statusBefore := wandb.DeepCopy().Status
-	// Ensure any manifest-declared generated secrets exist and capture their selectors in status
-	if wandb.Status.GeneratedSecrets == nil {
-		wandb.Status.GeneratedSecrets = map[string]corev1.SecretKeySelector{}
-	}
-	for _, gs := range manifest.GeneratedSecrets {
-		// Deterministic secret name scoped to the CR instance
-		// If UseExactName is true, use the exact name without prefixing
-		secretName := gs.Name
-		if !gs.UseExactName {
-			secretName = fmt.Sprintf("%s-%s", wandb.Name, gs.Name)
-		}
-		keyName := "key"
-		sec := &corev1.Secret{}
-		err := client.Get(ctx, types.NamespacedName{Name: secretName, Namespace: wandb.Namespace}, sec)
-		if err != nil {
-			if apiErrors.IsNotFound(err) {
-				// Create new secret with generated value
-				valueLen := gs.Length
-				if valueLen <= 0 {
-					valueLen = 32
-				}
-				pw, err := oputils.GenerateRandomPassword(valueLen)
-				if err != nil {
-					return ctrl.Result{}, err
-				}
-				sec = &corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      secretName,
-						Namespace: wandb.Namespace,
-						Labels: map[string]string{
-							"app.kubernetes.io/managed-by": "wandb-operator",
-							"app.kubernetes.io/instance":   wandb.Name,
-							"app.kubernetes.io/part-of":    "wandb",
-						},
-					},
-					StringData: map[string]string{keyName: pw},
-					Type:       corev1.SecretTypeOpaque,
-				}
-				if err := controllerutil.SetOwnerReference(wandb, sec, client.Scheme()); err != nil {
-					return ctrl.Result{}, err
-				}
-				if err := client.Create(ctx, sec); err != nil {
-					return ctrl.Result{}, err
-				}
-			} else {
-				return ctrl.Result{}, err
-			}
-		} else {
-			// Secret exists. Ensure it has the expected key; do not overwrite existing value.
-			if sec.Data == nil || (sec.Data != nil && sec.Data[keyName] == nil && sec.StringData == nil) {
-				if sec.StringData == nil {
-					sec.StringData = map[string]string{}
-				}
-				// Generate a value only if missing
-				valueLen := gs.Length
-				if valueLen <= 0 {
-					valueLen = 32
-				}
-				pw, err := oputils.GenerateRandomPassword(valueLen)
-				if err != nil {
-					return ctrl.Result{}, err
-				}
-				sec.StringData[keyName] = pw
-				if err := client.Update(ctx, sec); err != nil {
-					return ctrl.Result{}, err
-				}
-			}
-		}
-		// Record selector in status
-		wandb.Status.GeneratedSecrets[gs.Name] = corev1.SecretKeySelector{
-			LocalObjectReference: corev1.LocalObjectReference{Name: secretName},
-			Key:                  keyName,
-		}
-	}
-	// Persist status after updating generated secret selectors
-	if err := updateWandbStatusIfChanged(ctx, client, wandb, statusBefore); err != nil {
-		return ctrl.Result{}, err
-	}
-	return ctrl.Result{}, nil
-}
-
 // resolveCRField traverses a dotted field path (e.g., "spec.wandb.license") in the
 // provided custom resource object and returns the raw terminal value if present.
 // Typed accessors (resolveCRFieldEnvValue, resolveCRFieldSecretSelector, ...) build on
@@ -1442,30 +1394,44 @@ func resolveCRFieldEnvValue(obj any, path string) (string, bool) {
 		return value, true
 	case bool:
 		return strconv.FormatBool(value), true
+	case map[string]any:
+		// A ValueOrSecret envelope carrying a literal value.
+		tb, err := json.Marshal(value)
+		if err != nil {
+			return "", false
+		}
+		var v apiv2.ValueOrSecret
+		if err := json.Unmarshal(tb, &v); err == nil && v.Value != "" {
+			return v.Value, true
+		}
+		return "", false
 	default:
 		return "", false
 	}
 }
 
+// resolveCRFieldSecretSelector resolves a dotted CR field into the effective
+// secret selector. It understands the ValueOrSecret envelope (valueFrom or the
+// legacy {name, key} shape) as well as a bare SecretKeySelector node. A literal
+// value yields no selector (the caller falls back to resolveCRFieldEnvValue).
 func resolveCRFieldSecretSelector(obj any, path string) (corev1.SecretKeySelector, bool) {
 	cur, ok := resolveCRField(obj, path)
 	if !ok {
 		return corev1.SecretKeySelector{}, false
 	}
-	// Re-marshal the terminal node into a SecretKeySelector so we honor the same
-	// json tags (name/key/optional) the CRD uses.
 	tb, err := json.Marshal(cur)
 	if err != nil {
 		return corev1.SecretKeySelector{}, false
 	}
-	var sel corev1.SecretKeySelector
-	if err := json.Unmarshal(tb, &sel); err != nil {
+	var v apiv2.ValueOrSecret
+	if err := json.Unmarshal(tb, &v); err != nil {
 		return corev1.SecretKeySelector{}, false
 	}
-	if sel.Name == "" || sel.Key == "" {
+	ref := v.SecretKeyRef()
+	if ref == nil || ref.Name == "" || ref.Key == "" {
 		return corev1.SecretKeySelector{}, false
 	}
-	return sel, true
+	return *ref, true
 }
 
 // allInstancesReady reports whether every instance (managed or external) has a

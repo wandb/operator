@@ -46,6 +46,45 @@ func TestTelemetryRuntimeConfigResolveEndpointsEnabled(t *testing.T) {
 	}
 }
 
+func TestTelemetryRuntimeConfigResolveReadEndpointsEnabledModes(t *testing.T) {
+	for _, mode := range []string{telemetryModeForward, telemetryModeFull} {
+		t.Run(mode, func(t *testing.T) {
+			cfg := DefaultTelemetryRuntimeConfig()
+			cfg.Mode = mode
+			cfg.Namespace = "telemetry"
+			cfg.Normalize()
+
+			resolved := cfg.ResolveEndpoints()
+			if resolved.MetricsReadEndpoint != "http://vmsingle-victoria-instance.telemetry.svc:8428" {
+				t.Fatalf("unexpected metrics read endpoint: %s", resolved.MetricsReadEndpoint)
+			}
+			if resolved.LogsReadEndpoint != "http://vlsingle-victoria-logs.telemetry.svc:9428" {
+				t.Fatalf("unexpected logs read endpoint: %s", resolved.LogsReadEndpoint)
+			}
+			if resolved.TracesReadEndpoint != "http://vtsingle-victoria-traces.telemetry.svc:10428" {
+				t.Fatalf("unexpected traces read endpoint: %s", resolved.TracesReadEndpoint)
+			}
+		})
+	}
+}
+
+func TestTelemetryRuntimeConfigResolveReadEndpointsSameNamespace(t *testing.T) {
+	cfg := DefaultTelemetryRuntimeConfig()
+	cfg.Enabled = true
+	cfg.Normalize()
+
+	resolved := cfg.ResolveEndpoints()
+	if resolved.MetricsReadEndpoint != "http://vmsingle-victoria-instance:8428" {
+		t.Fatalf("unexpected metrics read endpoint: %s", resolved.MetricsReadEndpoint)
+	}
+	if resolved.LogsReadEndpoint != "http://vlsingle-victoria-logs:9428" {
+		t.Fatalf("unexpected logs read endpoint: %s", resolved.LogsReadEndpoint)
+	}
+	if resolved.TracesReadEndpoint != "http://vtsingle-victoria-traces:10428" {
+		t.Fatalf("unexpected traces read endpoint: %s", resolved.TracesReadEndpoint)
+	}
+}
+
 func TestTelemetryRuntimeConfigResolveEndpointsDisabled(t *testing.T) {
 	cfg := DefaultTelemetryRuntimeConfig()
 	cfg.Enabled = false
@@ -54,6 +93,9 @@ func TestTelemetryRuntimeConfigResolveEndpointsDisabled(t *testing.T) {
 	resolved := cfg.ResolveEndpoints()
 	if resolved.MetricsEndpoint != "" || resolved.LogsEndpoint != "" || resolved.TracesEndpoint != "" {
 		t.Fatalf("expected empty telemetry endpoints when telemetry is disabled: %+v", resolved)
+	}
+	if resolved.MetricsReadEndpoint != "" || resolved.LogsReadEndpoint != "" || resolved.TracesReadEndpoint != "" {
+		t.Fatalf("expected empty telemetry read endpoints when telemetry is disabled: %+v", resolved)
 	}
 }
 
@@ -230,6 +272,15 @@ func TestSummarizeTelemetryInfraStatusForwardReady(t *testing.T) {
 	if status.Connection.MetricsEndpoint != "http://victoria-otlp-gateway.wandb.svc:4318/v1/metrics" {
 		t.Fatalf("unexpected metrics endpoint: %q", status.Connection.MetricsEndpoint)
 	}
+	if status.Connection.MetricsReadEndpoint != "http://vmsingle-victoria-instance.wandb.svc:8428" {
+		t.Fatalf("unexpected metrics read endpoint: %q", status.Connection.MetricsReadEndpoint)
+	}
+	if status.Connection.LogsReadEndpoint != "http://vlsingle-victoria-logs.wandb.svc:9428" {
+		t.Fatalf("unexpected logs read endpoint: %q", status.Connection.LogsReadEndpoint)
+	}
+	if status.Connection.TracesReadEndpoint != "http://vtsingle-victoria-traces.wandb.svc:10428" {
+		t.Fatalf("unexpected traces read endpoint: %q", status.Connection.TracesReadEndpoint)
+	}
 	if status.Connection.GorillaTracer != "otlp+http://victoria-otlp-gateway.wandb.svc:4318" {
 		t.Fatalf("unexpected gorilla tracer: %q", status.Connection.GorillaTracer)
 	}
@@ -270,6 +321,9 @@ func TestSummarizeTelemetryInfraStatusFullReady(t *testing.T) {
 	}
 	if status.Mode != telemetryModeFull {
 		t.Fatalf("unexpected telemetry mode: %q", status.Mode)
+	}
+	if status.Connection.MetricsReadEndpoint != "http://vmsingle-victoria-instance.wandb.svc:8428" {
+		t.Fatalf("unexpected metrics read endpoint: %q", status.Connection.MetricsReadEndpoint)
 	}
 }
 
@@ -427,6 +481,15 @@ func TestReconcileTelemetryConnectionSecretCreateManaged(t *testing.T) {
 	if got := string(secret.Data["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"]); got != "http://victoria-otlp-gateway:4318/v1/traces" {
 		t.Fatalf("unexpected traces endpoint in secret: %q", got)
 	}
+	if got := string(secret.Data["metricsReadEndpoint"]); got != "http://vmsingle-victoria-instance:8428" {
+		t.Fatalf("unexpected metrics read endpoint in secret: %q", got)
+	}
+	if got := string(secret.Data["logsReadEndpoint"]); got != "http://vlsingle-victoria-logs:9428" {
+		t.Fatalf("unexpected logs read endpoint in secret: %q", got)
+	}
+	if got := string(secret.Data["tracesReadEndpoint"]); got != "http://vtsingle-victoria-traces:10428" {
+		t.Fatalf("unexpected traces read endpoint in secret: %q", got)
+	}
 	if len(secret.OwnerReferences) != 1 || secret.OwnerReferences[0].Name != wandb.Name {
 		t.Fatalf("expected secret to be owned by wandb resource")
 	}
@@ -535,6 +598,15 @@ func TestReconcileTelemetryConnectionSecretUpdateManaged(t *testing.T) {
 	}
 	if got := string(updated.Data["DD_TRACE_AGENT_PORT"]); got != "8126" {
 		t.Fatalf("unexpected Datadog trace agent port in updated secret: %q", got)
+	}
+	if got := string(updated.Data["metricsReadEndpoint"]); got != "http://vmsingle-victoria-instance.wandb.svc:8428" {
+		t.Fatalf("unexpected metrics read endpoint in updated secret: %q", got)
+	}
+	if got := string(updated.Data["logsReadEndpoint"]); got != "http://vlsingle-victoria-logs.wandb.svc:9428" {
+		t.Fatalf("unexpected logs read endpoint in updated secret: %q", got)
+	}
+	if got := string(updated.Data["tracesReadEndpoint"]); got != "http://vtsingle-victoria-traces.wandb.svc:10428" {
+		t.Fatalf("unexpected traces read endpoint in updated secret: %q", got)
 	}
 }
 

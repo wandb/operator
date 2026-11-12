@@ -4,8 +4,8 @@
       "name": "DS_VICTORIAMETRICS",
       "label": "VictoriaMetrics",
       "type": "datasource",
-      "pluginId": "victoriametrics-metrics-datasource",
-      "pluginName": "VictoriaMetrics"
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
     }
   ],
   "annotations": {
@@ -61,7 +61,7 @@
       "type": "stat",
       "title": "CR Ready",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "fieldConfig": {
@@ -128,7 +128,7 @@
       "type": "stat",
       "title": "Unhealthy dependencies",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "fieldConfig": {
@@ -183,7 +183,7 @@
       "type": "stat",
       "title": "Distinct image versions",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "fieldConfig": {
@@ -238,7 +238,7 @@
       "type": "table",
       "title": "Dependency states",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "targets": [
@@ -307,7 +307,7 @@
       "type": "table",
       "title": "Managed service versions",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "targets": [
@@ -401,7 +401,7 @@
       "type": "stat",
       "title": "Reconcile errors / sec",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "fieldConfig": {
@@ -456,7 +456,7 @@
       "type": "stat",
       "title": "Terminal reconcile errors",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "fieldConfig": {
@@ -511,7 +511,7 @@
       "type": "stat",
       "title": "Reconcile panics",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "fieldConfig": {
@@ -566,7 +566,7 @@
       "type": "timeseries",
       "title": "Reconciles / sec by result",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "fieldConfig": {
@@ -607,7 +607,7 @@
       "type": "timeseries",
       "title": "Reconcile errors / sec by controller",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "fieldConfig": {
@@ -648,7 +648,7 @@
       "type": "timeseries",
       "title": "Reconcile latency",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "fieldConfig": {
@@ -700,7 +700,7 @@
       "type": "timeseries",
       "title": "Active vs max workers",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "fieldConfig": {
@@ -773,7 +773,7 @@
       "type": "timeseries",
       "title": "Queue depth",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "fieldConfig": {
@@ -815,7 +815,7 @@
       "type": "timeseries",
       "title": "Adds & retries / sec",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "fieldConfig": {
@@ -861,7 +861,7 @@
       "type": "timeseries",
       "title": "Queue wait & work p95",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "fieldConfig": {
@@ -907,7 +907,7 @@
       "type": "timeseries",
       "title": "Oldest in-flight work",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "fieldConfig": {
@@ -980,7 +980,7 @@
       "type": "timeseries",
       "title": "Requests / sec by code",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "fieldConfig": {
@@ -1021,7 +1021,7 @@
       "type": "timeseries",
       "title": "Errors / sec (4xx / 5xx)",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "fieldConfig": {
@@ -1088,7 +1088,7 @@
       "type": "timeseries",
       "title": "Webhook requests / sec by code",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "fieldConfig": {
@@ -1129,7 +1129,7 @@
       "type": "timeseries",
       "title": "Webhook errors / sec (5xx)",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "fieldConfig": {
@@ -1170,7 +1170,7 @@
       "type": "stat",
       "title": "Webhook panics",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "fieldConfig": {
@@ -1225,7 +1225,7 @@
       "type": "stat",
       "title": "Webhook requests in flight",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "fieldConfig": {
@@ -1294,7 +1294,7 @@
       "type": "stat",
       "title": "Up",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "fieldConfig": {
@@ -1362,7 +1362,7 @@
       "type": "stat",
       "title": "Uptime",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "fieldConfig": {
@@ -1405,7 +1405,7 @@
       "type": "stat",
       "title": "Last restarted",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "fieldConfig": {
@@ -1448,7 +1448,7 @@
       "type": "stat",
       "title": "Restarts (in range)",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "fieldConfig": {
@@ -1503,7 +1503,7 @@
       "type": "stat",
       "title": "Leader election",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "fieldConfig": {
@@ -1571,7 +1571,7 @@
       "type": "stat",
       "title": "CPU throttling",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "fieldConfig": {
@@ -1630,7 +1630,7 @@
       "type": "timeseries",
       "title": "Goroutines",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "fieldConfig": {
@@ -1672,7 +1672,7 @@
       "type": "timeseries",
       "title": "Memory",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "fieldConfig": {
@@ -1718,7 +1718,7 @@
       "type": "timeseries",
       "title": "CPU cores used",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "fieldConfig": {
@@ -1759,7 +1759,7 @@
       "type": "timeseries",
       "title": "Open file descriptors",
       "datasource": {
-        "type": "victoriametrics-metrics-datasource",
+        "type": "prometheus",
         "uid": "${DS_VICTORIAMETRICS}"
       },
       "fieldConfig": {

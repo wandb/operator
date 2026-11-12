@@ -556,10 +556,23 @@ func ToBufstreamApplication(
 		SecurityContext: bufstreamContainerSecurityContext(),
 		Ports: []corev1.ContainerPort{
 			{Name: "kafka", ContainerPort: KafkaListenerPort},
+			{Name: "connect", ContainerPort: ConnectPort},
 			{Name: "metrics", ContainerPort: DebugPort},
 			{Name: "admin", ContainerPort: AdminPort},
 		},
-		Env: storageCredentialEnv(nsnBuilder, storage),
+		// Peers must reach this broker directly. Bufstream otherwise binds its
+		// internal RPC listener to localhost on a random port.
+		Env: append(storageCredentialEnv(nsnBuilder, storage),
+			corev1.EnvVar{Name: "BUFSTREAM_CONNECT_HOST", Value: "0.0.0.0"},
+			corev1.EnvVar{Name: "BUFSTREAM_CONNECT_PORT", Value: fmt.Sprint(ConnectPort)},
+			corev1.EnvVar{
+				Name: "BUFSTREAM_CONNECT_PUBLIC_HOST",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.podIP"},
+				},
+			},
+			corev1.EnvVar{Name: "BUFSTREAM_CONNECT_PUBLIC_PORT", Value: fmt.Sprint(ConnectPort)},
+		),
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: "config", MountPath: ConfigMountPath, ReadOnly: true},
 		},

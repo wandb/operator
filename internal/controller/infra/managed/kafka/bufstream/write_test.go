@@ -31,11 +31,8 @@ func resolveStorageFixture(t *testing.T, data map[string]string) (ctrlclient.Cli
 		Data:       secretData,
 	}
 
-	sel := func(key string) corev1.SecretKeySelector {
-		return corev1.SecretKeySelector{
-			LocalObjectReference: corev1.LocalObjectReference{Name: secret.Name},
-			Key:                  key,
-		}
+	sel := func(key string) apiv2.ValueOrSecret {
+		return apiv2.ValueFromSecret(secret.Name, key, false)
 	}
 	wandb := &apiv2.WeightsAndBiases{
 		ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "wandb"},

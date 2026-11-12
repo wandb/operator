@@ -8,13 +8,12 @@ creates the matching GitHub Release.
 ## Tagged release
 
 1. Open a release pull request against `main`.
-2. Update `wandb.version` in `deploy/operator/values.yaml` to the intended W&B
-   server release.
-3. Set all three operator versions to the release number without a leading
+2. Set all three operator versions to the release number without a leading
    `v`:
    - `version` in `deploy/operator/Chart.yaml`
    - `appVersion` in `deploy/operator/Chart.yaml`
    - `wandb-operator.image.tag` in `deploy/operator/values.yaml`
+3. Set the latest WATCHTOWER_VERSION on `Makefile`
 4. Run the chart validation commands used by CI:
 
    ```bash

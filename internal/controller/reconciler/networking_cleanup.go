@@ -20,6 +20,11 @@ func cleanupNetworkingModeResources(
 		if err := deleteInfraHTTPRoutes(ctx, c, wandb); err != nil {
 			return err
 		}
+		if !ingressManaged(wandb) {
+			if err := deleteConsolidatedIngress(ctx, c, wandb); err != nil {
+				return err
+			}
+		}
 	case apiv2.NetworkingModeGatewayAPI:
 		if err := deleteConsolidatedIngress(ctx, c, wandb); err != nil {
 			return err

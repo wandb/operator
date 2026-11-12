@@ -33,6 +33,16 @@ func TestParseGroupsValid(t *testing.T) {
 	}
 }
 
+func TestParseGroupsAcceptsTelemetryGroups(t *testing.T) {
+	got, err := ParseGroups("victoriametrics,grafana")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 2 || got[0] != "victoriametrics" || got[1] != "grafana" {
+		t.Errorf("got %v, want [victoriametrics grafana]", got)
+	}
+}
+
 func TestParseGroupsRejectsUnknown(t *testing.T) {
 	_, err := ParseGroups("redis,bogus")
 	if err == nil {
@@ -69,10 +79,12 @@ func TestComposeOperatorOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("compose failed: %v", err)
 	}
-	if len(crds) != 2 {
-		t.Fatalf("expected 2 operator CRDs, got %d", len(crds))
+	if len(crds) != 3 {
+		t.Fatalf("expected 3 operator CRDs, got %d", len(crds))
 	}
+	names := make(map[string]bool, len(crds))
 	for _, crd := range crds {
+		names[crd.Name] = true
 		if got := crd.Annotations["cert-manager.io/inject-ca-from"]; got != validOpts.CertInjectReference {
 			t.Errorf("%s: cert-manager annotation = %q, want %q", crd.Name, got, validOpts.CertInjectReference)
 		}
@@ -84,6 +96,15 @@ func TestComposeOperatorOnly(t *testing.T) {
 			}
 		}
 	}
+	for _, name := range []string{
+		"applications.apps.wandb.com",
+		"actionruns.apps.wandb.com",
+		"weightsandbiases.apps.wandb.com",
+	} {
+		if !names[name] {
+			t.Errorf("expected operator CRD %s to be included", name)
+		}
+	}
 }
 
 func TestComposeIncludesOptionalGroup(t *testing.T) {
@@ -93,8 +114,8 @@ func TestComposeIncludesOptionalGroup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("compose failed: %v", err)
 	}
-	if len(crds) <= 2 {
-		t.Fatalf("expected >2 CRDs when redis group included, got %d", len(crds))
+	if len(crds) <= 3 {
+		t.Fatalf("expected >3 CRDs when redis group included, got %d", len(crds))
 	}
 	// Redis CRDs must NOT have the cert-manager annotation we inject for operator CRDs.
 	for _, crd := range crds {
@@ -126,6 +147,42 @@ func TestComposeIncludesClickHouseGroup(t *testing.T) {
 	} {
 		if !names[name] {
 			t.Errorf("expected ClickHouse CRD %s to be included", name)
+		}
+	}
+}
+
+func TestComposeIncludesTelemetryGroups(t *testing.T) {
+	opts := validOpts
+	opts.Groups = []string{"victoriametrics", "grafana"}
+	crds, err := compose(opts)
+	if err != nil {
+		t.Fatalf("compose failed: %v", err)
+	}
+
+	names := make(map[string]bool, len(crds))
+	for _, crd := range crds {
+		names[crd.Name] = true
+	}
+	for _, name := range []string{
+		"vmsingles.operator.victoriametrics.com",
+		"vmagents.operator.victoriametrics.com",
+		"vlsingles.operator.victoriametrics.com",
+		"vtsingles.operator.victoriametrics.com",
+		"grafanas.grafana.integreatly.org",
+		"grafanadashboards.grafana.integreatly.org",
+		"grafanadatasources.grafana.integreatly.org",
+	} {
+		if !names[name] {
+			t.Errorf("expected telemetry CRD %s to be included", name)
+		}
+	}
+
+	// Upstream CRDs must not carry the cert-manager annotation we inject for operator CRDs.
+	for _, crd := range crds {
+		if strings.HasSuffix(crd.Name, ".victoriametrics.com") || strings.HasSuffix(crd.Name, ".grafana.integreatly.org") {
+			if _, ok := crd.Annotations["cert-manager.io/inject-ca-from"]; ok {
+				t.Errorf("upstream CRD %s should not have cert-manager annotation", crd.Name)
+			}
 		}
 	}
 }

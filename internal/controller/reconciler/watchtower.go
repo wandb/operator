@@ -10,12 +10,16 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/controller/common"
 	"github.com/wandb/operator/internal/logx"
+	"github.com/wandb/operator/internal/observability/supportbundle"
 	"github.com/wandb/operator/pkg/utils"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -40,6 +44,26 @@ const (
 	// serves gorilla's /oidc/auth sub-request, used to derive AUTH_SERVICE.
 	watchtowerOIDCIngressPath = "/oidc"
 	operatorImageEnvVar       = "OPERATOR_IMAGE"
+
+	// secretWritesEnvVar opts Watchtower's namespaced Role into writing Secrets.
+	//
+	// Off by default, and deliberately a separate switch from dbAdminEnvVar: this
+	// grant is broad — create/update/delete on EVERY Secret in the install
+	// namespace, which is where the database, object-store, OIDC, license and
+	// operator-managed credentials all live. A compromised Watchtower with it
+	// could replace any of them. Without it Watchtower can still *reference*
+	// existing Secrets (the CR only ever stores refs), so the OIDC, external
+	// connection and notification flows keep working against Secrets an admin
+	// created out of band; only Watchtower's own secret-manager needs the write.
+	secretWritesEnvVar = "WATCHTOWER_ENABLE_SECRET_WRITES"
+
+	// dbAdminEnvVar opts Watchtower into the user-administration actions that
+	// write directly to the W&B application database (email-domain migration).
+	// It is forwarded from the operator's own environment rather than the CR:
+	// this is a deployment-level policy decision, like the RBAC below, not
+	// per-instance configuration. Unset means the feature stays off, and
+	// Watchtower hides the control rather than failing at click time.
+	dbAdminEnvVar = "WATCHTOWER_ENABLE_DB_ADMIN"
 )
 
 // reconcileWatchtower brings the operator-managed Watchtower deployment in line
@@ -76,6 +100,13 @@ func reconcileWatchtower(
 		return err
 	}
 	desired := buildWatchtowerApplication(wandb, authService, image)
+	usesAWSIngress, err := ingressUsesAWSLoadBalancerController(ctx, c, wandb)
+	if err != nil {
+		return err
+	}
+	if usesAWSIngress {
+		desired.Spec.ServiceAnnotations = awsLoadBalancerHealthCheckAnnotations(desired.Spec.PodTemplate.Spec.Containers)
+	}
 
 	application := &apiv2.Application{
 		ObjectMeta: metav1.ObjectMeta{
@@ -170,7 +201,7 @@ func buildWatchtowerApplication(wandb *apiv2.WeightsAndBiases, authService strin
 			PodTemplate: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
 					ServiceAccountName: watchtowerServiceAccountName(wandb),
-					SecurityContext:    resolvePodSecurityContext(),
+					SecurityContext:    resolvePodSecurityContext(apiv2.WorkloadSecurityProfile{}),
 					Affinity:           wandb.Spec.Affinity,
 					Tolerations:        watchtowerTolerations(wandb),
 					Containers: []corev1.Container{
@@ -179,7 +210,7 @@ func buildWatchtowerApplication(wandb *apiv2.WeightsAndBiases, authService strin
 							Image:           image,
 							Command:         []string{"/watchtower"},
 							Args:            []string{"--port", fmt.Sprintf("%d", watchtowerContainerPort)},
-							SecurityContext: resolveContainerSecurityContext(),
+							SecurityContext: resolveContainerSecurityContext(apiv2.WorkloadSecurityProfile{}),
 							Env:             watchtowerEnv(wandb, authService, basePath),
 							Resources:       watchtowerResources(),
 							Ports: []corev1.ContainerPort{{
@@ -224,7 +255,7 @@ func buildWatchtowerApplication(wandb *apiv2.WeightsAndBiases, authService strin
 // container: it is told where it is mounted and which service validates the
 // caller's session, so neither has to be baked into the image.
 func watchtowerEnv(wandb *apiv2.WeightsAndBiases, authService, basePath string) []corev1.EnvVar {
-	return []corev1.EnvVar{
+	env := []corev1.EnvVar{
 		// Locks the UI to the cluster it runs in: no context switching, no teardown.
 		{Name: "WATCHTOWER_MODE", Value: "cluster"},
 		{Name: "WATCHTOWER_BASE_PATH", Value: basePath},
@@ -240,6 +271,13 @@ func watchtowerEnv(wandb *apiv2.WeightsAndBiases, authService, basePath string) 
 			},
 		}},
 	}
+
+	// Forwarded only when set, so the default deployment carries no trace of it
+	// and the capability cannot be switched on by accident.
+	if v := os.Getenv(dbAdminEnvVar); v != "" {
+		env = append(env, corev1.EnvVar{Name: dbAdminEnvVar, Value: v})
+	}
+	return env
 }
 
 // watchtowerAuthService resolves the in-cluster host:port Watchtower calls to
@@ -451,15 +489,52 @@ func reconcileWatchtowerRBAC(ctx context.Context, c ctrlClient.Client, wandb *ap
 	serviceAccountName := watchtowerServiceAccountName(wandb)
 	clusterScopedName := watchtowerClusterScopedName(wandb)
 
+	// The support-bundle grants wait for the policy that confines the Jobs Watchtower can create.
+	supportBundleGrants := false
+	if supportbundle.Enabled(wandb) {
+		want := supportbundle.WatchtowerJobPolicy(wandb, serviceAccountName)
+		policy := &admissionregistrationv1.ValidatingAdmissionPolicy{}
+		binding := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
+		err := c.Get(ctx, ctrlClient.ObjectKeyFromObject(want), policy)
+		if err == nil {
+			err = c.Get(ctx, ctrlClient.ObjectKeyFromObject(want), binding)
+		}
+		if err != nil && !apiErrors.IsNotFound(err) && !meta.IsNoMatchError(err) {
+			return fmt.Errorf("failed to check the Watchtower job policy: %w", err)
+		}
+		supportBundleGrants = err == nil && apiequality.Semantic.DeepEqual(want.Spec, policy.Spec) &&
+			apiequality.Semantic.DeepEqual(supportbundle.WatchtowerJobPolicyBinding(wandb).Spec, binding.Spec)
+	}
+
 	role := &rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: watchtowerName(wandb), Namespace: wandb.Namespace}}
 	if _, err := controllerruntime.CreateOrUpdate(ctx, c, role, func() error {
 		role.Labels = utils.MergeMapsStringString(role.Labels, labels)
 		// Secrets and ConfigMaps stay namespace-scoped: Watchtower reads the
 		// install's license and connection material, not the whole cluster's.
+		//
+		// Reading Secrets is required for normal operation (license, connection
+		// material). Writing them is opt-in — see secretWritesEnvVar for why.
+		secretVerbs := []string{"get", "list", "watch"}
+		if os.Getenv(secretWritesEnvVar) != "" {
+			secretVerbs = append(secretVerbs, "create", "update", "patch", "delete")
+		}
 		role.Rules = []rbacv1.PolicyRule{
 			{
+				// Creating an ActionRun executes an administrator-published action
+				// with the referenced application's identity. Keep this grant on
+				// Watchtower's install-scoped ServiceAccount.
+				APIGroups: []string{"apps.wandb.com"},
+				Resources: []string{"actionruns"},
+				Verbs:     []string{"get", "list", "watch", "create", "delete"},
+			},
+			{
 				APIGroups: []string{""},
-				Resources: []string{"secrets", "configmaps"},
+				Resources: []string{"secrets"},
+				Verbs:     secretVerbs,
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"configmaps"},
 				Verbs:     []string{"get", "list", "watch"},
 			},
 			{
@@ -472,6 +547,14 @@ func reconcileWatchtowerRBAC(ctx context.Context, c ctrlClient.Client, wandb *ap
 				Resources: []string{"ingresses"},
 				Verbs:     []string{"get", "list", "watch"},
 			},
+		}
+		if supportBundleGrants {
+			// Launching, cancelling and copying out support-bundle collections.
+			role.Rules = append(role.Rules,
+				rbacv1.PolicyRule{APIGroups: []string{"batch"}, Resources: []string{"jobs"}, Verbs: []string{"create", "delete"}},
+				rbacv1.PolicyRule{APIGroups: []string{""}, Resources: []string{"pods"}, Verbs: []string{"delete"}},
+				rbacv1.PolicyRule{APIGroups: []string{""}, Resources: []string{"pods/exec"}, Verbs: []string{"create", "get"}},
+			)
 		}
 		return controllerutil.SetOwnerReference(wandb, role, c.Scheme())
 	}); err != nil {
@@ -526,6 +609,14 @@ func reconcileWatchtowerRBAC(ctx context.Context, c ctrlClient.Client, wandb *ap
 				APIGroups: []string{"apps"},
 				Resources: []string{"deployments", "statefulsets", "replicasets", "daemonsets"},
 				Verbs:     []string{"get", "list", "watch"},
+			},
+			{
+				// Pod CPU/memory usage from metrics-server, for the Metrics tab. The
+				// operator holds this too (see the wandb-operator ClusterRole), so the
+				// apiserver allows delegating it here.
+				APIGroups: []string{"metrics.k8s.io"},
+				Resources: []string{"pods"},
+				Verbs:     []string{"get", "list"},
 			},
 		}
 		// Cluster-scoped objects cannot own-reference a namespaced CR; cleanup

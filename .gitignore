@@ -54,3 +54,8 @@ hack/testing-manifests/wandb/.generated/*.yaml
 
 # Downloaded by `make download-watchtower` for the image build
 /watchtower
+# Downloaded by `make download-grafana-plugins` for the image build
+/grafana-plugins
+
+# Temporary credential files created by google-github-actions/auth
+gha-creds-*.json

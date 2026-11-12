@@ -8,7 +8,6 @@ import (
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -18,10 +17,7 @@ func oidcTestCR() *apiv2.WeightsAndBiases {
 		ObjectMeta: metav1.ObjectMeta{Name: "wandb", Namespace: "default"},
 	}
 	wandb.Spec.Wandb.OIDC = apiv2.OidcSpec{
-		ClientId: corev1.SecretKeySelector{
-			LocalObjectReference: corev1.LocalObjectReference{Name: "my-oidc"},
-			Key:                  "clientId",
-		},
+		ClientId:      apiv2.ValueFromSecret("my-oidc", "clientId", false),
 		SessionLength: "48h",
 	}
 	return wandb
