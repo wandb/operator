@@ -80,6 +80,7 @@ func (d *WeightsAndBiasesCustomDefaulter) Default(ctx context.Context, obj runti
 	if wandb.Spec.Size == "" {
 		wandb.Spec.Size = appsv2.SizeDev
 	}
+	wandb.Spec.Size = wandb.Spec.Size.Canonical()
 
 	if wandb.Spec.RetentionPolicy.OnDelete == "" {
 		wandb.Spec.RetentionPolicy.OnDelete = appsv2.DetachOnDelete
