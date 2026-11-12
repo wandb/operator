@@ -1178,14 +1178,6 @@ type SupportBundleStatusSummary struct {
 	LastSuccessfulTime *metav1.Time `json:"lastSuccessfulTime,omitempty"`
 }
 
-type SupportBundleStatusSummary struct {
-	Ready              bool         `json:"ready"`
-	Image              string       `json:"image,omitempty"`
-	CronJob            string       `json:"cronJob,omitempty"`
-	Version            string       `json:"version,omitempty"`
-	Running            bool         `json:"running,omitempty"`
-	LastSuccessfulTime *metav1.Time `json:"lastSuccessfulTime,omitempty"`
-}
 
 type WatchtowerStatusSummary struct {
 	Ready       bool   `json:"ready"`
