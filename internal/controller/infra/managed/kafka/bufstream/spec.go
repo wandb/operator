@@ -20,6 +20,26 @@ import (
 
 const defaultEtcdStorageSize = "10Gi"
 
+// defaultEtcdResources: unsized by the manifest; dev/limits gates apply.
+func defaultEtcdResources(spec *apiv2.WeightsAndBiasesSpec) corev1.ResourceRequirements {
+	if spec.BestEffortResources() {
+		return corev1.ResourceRequirements{}
+	}
+	res := corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("250m"),
+			corev1.ResourceMemory: resource.MustParse("512Mi"),
+		},
+	}
+	if spec.RequireLimits {
+		res.Limits = corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("1"),
+			corev1.ResourceMemory: resource.MustParse("1Gi"),
+		}
+	}
+	return res
+}
+
 const (
 	kafkaRunAsUser  int64 = 65532
 	kafkaRunAsGroup int64 = 65532
@@ -345,6 +365,7 @@ func ToEtcdApplication(
 							Name:            "etcd",
 							Image:           EtcdImage(mfst.Kafka.Images[imageKeyEtcd], wandb.Spec.Global.ImageRegistry),
 							Env:             etcdEnv,
+							Resources:       defaultEtcdResources(&wandb.Spec),
 							SecurityContext: kafkaContainerSecurityContext(),
 							Ports: []corev1.ContainerPort{
 								{Name: "client", ContainerPort: EtcdClientPort},

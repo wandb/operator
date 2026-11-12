@@ -64,6 +64,26 @@ func DefaultRedisExporterImage(img manifest.ImageRef, globalImageRegistry string
 	return defaultRedisExporterImage
 }
 
+// defaultSentinelResources: unsized by the manifest; same dev/limits gates.
+func defaultSentinelResources(spec *apiv2.WeightsAndBiasesSpec) *corev1.ResourceRequirements {
+	if spec.BestEffortResources() {
+		return &corev1.ResourceRequirements{}
+	}
+	res := &corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("100m"),
+			corev1.ResourceMemory: resource.MustParse("128Mi"),
+		},
+	}
+	if spec.RequireLimits {
+		res.Limits = corev1.ResourceList{
+			corev1.ResourceCPU:    resource.MustParse("250m"),
+			corev1.ResourceMemory: resource.MustParse("256Mi"),
+		}
+	}
+	return res
+}
+
 const (
 	redisRunAsUser  int64 = 1000
 	redisRunAsGroup int64 = 1000
@@ -310,7 +330,7 @@ func ToRedisSentinelVendorSpec(
 				Image:            RedisSentinelImage(mfst.Redis["default"].Images["sentinel"], wandb.Spec.Global.ImageRegistry),
 				ImagePullPolicy:  corev1.PullIfNotPresent,
 				ImagePullSecrets: pullSecretsPtr(wandb),
-				Resources:        &corev1.ResourceRequirements{},
+				Resources:        defaultSentinelResources(&wandb.Spec),
 			},
 			PodSecurityContext: redisPodSecurityContext(),
 			SecurityContext:    redisContainerSecurityContext(),

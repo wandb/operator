@@ -85,6 +85,7 @@ func ResolveInstance[T any](m map[string]T, key string) (T, bool) {
 type Size string
 
 const (
+	// SizeDev runs every pod BestEffort (see BestEffortResources).
 	SizeDev     Size = "dev"
 	SizeMicro   Size = "micro"
 	SizeSmall   Size = "small"
