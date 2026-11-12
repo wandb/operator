@@ -11,3 +11,9 @@ dependencies:
     value:
       packageName: victoriametrics-operator
       version: ">=0.66.3"
+  # Helm pins 0.22.2; older catalog releases (<=0.15.1) cannot reconcile the
+  # HA Redis CRs this operator writes.
+  - type: olm.package
+    value:
+      packageName: redis-operator
+      version: ">=0.22.2"

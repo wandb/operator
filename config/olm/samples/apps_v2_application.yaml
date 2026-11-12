@@ -13,3 +13,10 @@ spec:
       containers:
       - name: app
         image: nginx:1.27
+  triage:
+    containerName: app
+    command: ["/bin/echo"]
+    timeoutSeconds: 60
+    actions:
+      - name: default
+        description: Run the default application diagnostic

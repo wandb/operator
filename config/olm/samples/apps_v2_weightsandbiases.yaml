@@ -9,54 +9,74 @@ metadata:
     app.kubernetes.io/managed-by: olm
 spec:
   size: small
+  wandb:
+    # Public URL users reach W&B at; front the `frontend` Service with your own ingress/Route.
+    hostname: https://wandb.example.com
+    # Pin to a published W&B Server version.
+    version: "0.86.3"
   retentionPolicy:
     onDelete: detach
+  # Moco (MySQL) is not in the OLM catalog: connect to an existing MySQL 8 instance.
   mysql:
     default:
       externalMysql:
         host:
-          name: wandb-mysql
-          key: host
+          valueFrom:
+            secretKeyRef:
+              name: wandb-mysql
+              key: host
         port:
-          name: wandb-mysql
-          key: port
+          valueFrom:
+            secretKeyRef:
+              name: wandb-mysql
+              key: port
         database:
-          name: wandb-mysql
-          key: database
+          valueFrom:
+            secretKeyRef:
+              name: wandb-mysql
+              key: database
         username:
-          name: wandb-mysql
-          key: username
+          valueFrom:
+            secretKeyRef:
+              name: wandb-mysql
+              key: username
         password:
-          name: wandb-mysql
-          key: password
+          valueFrom:
+            secretKeyRef:
+              name: wandb-mysql
+              key: password
   redis:
     default:
-      externalRedis:
-        host:
-          name: wandb-redis
-          key: host
-        port:
-          name: wandb-redis
-          key: port
+      managedRedis:
+        storageSize: 5Gi
   kafka:
     managedKafka:
       storageSize: 10Gi
       replicas: 1
+  # SeaweedFS is not in the OLM catalog: connect to an existing S3-compatible bucket.
   objectStore:
     default:
       externalObjectStore:
         bucket:
-          name: wandb-object-store
-          key: bucket
+          valueFrom:
+            secretKeyRef:
+              name: wandb-object-store
+              key: bucket
         accessKey:
-          name: wandb-object-store
-          key: accessKey
+          valueFrom:
+            secretKeyRef:
+              name: wandb-object-store
+              key: accessKey
         secretKey:
-          name: wandb-object-store
-          key: secretKey
+          valueFrom:
+            secretKeyRef:
+              name: wandb-object-store
+              key: secretKey
         region:
-          name: wandb-object-store
-          key: region
+          valueFrom:
+            secretKeyRef:
+              name: wandb-object-store
+              key: region
   clickhouse:
     default:
       managedClickhouse:

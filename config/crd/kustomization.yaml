@@ -4,6 +4,7 @@
 resources:
 - bases/apps.wandb.com_weightsandbiases.yaml
 - bases/apps.wandb.com_applications.yaml
+- bases/apps.wandb.com_actionruns.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 # By default, both v1 and v2 are served. Uncomment one of the patches below to serve only one version:

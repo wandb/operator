@@ -43,55 +43,16 @@ def set_indented_field(text: str, indent: str, field: str, value: str) -> str:
 
 
 def set_csv_field(csv_text: str, field: str, value: str) -> str:
-    updated = set_indented_field(csv_text, "  ", field, value)
-    if updated != csv_text:
-        return updated
-    # Place before the trailing version field when possible.
     lines = csv_text.splitlines()
+    if any(existing.startswith(f"  {field}:") for existing in lines):
+        return set_indented_field(csv_text, "  ", field, value)
+    # Place before the trailing version field when possible.
     for i, existing in enumerate(lines):
         if existing.startswith("  version:"):
             lines.insert(i, f"  {field}: {value}")
             return "\n".join(lines) + "\n"
     lines.append(f"  {field}: {value}")
     return "\n".join(lines) + "\n"
-
-
-# Catalog redis-operator tops out at 0.15.1 and cannot reconcile the Redis
-# CRs this operator writes. Do not list those GVKs as required — OLM treats
-# required CRDs as install deps and will pull 0.15.1 even without a package dep.
-_REDIS_REQUIRED_CRD_NAMES = {
-    "redis.redis.redis.opstreelabs.in",
-    "redisreplications.redis.redis.opstreelabs.in",
-    "redissentinels.redis.redis.opstreelabs.in",
-}
-
-
-def drop_redis_required_crds(csv_text: str) -> str:
-    lines = csv_text.splitlines(keepends=True)
-    out: list[str] = []
-    i = 0
-    while i < len(lines):
-        line = lines[i]
-        if line.startswith("    - ") and i + 1 < len(lines):
-            block = [line]
-            j = i + 1
-            while j < len(lines) and (
-                lines[j].startswith("      ") or lines[j].strip() == ""
-            ):
-                block.append(lines[j])
-                j += 1
-            name = ""
-            for entry in block:
-                stripped = entry.strip()
-                if stripped.startswith("name:"):
-                    name = stripped.split(":", 1)[1].strip()
-                    break
-            if name in _REDIS_REQUIRED_CRD_NAMES:
-                i = j
-                continue
-        out.append(line)
-        i += 1
-    return "".join(out)
 
 
 def set_dockerfile_label(dockerfile_text: str, key: str, value: str) -> str:
@@ -111,7 +72,16 @@ def main() -> int:
     parser.add_argument("--bundle-dir", required=True, type=Path)
     parser.add_argument("--dependencies", required=True, type=Path)
     parser.add_argument("--openshift-versions", required=True)
-    parser.add_argument("--replaces", required=True)
+    parser.add_argument(
+        "--replaces",
+        default="",
+        help="CSV spec.replaces; omit for a bundle with no upgrade predecessor.",
+    )
+    parser.add_argument(
+        "--maturity",
+        default="",
+        help="CSV spec.maturity (e.g. beta, stable); unchanged when empty.",
+    )
     parser.add_argument("--stage-dir", required=True, type=Path)
     parser.add_argument(
         "--container-image",
@@ -146,8 +116,11 @@ def main() -> int:
         )
     )
     shutil.copyfile(args.dependencies, bundle / "metadata" / "dependencies.yaml")
-    csv_text = drop_redis_required_crds(csvs[0].read_text())
-    csv_text = set_csv_field(csv_text, "replaces", args.replaces)
+    csv_text = csvs[0].read_text()
+    if args.replaces:
+        csv_text = set_csv_field(csv_text, "replaces", args.replaces)
+    if args.maturity:
+        csv_text = set_csv_field(csv_text, "maturity", args.maturity)
     container_image = args.container_image
     if not container_image:
         for line in csv_text.splitlines():

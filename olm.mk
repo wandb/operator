@@ -1,6 +1,8 @@
 # VERSION defaults to the Helm chart appVersion (no leading v).
 VERSION ?= $(shell sed -n 's/^appVersion: *"\(.*\)"/\1/p' deploy/operator/Chart.yaml)
-CHANNELS ?= stable
+# Prereleases ship in the opt-in beta channel; stable stays the package default
+# so existing 1.x installs are not auto-upgraded onto a beta.
+CHANNELS ?= beta
 DEFAULT_CHANNEL ?= stable
 BUNDLE_METADATA_OPTS ?= --channels=$(CHANNELS) --default-channel=$(DEFAULT_CHANNEL)
 
@@ -19,8 +21,14 @@ BUNDLE_GEN_FLAGS ?= -q --overwrite --version $(VERSION) --package wandb-operator
 
 # OpenShift floor from CRC 2.60.1 (OpenShift 4.21.8).
 OPENSHIFT_VERSIONS ?= v4.21
-BUNDLE_REPLACES ?= wandb-operator.v1.22.0
+# Empty: the beta channel has no predecessor. Set e.g. wandb-operator.v1.22.0
+# when publishing to a channel that should upgrade from an earlier bundle.
+BUNDLE_REPLACES ?=
+BUNDLE_MATURITY ?= beta
 COMMUNITY_BUNDLE_DIR ?= dist/community-operators/operators/wandb-operator/$(VERSION)
+ifneq ($(strip $(BUNDLE_REPLACES)),)
+BUNDLE_REPLACES_OPT := --replaces $(BUNDLE_REPLACES)
+endif
 
 .PHONY: bundle
 bundle: manifests kustomize ## Generate bundle manifests and metadata, then validate generated files.
@@ -41,7 +49,8 @@ bundle-community: bundle ## Stamp community-operators-prod metadata and stage th
 		--bundle-dir ./bundle \
 		--dependencies config/olm/community/dependencies.yaml \
 		--openshift-versions $(OPENSHIFT_VERSIONS) \
-		--replaces $(BUNDLE_REPLACES) \
+		--maturity $(BUNDLE_MATURITY) \
+		$(BUNDLE_REPLACES_OPT) \
 		--container-image $(BUNDLE_CONTROLLER_IMG) \
 		--stage-dir $(COMMUNITY_BUNDLE_DIR)
 	operator-sdk bundle validate ./bundle
