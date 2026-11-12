@@ -87,6 +87,7 @@ func createSupportBundleWandb(t *testing.T, c ctrlClient.Client, name string) *a
 	wandb := &apiv2.WeightsAndBiases{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: supportBundleTestNamespace}}
 	wandb.Spec.Wandb.Hostname = "https://wandb.example.com"
 	wandb.Spec.Wandb.Features = map[string]bool{}
+	wandb.Spec.RetentionPolicy.OnDelete = apiv2.DetachOnDelete
 	wandb.Spec.SupportBundle.Enabled = ptr.To(true)
 	require.NoError(t, c.Create(ctx, wandb))
 
@@ -455,6 +456,7 @@ func TestSupportBundleRefusesUnownedObjects(t *testing.T) {
 		wandb := &apiv2.WeightsAndBiases{ObjectMeta: metav1.ObjectMeta{Name: "no-bucket", Namespace: supportBundleTestNamespace}}
 		wandb.Spec.Wandb.Hostname = "https://wandb.example.com"
 		wandb.Spec.Wandb.Features = map[string]bool{}
+		wandb.Spec.RetentionPolicy.OnDelete = apiv2.DetachOnDelete
 		wandb.Spec.SupportBundle.Enabled = ptr.To(true)
 		require.NoError(t, c.Create(ctx, wandb))
 

@@ -95,13 +95,11 @@ func mysqlInferStatus(
 // runMysqlRetentionFinalizer applies the configured retention policy for a
 // single MySQL instance during deletion.
 func runMysqlRetentionFinalizer(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, key string, spec apiv2.MySQLSpec) error {
-	switch wandb.GetRetentionPolicy(mysqlInstanceInfraSpec(spec)).OnDelete {
-	case apiv2.PurgeOnDelete:
-		return mysqlPurgeFinalizer(ctx, c, wandb, key, spec)
-	case apiv2.DetachOnDelete:
-		return mysqlDetachFinalizer(ctx, c, wandb, key, spec)
-	}
-	return nil
+	return runRetentionFinalizer(
+		wandb.GetRetentionPolicy(mysqlInstanceInfraSpec(spec)),
+		func() error { return mysqlPurgeFinalizer(ctx, c, wandb, key, spec) },
+		func() error { return mysqlDetachFinalizer(ctx, c, wandb, key, spec) },
+	)
 }
 
 func mysqlInstanceInfraSpec(spec apiv2.MySQLSpec) apiv2.ManagedInfraSpec {

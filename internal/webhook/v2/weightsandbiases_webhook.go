@@ -368,6 +368,7 @@ func validateSpec(_ context.Context, newWandb, oldWandb *appsv2.WeightsAndBiases
 	allErrors = append(allErrors, validateOIDCSpec(newWandb)...)
 	allErrors = append(allErrors, validateNotificationSpec(newWandb)...)
 	allErrors = append(allErrors, validateInfraNames(newWandb, oldWandb)...)
+	allErrors = append(allErrors, validateRetentionPolicies(newWandb, oldWandb)...)
 	networkingErrors, networkingWarnings := validateNetworkingSpec(newWandb)
 	allErrors = append(allErrors, networkingErrors...)
 	warnings = append(warnings, networkingWarnings...)
@@ -887,6 +888,73 @@ func validateClickHouseSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {
 		}
 	}
 
+	return errors
+}
+
+type retentionPolicyRef struct {
+	path   *field.Path
+	policy *appsv2.RetentionPolicy
+}
+
+func retentionPolicyRefs(wandb *appsv2.WeightsAndBiases) []retentionPolicyRef {
+	spec := field.NewPath("spec")
+	refs := []retentionPolicyRef{{spec.Child("retentionPolicy"), &wandb.Spec.RetentionPolicy}}
+	add := func(path *field.Path, policy *appsv2.RetentionPolicy) {
+		if policy != nil {
+			refs = append(refs, retentionPolicyRef{path.Child("retentionPolicy"), policy})
+		}
+	}
+	for key, s := range wandb.Spec.MySQL {
+		if s.ManagedMysql != nil {
+			add(spec.Child("mysql").Key(key).Child("managedMysql"), s.ManagedMysql.RetentionPolicy)
+		}
+	}
+	for key, s := range wandb.Spec.Redis {
+		if s.ManagedRedis != nil {
+			add(spec.Child("redis").Key(key).Child("managedRedis"), s.ManagedRedis.RetentionPolicy)
+		}
+	}
+	for key, s := range wandb.Spec.ObjectStore {
+		if s.ManagedObjectStore != nil {
+			add(spec.Child("objectStore").Key(key).Child("managedObjectStore"), s.ManagedObjectStore.RetentionPolicy)
+		}
+	}
+	for key, s := range wandb.Spec.ClickHouse {
+		if s.ManagedClickHouse != nil {
+			add(spec.Child("clickhouse").Key(key).Child("managedClickhouse"), s.ManagedClickHouse.RetentionPolicy)
+		}
+	}
+	if k := wandb.Spec.Kafka.ManagedKafka; k != nil {
+		add(spec.Child("kafka").Child("managedKafka"), k.RetentionPolicy)
+	}
+	return refs
+}
+
+// validateRetentionPolicies backs the CRD enum when CRDs lag the operator. Empty
+// (v1 conversions) and unchanged values pass, so existing CRs stay deletable.
+func validateRetentionPolicies(newWandb, oldWandb *appsv2.WeightsAndBiases) field.ErrorList {
+	stored := map[string]appsv2.OnDeletePolicy{}
+	if oldWandb != nil {
+		for _, ref := range retentionPolicyRefs(oldWandb) {
+			stored[ref.path.String()] = ref.policy.OnDelete
+		}
+	}
+
+	var errors field.ErrorList
+	for _, ref := range retentionPolicyRefs(newWandb) {
+		switch ref.policy.OnDelete {
+		case "", appsv2.DetachOnDelete, appsv2.PurgeOnDelete:
+			continue
+		}
+		if old, ok := stored[ref.path.String()]; ok && old == ref.policy.OnDelete {
+			continue
+		}
+		errors = append(errors, field.NotSupported(
+			ref.path.Child("onDelete"),
+			ref.policy.OnDelete,
+			[]appsv2.OnDeletePolicy{appsv2.DetachOnDelete, appsv2.PurgeOnDelete},
+		))
+	}
 	return errors
 }
 

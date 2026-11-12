@@ -94,6 +94,7 @@ const (
 	SizeXXLarge Size = "xxlarge"
 )
 
+// +kubebuilder:validation:Enum=detach;purge
 type OnDeletePolicy string
 
 const (

@@ -1314,6 +1314,9 @@ spec:
                           properties:
                             onDelete:
                               default: detach
+                              enum:
+                              - detach
+                              - purge
                               type: string
                           required:
                           - onDelete
@@ -1951,6 +1954,9 @@ spec:
                         properties:
                           onDelete:
                             default: detach
+                            enum:
+                            - detach
+                            - purge
                             type: string
                         required:
                         - onDelete
@@ -2762,6 +2768,9 @@ spec:
                           properties:
                             onDelete:
                               default: detach
+                              enum:
+                              - detach
+                              - purge
                               type: string
                           required:
                           - onDelete
@@ -3707,6 +3716,9 @@ spec:
                           properties:
                             onDelete:
                               default: detach
+                              enum:
+                              - detach
+                              - purge
                               type: string
                           required:
                           - onDelete
@@ -4395,6 +4407,9 @@ spec:
                           properties:
                             onDelete:
                               default: detach
+                              enum:
+                              - detach
+                              - purge
                               type: string
                           required:
                           - onDelete
@@ -4481,6 +4496,9 @@ spec:
                 properties:
                   onDelete:
                     default: detach
+                    enum:
+                    - detach
+                    - purge
                     type: string
                 required:
                 - onDelete
