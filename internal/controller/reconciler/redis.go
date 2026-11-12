@@ -87,11 +87,13 @@ func redisInferStatus(
 }
 
 func runRedisRetentionFinalizer(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, key string, spec apiv2.RedisSpec) error {
-	return runRetentionFinalizer(
-		wandb.GetRetentionPolicy(redisInstanceInfraSpec(spec)),
-		func() error { return redisPurgeFinalizer(ctx, c, wandb, key, spec) },
-		func() error { return redisDetachFinalizer(ctx, c, wandb, key, spec) },
-	)
+	switch wandb.GetRetentionPolicy(redisInstanceInfraSpec(spec)).OnDelete {
+	case apiv2.PurgeOnDelete:
+		return redisPurgeFinalizer(ctx, c, wandb, key, spec)
+	case apiv2.DetachOnDelete:
+		return redisDetachFinalizer(ctx, c, wandb, key, spec)
+	}
+	return nil
 }
 
 func redisInstanceInfraSpec(spec apiv2.RedisSpec) apiv2.ManagedInfraSpec {

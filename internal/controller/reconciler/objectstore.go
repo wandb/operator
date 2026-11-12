@@ -87,11 +87,13 @@ func objectStoreInferStatus(
 }
 
 func runObjectStoreRetentionFinalizer(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, key string, spec apiv2.ObjectStoreSpec) error {
-	return runRetentionFinalizer(
-		wandb.GetRetentionPolicy(objectStoreInstanceInfraSpec(spec)),
-		func() error { return objectStorePurgeFinalizer(ctx, c, wandb, key, spec) },
-		func() error { return objectStoreDetachFinalizer(ctx, c, wandb, key, spec) },
-	)
+	switch wandb.GetRetentionPolicy(objectStoreInstanceInfraSpec(spec)).OnDelete {
+	case apiv2.PurgeOnDelete:
+		return objectStorePurgeFinalizer(ctx, c, wandb, key, spec)
+	case apiv2.DetachOnDelete:
+		return objectStoreDetachFinalizer(ctx, c, wandb, key, spec)
+	}
+	return nil
 }
 
 func objectStoreInstanceInfraSpec(spec apiv2.ObjectStoreSpec) apiv2.ManagedInfraSpec {

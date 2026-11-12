@@ -54,13 +54,23 @@ const CleanupFinalizer = "wandb.apps.wandb.com/cleanup"
 var defaultRequeueMinutes = 1
 var defaultRequeueDuration = time.Duration(defaultRequeueMinutes) * time.Minute
 
-// runRetentionFinalizer detaches unless the policy is explicitly purge, so empty
-// or pre-enum stored values keep data rather than falling through to GC.
-func runRetentionFinalizer(policy apiv2.RetentionPolicy, purge, detach func() error) error {
-	if policy.OnDelete == apiv2.PurgeOnDelete {
-		return purge()
+type finalizerFunc func(context.Context, ctrlClient.Client, *apiv2.WeightsAndBiases) error
+
+func runRetentionFinalizer(
+	ctx context.Context,
+	client ctrlClient.Client,
+	wandb *apiv2.WeightsAndBiases,
+	infraSpec apiv2.ManagedInfraSpec,
+	purgeFn finalizerFunc,
+	detachFn finalizerFunc,
+) error {
+	switch wandb.GetRetentionPolicy(infraSpec).OnDelete {
+	case apiv2.PurgeOnDelete:
+		return purgeFn(ctx, client, wandb)
+	case apiv2.DetachOnDelete:
+		return detachFn(ctx, client, wandb)
 	}
-	return detach()
+	return nil
 }
 
 // Reconcile for V2 of WandB as the assumed object
@@ -125,11 +135,7 @@ func Reconcile(
 			}
 			// Kafka remains single-instance.
 			if wandb.Spec.Kafka.ManagedKafka != nil {
-				if err = runRetentionFinalizer(
-					wandb.GetRetentionPolicy(wandb.Spec.Kafka.ManagedKafka.ManagedInfraSpec),
-					func() error { return kafkaPurgeFinalizer(ctx, client, wandb) },
-					func() error { return kafkaDetachFinalizer(ctx, client, wandb) },
-				); err != nil {
+				if err = runRetentionFinalizer(ctx, client, wandb, wandb.Spec.Kafka.ManagedKafka.ManagedInfraSpec, kafkaPurgeFinalizer, kafkaDetachFinalizer); err != nil {
 					return ctrl.Result{}, err
 				}
 			}

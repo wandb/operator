@@ -93,11 +93,13 @@ func clickHouseInferStatus(
 }
 
 func runClickHouseRetentionFinalizer(ctx context.Context, c client.Client, wandb *apiv2.WeightsAndBiases, key string, spec apiv2.ClickHouseSpec) error {
-	return runRetentionFinalizer(
-		wandb.GetRetentionPolicy(clickHouseInstanceInfraSpec(spec)),
-		func() error { return clickHousePurgeFinalizer(ctx, c, wandb, key, spec) },
-		func() error { return clickHouseDetachFinalizer(ctx, c, wandb, key, spec) },
-	)
+	switch wandb.GetRetentionPolicy(clickHouseInstanceInfraSpec(spec)).OnDelete {
+	case apiv2.PurgeOnDelete:
+		return clickHousePurgeFinalizer(ctx, c, wandb, key, spec)
+	case apiv2.DetachOnDelete:
+		return clickHouseDetachFinalizer(ctx, c, wandb, key, spec)
+	}
+	return nil
 }
 
 func clickHouseInstanceInfraSpec(spec apiv2.ClickHouseSpec) apiv2.ManagedInfraSpec {
