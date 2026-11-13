@@ -1,5 +1,8 @@
 # Legacy Overrides: carrying v1 helm values into v2
 
+> Status: Design history for implemented compatibility behavior; verify details against current code.
+> Current guidance: [developer guide](../../developer/api-development.md).
+
 ## Problem
 
 The v1 `WeightsAndBiases` spec is untyped: `spec.values` is an arbitrary map passed to
@@ -220,7 +223,7 @@ the apps do. Per-app entries do not apply to migrations (no v1 analog).
 **Hand-authored content.** Editing `legacyOverrides` directly in a v2 CR is
 discouraged but not prevented — and we assume it will happen. So there is no
 blocking webhook validation beyond the CRD schema, the field's doc comment (and
-`docs/config-api.md`) steer users toward first-class fields, and the apply path
+the former `docs/config-api.md`, now [legacy-config-api.md](../legacy-config-api.md)) steer users toward first-class fields, and the apply path
 is defensive: entries with an empty name are skipped with a log,
 `overrideEnvVars` resolves duplicate names within an override deterministically
 (last entry wins), and unknown map keys are already logged and ignored by
@@ -354,7 +357,8 @@ never enter the spec.
     round-trip (`kubectl get wandb.v1... -o yaml` still shows original values).
 13. User-facing documentation lives in the API type's doc comments and this
     design doc. (`docs/config-api.md` turned out to be v1 console-API docs — the
-    wrong venue; revisit if a v2 CR reference doc is added.)
+    wrong venue; revisit if a v2 CR reference doc is added.) The v2
+    [configuration reference](../../user/reference.md) now exists.
 
 ## Resolved design decisions
 

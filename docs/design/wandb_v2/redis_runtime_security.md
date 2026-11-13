@@ -1,5 +1,8 @@
 # Managed Redis runtime security
 
+Status: implemented design record. See [workload security development](../../developer/workload-security.md)
+and [user configuration](../../user/workload-security.md) for current guidance.
+
 Managed Redis, replication, Sentinel, and exporter containers use read-only
 roots. The pinned Redis operator chart 0.22.2 enables its upstream
 `GenerateConfigInInitContainer` feature. The controller generates `init-config`,

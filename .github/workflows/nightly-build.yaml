@@ -3,7 +3,7 @@ name: Nightly Build (reusable)
 # Reusable build for nightly WESTest testing: derives one version string, builds
 # and pushes the operator image, bakes that tag into the chart, then packages and
 # pushes the chart to the same OCI repo the release path uses. See
-# docs/nightly-westest-testing.md.
+# docs/developer/nightly-westest.md.
 
 on:
   workflow_call:

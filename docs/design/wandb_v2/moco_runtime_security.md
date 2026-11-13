@@ -1,5 +1,8 @@
 # Managed MOCO runtime security
 
+Status: implemented design record. See [workload security development](../../developer/workload-security.md)
+and [user configuration](../../user/workload-security.md) for current guidance.
+
 The MySQL container and upstream-generated agent, slow-log, exporter, and both
 init containers use read-only roots. Existing data, configuration, shared
 binary, log, socket, and temporary volumes provide their writable paths.

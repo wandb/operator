@@ -1,6 +1,6 @@
 # Nightly WESTest testing
 
-[The nightly workflow](../.github/workflows/nightly.yaml) builds an operator image
+[The nightly workflow](../../.github/workflows/nightly.yaml) builds an operator image
 and chart, then tests that chart with the published WESTest container. Manual runs
 can instead select an existing chart version and skip the build. The daily 07:00
 UTC schedule remains commented out until the first cloud runs and cleanup have
@@ -32,11 +32,10 @@ cloud scenarios. A named scenario selects only that scenario. Unsupported names
 and attempts to select a cloud scenario on another ref fail during setup. There
 is no pull-request trigger for these provisioning tests.
 
-The separate [PR WESTest workflow](pr-westest-testing.md) runs seven local
+The separate [PR WESTest workflow](pr-westest-testing.md) runs eight local
 Kind scenarios against the PR's operator checkout. Its airgap scenarios are
 temporarily excluded because dependency mirroring hits Docker Hub's anonymous
-pull limits. The external datastore scenario is also excluded from PR runs
-pending a separate investigation into its provisioning failure.
+pull limits.
 
 The nightly local matrix covers external datastores, authenticated proxy egress, and
 TLS-intercepting proxy CA trust alongside the baseline routing and OIDC checks.
@@ -55,10 +54,10 @@ same ref are serialized, and a new dispatch does not cancel an active run.
 ## Container and chart versions
 
 The action hardcodes the public WESTest image repository. The workflow selects
-only the tag through `WESTEST_IMAGE_TAG`, currently `0.5.1`:
+only the tag through `WESTEST_IMAGE_TAG`, currently `0.8.0`:
 
 ```text
-us-docker.pkg.dev/wandb-production/public/westest/westest:0.5.1
+us-docker.pkg.dev/wandb-production/public/westest/westest:0.8.0
 ```
 
 To test a different WESTest release, change `WESTEST_IMAGE_TAG` in the workflow.
@@ -75,7 +74,7 @@ The host still needs Docker CLI and GNU coreutils `timeout`. The wrapper checks
 both before preparing credentials or starting containers and reports a clear
 dependency error if either is missing.
 
-The shared [Docker action](../.github/actions/westest-run/action.yml) mounts a
+The shared [Docker action](../../.github/actions/westest-run/action.yml) mounts a
 fresh runner-local work directory at `/work`. Local tests also mount the Docker
 socket and use host networking so WESTest can reach Kind's API and application
 ports. The image entrypoint configures scenario hostnames in its own `/etc/hosts`.
@@ -106,7 +105,7 @@ gh workflow run nightly.yaml --repo wandb/operator --ref main \
   -f upgrade_from_version=2.0.0-beta.8 -f operator_version=2.0.0-beta.9
 ```
 
-The reusable [nightly build](../.github/workflows/nightly-build.yaml) is unchanged:
+The reusable [nightly build](../../.github/workflows/nightly-build.yaml) is unchanged:
 
 - Scheduled runs use `<base>-nightly-<UTC timestamp>`.
 - Manual builds default to `<base>-dev-[<dev_tag>-]<UTC timestamp>`. The optional
@@ -153,7 +152,8 @@ provides the recorded artifact identity; setup does not look up the Core commit.
 
 ## Cloud authentication
 
-Only the cloud test job requests `id-token: write`. Each matrix entry selects its
+Among the test jobs, only the cloud test job requests `id-token: write`; the build
+job also requests it to publish to Artifact Registry. Each matrix entry selects its
 GitHub environment before requesting credentials. Environments provide a place
 for deployment branch restrictions, reviewers and other protections; cloud trust
 also independently checks the main branch.
@@ -290,7 +290,8 @@ Follow-up work includes a secure recovery mechanism for failed teardown and the
 etcd PVC cleanup issue observed during local AWS/GCP validation. Keep the cron
 disabled until cleanup behavior is acceptable for unattended runs.
 
-Offline wrapper and matrix checks run in the regular PR test workflow:
+The offline wrapper and matrix checks have a job in the regular PR test workflow,
+but that job is paused while AWS scenarios are disabled. Run them locally:
 
 ```bash
 python3 -B -m unittest discover -s hack/scripts -p test_nightly_westest.py

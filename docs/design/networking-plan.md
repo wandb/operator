@@ -1,3 +1,7 @@
+> Status: Historical implementation plan. Networking is implemented; the proposed types and examples below are not the current API.
+> See the current [networking guide](../user/networking.md) for API values and the
+> [developer guide](../developer/reconciliation.md#application-rendering-and-networking) before using these notes.
+
 # Plan: Ingress and Gateway API Support for WeightsAndBiases Operator
 
 ## Context

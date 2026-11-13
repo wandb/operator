@@ -1,9 +1,18 @@
-# Migrating from Operator v1 to v2
+# Prepare and validate an Operator v1 to v2 migration
 
 Operator v2 adopts an existing v1 `WeightsAndBiases` resource in place: a
 conversion webhook converts it to `apps.wandb.com/v2`, and the operator
 reconnects to the same backing services without migrating data. MySQL, Redis,
-and object storage convert to their external connection specs automatically.
+and object storage convert to their external connection specs automatically, as
+does ClickHouse when the v1 values set `global.clickhouse` connection fields.
+Conversion also carries over the hostname, license, size, OIDC settings, custom CA
+certificates, ServiceAccount annotations, the v1 ingress settings (as
+`spec.networking` in `ingress` mode), and `spec.wandb.version` from the v1 `app`
+(or `api`) image tag.
+
+Kafka is not converted. v2 always runs an Operator-managed Kafka (Bufstream),
+provisioned by Operator itself rather than a chart subchart. It stores data under
+its own prefix in the default bucket and metadata on etcd PersistentVolumes.
 
 Operator v2 does not uninstall the v1 Helm releases or modify migration
 metadata inside MySQL or ClickHouse. Those actions can destroy data or make
@@ -23,16 +32,9 @@ INSTALLATION FAILED: no matches for kind "Certificate"/"Issuer" in version "cert
 ```
 
 cert-manager is intentionally not a chart dependency (many clusters already run
-it, and it is a cluster-wide singleton). Install it with its CRDs before the
-operator:
-
-```bash
-helm repo add jetstack https://charts.jetstack.io
-helm repo update
-helm install cert-manager jetstack/cert-manager \
-  --namespace cert-manager --create-namespace \
-  --set crds.enabled=true
-```
+it, and it is a cluster-wide singleton). Follow the
+[cert-manager installation steps](installation.md#install-cert-manager) before
+installing Operator v2.
 
 ### Other tooling
 
@@ -41,6 +43,10 @@ helm install cert-manager jetstack/cert-manager \
 - A default `StorageClass` (managed backing services request PersistentVolumes).
 
 ## Before the change window
+
+Set `WANDB_NAMESPACE`, `WANDB_NAME`, and `V1_WANDB_RELEASE` to the existing
+deployment's namespace, W&B resource name, and W&B Helm release name for the
+commands below.
 
 1. Record the v1 operator and W&B Helm release names, namespaces, chart
    versions, and values.
@@ -61,12 +67,20 @@ helm install cert-manager jetstack/cert-manager \
      export before applying it as desired state.
    - Make sure the wandb server manifest is pinned to a specific version. If version is `latest` or empty, it will fail.
 
+   Literal (non-`valueFrom`) v1 connection values are not placed in the converted
+   spec. They are held in `legacy.operator.wandb.com/<service>-pending` annotations
+   (`mysql`, `redis`, `bucket`, `clickhouse`, `oidc`) until the first reconcile
+   writes them to `<name>-<service>-converted` Secrets and points the selectors
+   there. A freshly converted resource can therefore show, for example, a Redis
+   password selector without a host; check the annotations before treating it as
+   incomplete.
+
 5. Determine whether the v1 W&B Helm release owns Redis or another dependency
    that v2 will continue using:
 
    ```bash
-   helm get manifest <v1-wandb-release> -n <wandb-namespace>
-   kubectl get statefulset,service,pvc -n <wandb-namespace>
+   helm get manifest "$V1_WANDB_RELEASE" -n "$WANDB_NAMESPACE"
+   kubectl get statefulset,service,pvc -n "$WANDB_NAMESPACE"
    ```
 
    If the release owns Redis, keep that release installed until Redis has been
@@ -74,14 +88,26 @@ helm install cert-manager jetstack/cert-manager \
    Pointing v2 at the v1 Redis Service does not make it safe to uninstall the
    v1 release.
 
-## TODO: What needs to happen before applying `helm upgrade`
+## Plan the controller handoff
+
+This guide covers preparation and validation. A complete release-specific
+handoff and rollback sequence has not yet been validated in these docs. Before
+running the installation commands below, establish which controller owns the
+existing resource, how the v1 controller will stop reconciling it, how v2 will
+adopt it, and how traffic and data will be preserved if the cutover fails.
+
+Rehearse that sequence on a representative copy of the deployment. Keep
+infrastructure-owning v1 Helm releases installed until their ownership is resolved;
+turning off a controller and uninstalling a data-owning release are different
+operations. Record the validated sequence and downtime expectations in the
+change plan.
 
 ## Install Operator v2 and apply the resource
 
-Each managed backing service is provisioned by a component operator that the v2
-chart installs as a subchart (and whose CRDs its bundled crd-installer applies).
-If your v1 environment already runs one of these operators cluster-wide — most
-commonly a standalone Altinity ClickHouse operator — disable the overlapping
+Each managed backing service other than Kafka is provisioned by a component
+operator that the v2 chart installs as a subchart. If your v1 environment
+already runs one of these operators cluster-wide — most commonly a standalone
+Altinity ClickHouse operator — disable the overlapping
 component operator so the chart reuses your existing one instead of fighting it
 for CRD ownership. A conflict looks like:
 
@@ -100,22 +126,29 @@ Disable the conflicting component operator with the matching toggle:
 | VictoriaMetrics (telemetry) | `victoria-metrics-operator.enabled` | `false` |
 | Grafana (telemetry) | `grafana-operator.enabled` | `false` |
 
-Disabling a component operator also drops its CRDs from the bundled
-crd-installer. Provision that backing service externally and point the
-`WeightsAndBiases` CR at it (see
-[Infrastructure Connection Settings](infra-connection-settings.md)).
+CRD installation differs by component. The bundled crd-installer applies the
+Redis and ClickHouse CRDs only while their operator toggles are enabled. Moco and
+SeaweedFS CRDs come from their subcharts, so disabling the subchart drops them.
+For VictoriaMetrics and Grafana, the crd-installer follows
+`telemetry.crds.victoriaMetrics` and `telemetry.crds.grafana` rather than the
+operator toggles. Supply an existing compatible controller and CRDs, or provision
+that backing service externally and point the `WeightsAndBiases` CR at it (see
+[Infrastructure Connection Settings](infrastructure.md)).
 
-Pin a reviewed version from the Operator v2 OCI repository, adding any
-`*-operator.enabled=false` toggles from the table above:
+Set `OPERATOR_VERSION` to the reviewed v2 chart version and `OPERATOR_NAMESPACE`
+to the intended v2 controller namespace. Save the complete chart settings in
+`operator-values.yaml`, including any dependency toggles from the table above.
+Save the reviewed v2 resource as `weightsandbiases-v2.yaml`.
 
 ```bash
 helm upgrade --install wandb-operator \
   oci://us-docker.pkg.dev/wandb-production/public/wandb/charts/operator \
-  --version <operator-version> \
-  --namespace <v2-operator-namespace> \
-  --create-namespace
+  --version "$OPERATOR_VERSION" \
+  --namespace "$OPERATOR_NAMESPACE" \
+  --create-namespace -f operator-values.yaml --wait --timeout 10m
 
-kubectl apply -f <weightsandbiases-v2.yaml>
+kubectl apply --dry-run=server -f weightsandbiases-v2.yaml
+kubectl apply -f weightsandbiases-v2.yaml
 ```
 
 The `wandb/operator` chart in `charts.wandb.ai` is Operator v1 and is not an
@@ -132,11 +165,11 @@ the W&B migration Jobs. Do not treat the upgrade as complete until all of these
 checks pass:
 
 ```bash
-kubectl -n <wandb-namespace> get wandb <wandb-name> -o yaml
-kubectl -n <wandb-namespace> get jobs \
-  -l app.kubernetes.io/instance=<wandb-name>,app.kubernetes.io/component=migration
-kubectl -n <wandb-namespace> get applications
-kubectl -n <wandb-namespace> get deployments
+kubectl -n "$WANDB_NAMESPACE" get wandb "$WANDB_NAME" -o yaml
+kubectl -n "$WANDB_NAMESPACE" get jobs \
+  -l app.kubernetes.io/instance="$WANDB_NAME",app.kubernetes.io/component=migration
+kubectl -n "$WANDB_NAMESPACE" get applications
+kubectl -n "$WANDB_NAMESPACE" get deployments
 ```
 
 Confirm:
@@ -148,11 +181,12 @@ Confirm:
 - The public route targets the intended v2 Services and no longer returns
   transient 5xx responses.
 
-If a migration Job fails, collect its status and logs:
+If a migration Job fails, set `MIGRATION_JOB` to its name and collect its status
+and logs:
 
 ```bash
-kubectl -n <wandb-namespace> describe job/<migration-job>
-kubectl -n <wandb-namespace> logs job/<migration-job> -c migrate
+kubectl -n "$WANDB_NAMESPACE" describe job/"$MIGRATION_JOB"
+kubectl -n "$WANDB_NAMESPACE" logs job/"$MIGRATION_JOB" -c migrate
 ```
 
 Do not infer migration success from a similarly named Deployment. Do not
@@ -173,6 +207,10 @@ requires a migration-specific recovery decision and a verified backup.
   invalid UTF-8`. Regenerate the token, overwrite the `weave-worker-auth` secret,
   and restart the weave-trace deployments.
 
+After live v2 application Deployments are healthy, the reconciler removes the
+known obsolete v1 `*-bc` application Deployments. This does not uninstall the
+v1 Helm releases or transfer ownership of their backing services.
+
 ## Smoke test before cleanup
 
 Run the tests through the customer-facing hostname:
@@ -190,7 +228,7 @@ downloads can still fail when the external endpoint or CORS policy is wrong.
 
 ## Further reading
 
-- [Configuration API](config-api.md)
-- [Infrastructure Connection Settings](infra-connection-settings.md)
+- [Configuration API](reference.md)
+- [Infrastructure Connection Settings](infrastructure.md)
 - [Monitoring and Telemetry Guide](monitoring.md)
 - [Deploying on OpenShift](openshift.md)
