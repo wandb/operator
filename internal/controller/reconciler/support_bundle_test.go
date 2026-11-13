@@ -91,6 +91,7 @@ func createSupportBundleWandb(t *testing.T, c ctrlClient.Client, name string) *a
 	require.NoError(t, c.Create(ctx, wandb))
 
 	wandb.Status.TelemetryStatus.Ready = true
+	wandb.Status.TelemetryStatus.Connection = telemetry.SummarizeTelemetryInfraStatus(ctx, c, supportBundleTelemetry).Connection
 	wandb.Status.ObjectStoreStatus = map[string]apiv2.ObjectStoreInfraStatus{
 		apiv2.DefaultInstanceName: {Connection: apiv2.ObjectStoreConnection{
 			URL: apiv2.ValueOrSecret{ValueFrom: &apiv2.SecretValueSource{SecretKeyRef: &corev1.SecretKeySelector{
@@ -107,16 +108,11 @@ var supportBundleTelemetry = telemetry.TelemetryRuntimeConfig{Enabled: true, Mod
 
 type supportBundleObjects struct {
 	application        *apiv2.Application
-	configMap          *corev1.ConfigMap
 	serviceAccount     *corev1.ServiceAccount
 	role               *rbacv1.Role
 	roleBinding        *rbacv1.RoleBinding
 	telemetryRole      *rbacv1.Role
 	telemetryBinding   *rbacv1.RoleBinding
-	dnsTestRole        *rbacv1.Role
-	dnsTestBinding     *rbacv1.RoleBinding
-	dnsSystemRole      *rbacv1.Role
-	dnsSystemBinding   *rbacv1.RoleBinding
 	clusterRole        *rbacv1.ClusterRole
 	clusterRoleBinding *rbacv1.ClusterRoleBinding
 	podPolicy          *admissionregistrationv1.ValidatingAdmissionPolicy
@@ -127,8 +123,8 @@ type supportBundleObjects struct {
 
 func (o supportBundleObjects) all() []ctrlClient.Object {
 	return []ctrlClient.Object{
-		o.application, o.configMap, o.serviceAccount, o.role, o.roleBinding,
-		o.telemetryRole, o.telemetryBinding, o.dnsTestRole, o.dnsTestBinding, o.dnsSystemRole, o.dnsSystemBinding,
+		o.application, o.serviceAccount, o.role, o.roleBinding,
+		o.telemetryRole, o.telemetryBinding,
 		o.clusterRole, o.clusterRoleBinding, o.podPolicy, o.podPolicyBinding, o.jobPolicy, o.jobPolicyBinding,
 	}
 }
@@ -138,20 +134,13 @@ func supportBundleObjectKeys(wandb *apiv2.WeightsAndBiases) supportBundleObjects
 	clusterName := supportbundle.ClusterScopedName(wandb)
 	ns := metav1.ObjectMeta{Name: name, Namespace: wandb.Namespace}
 	telemetryNS := metav1.ObjectMeta{Name: clusterName, Namespace: supportBundleTelemetryNS}
-	dnsTestNS := metav1.ObjectMeta{Name: clusterName, Namespace: "default"}
-	dnsSystemNS := metav1.ObjectMeta{Name: clusterName, Namespace: "kube-system"}
 	return supportBundleObjects{
 		application:        &apiv2.Application{ObjectMeta: ns},
-		configMap:          &corev1.ConfigMap{ObjectMeta: ns},
 		serviceAccount:     &corev1.ServiceAccount{ObjectMeta: ns},
 		role:               &rbacv1.Role{ObjectMeta: ns},
 		roleBinding:        &rbacv1.RoleBinding{ObjectMeta: ns},
 		telemetryRole:      &rbacv1.Role{ObjectMeta: telemetryNS},
 		telemetryBinding:   &rbacv1.RoleBinding{ObjectMeta: telemetryNS},
-		dnsTestRole:        &rbacv1.Role{ObjectMeta: dnsTestNS},
-		dnsTestBinding:     &rbacv1.RoleBinding{ObjectMeta: dnsTestNS},
-		dnsSystemRole:      &rbacv1.Role{ObjectMeta: dnsSystemNS},
-		dnsSystemBinding:   &rbacv1.RoleBinding{ObjectMeta: dnsSystemNS},
 		clusterRole:        &rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: clusterName}},
 		clusterRoleBinding: &rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: clusterName}},
 		podPolicy:          &admissionregistrationv1.ValidatingAdmissionPolicy{ObjectMeta: metav1.ObjectMeta{Name: clusterName}},
@@ -214,11 +203,8 @@ func TestSupportBundleLifecycle(t *testing.T) {
 		require.Equal(t, "CronJob", objects.application.Spec.Kind)
 		require.True(t, metav1.IsControlledBy(objects.application, wandb))
 		require.True(t, *objects.application.Spec.CronJobs[0].Spec.Suspend)
-		require.Contains(t, objects.configMap.Data, "full.yaml")
-		require.Contains(t, objects.configMap.Data["full.yaml"], "victoriaStack")
+		require.Contains(t, cronJobArgs(objects.application), "--victoria-namespace="+supportBundleTelemetryNS)
 		require.Len(t, objects.telemetryRole.OwnerReferences, 0)
-		require.Len(t, objects.dnsSystemRole.OwnerReferences, 0)
-		require.Contains(t, objects.configMap.Data["full.yaml"], "dns:")
 		require.Len(t, objects.clusterRole.OwnerReferences, 0)
 
 		jobs := &batchv1.JobList{}
@@ -330,11 +316,14 @@ func TestSupportBundleLifecycle(t *testing.T) {
 	})
 
 	t.Run("removes the telemetry namespace Role when telemetry is turned off", func(t *testing.T) {
+		connection := wandb.Status.TelemetryStatus.Connection
+		wandb.Status.TelemetryStatus.Connection = apiv2.TelemetryConnectionStatus{}
 		reconcileSupportBundle(ctx, c, wandb, telemetry.DefaultTelemetryRuntimeConfig())
 		err := c.Get(ctx, ctrlClient.ObjectKeyFromObject(objects.telemetryRole), &rbacv1.Role{})
 		require.True(t, apierrors.IsNotFound(err))
-		require.NoError(t, c.Get(ctx, ctrlClient.ObjectKeyFromObject(objects.configMap), objects.configMap))
-		require.NotContains(t, objects.configMap.Data["full.yaml"], "victoriaStack")
+		require.NoError(t, c.Get(ctx, ctrlClient.ObjectKeyFromObject(objects.application), objects.application))
+		require.NotContains(t, cronJobArgs(objects.application), "--victoria-namespace="+supportBundleTelemetryNS)
+		wandb.Status.TelemetryStatus.Connection = connection
 		reconcileSupportBundle(ctx, c, wandb, supportBundleTelemetry)
 		requireAllPresent(t, c, objects)
 	})
@@ -412,27 +401,6 @@ func TestSupportBundleRefusesUnownedObjects(t *testing.T) {
 	ctx := context.Background()
 	c := supportBundleEnvtest(t)
 
-	t.Run("namespaced ConfigMap", func(t *testing.T) {
-		wandb := createSupportBundleWandb(t, c, "collide")
-		foreign := &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{Name: supportbundle.Name(wandb), Namespace: wandb.Namespace},
-			Data:       map[string]string{"owner": "someone-else"},
-		}
-		require.NoError(t, c.Create(ctx, foreign))
-
-		result := reconcileSupportBundle(ctx, c, wandb, telemetry.DefaultTelemetryRuntimeConfig())
-		require.Equal(t, defaultRequeueDuration, result.RequeueAfter)
-		require.NoError(t, c.Get(ctx, ctrlClient.ObjectKeyFromObject(foreign), foreign))
-		require.Equal(t, map[string]string{"owner": "someone-else"}, foreign.Data)
-		require.Empty(t, foreign.OwnerReferences)
-		err := c.Get(ctx, ctrlClient.ObjectKey{Name: supportbundle.Name(wandb), Namespace: wandb.Namespace}, &apiv2.Application{})
-		require.True(t, apierrors.IsNotFound(err))
-
-		_, err = deleteSupportBundle(ctx, c, wandb, false)
-		require.NoError(t, err)
-		require.NoError(t, c.Get(ctx, ctrlClient.ObjectKeyFromObject(foreign), foreign), "deletion must not remove an unowned ConfigMap")
-	})
-
 	t.Run("cluster-scoped ClusterRole", func(t *testing.T) {
 		wandb := createSupportBundleWandb(t, c, "collide-cluster")
 		foreign := &rbacv1.ClusterRole{
@@ -508,8 +476,9 @@ func TestSupportBundlePodAdmissionPolicy(t *testing.T) {
 	wandb := createSupportBundleWandb(t, c, "policy")
 	reconcileSupportBundle(ctx, c, wandb, supportBundleTelemetry)
 
+	// Victoria export pods are the helpers the collector may create, in the telemetry namespace.
 	for _, name := range []string{"default", "privileged"} {
-		require.NoError(t, c.Create(ctx, &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"}}))
+		require.NoError(t, c.Create(ctx, &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: supportBundleTelemetryNS}}))
 	}
 	collectorCfg := rest.CopyConfig(cfg)
 	collectorCfg.Impersonate = rest.ImpersonationConfig{
@@ -520,7 +489,7 @@ func TestSupportBundlePodAdmissionPolicy(t *testing.T) {
 
 	helperPod := func(name, serviceAccount string) *corev1.Pod {
 		return &corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: supportBundleTelemetryNS},
 			Spec: corev1.PodSpec{
 				ServiceAccountName:           serviceAccount,
 				AutomountServiceAccountToken: ptr.To(false),
@@ -568,13 +537,13 @@ func TestSupportBundleWatchtowerJobPolicy(t *testing.T) {
 		manager := collection.DeepCopy()
 		manager.Name = "support-bundle-" + op + "-abcdef"
 		pod := &manager.Spec.Template.Spec
-		pod.Volumes = slices.DeleteFunc(pod.Volumes, func(v corev1.Volume) bool { return v.Name == "collection" || v.Name == "staging" })
+		pod.Volumes = slices.DeleteFunc(pod.Volumes, func(v corev1.Volume) bool { return v.Name == "staging" })
 		container := &pod.Containers[0]
 		container.Command, container.Args = []string{"sleep", "300"}, nil
 		container.Env = slices.DeleteFunc(container.Env, func(e corev1.EnvVar) bool {
 			return slices.Contains([]string{"LUMEN_SUPPORT_BUNDLE_RESULT_PATH", "SUPPORT_BUNDLE_ID", "SELF_POD_NAME", "SELF_POD_NAMESPACE"}, e.Name)
 		})
-		container.VolumeMounts = slices.DeleteFunc(container.VolumeMounts, func(m corev1.VolumeMount) bool { return m.Name == "collection" || m.Name == "staging" })
+		container.VolumeMounts = slices.DeleteFunc(container.VolumeMounts, func(m corev1.VolumeMount) bool { return m.Name == "staging" })
 		jobs = append(jobs, manager)
 	}
 	invalid := collection.DeepCopy()
@@ -605,6 +574,10 @@ func TestSupportBundleWatchtowerJobPolicy(t *testing.T) {
 				},
 				"projected Secret": func(p *corev1.PodSpec) {
 					p.Volumes = append(p.Volumes, corev1.Volume{Name: "credentials", VolumeSource: corev1.VolumeSource{Projected: &corev1.ProjectedVolumeSource{Sources: []corev1.VolumeProjection{{Secret: &corev1.SecretProjection{LocalObjectReference: corev1.LocalObjectReference{Name: "unrelated"}}}}}}})
+				},
+				"spec ConfigMap": func(p *corev1.PodSpec) {
+					p.Volumes = append(p.Volumes, corev1.Volume{Name: "collection", VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{LocalObjectReference: corev1.LocalObjectReference{Name: supportbundle.Name(wandb)}}}})
+					p.Containers[0].VolumeMounts = append(p.Containers[0].VolumeMounts, corev1.VolumeMount{Name: "collection", MountPath: "/etc/support-bundle", ReadOnly: true})
 				},
 				"init container": func(p *corev1.PodSpec) { p.InitContainers = []corev1.Container{{Name: "init", Image: "busybox"}} },
 				"lifecycle command": func(p *corev1.PodSpec) {
@@ -664,7 +637,7 @@ func TestSupportBundleSkipsClustersWithoutAdmissionPolicies(t *testing.T) {
 	result := reconcileSupportBundle(context.Background(), c, wandb, telemetry.DefaultTelemetryRuntimeConfig())
 	require.Equal(t, defaultRequeueDuration, result.RequeueAfter)
 	require.False(t, wandb.Status.SupportBundle.Ready)
-	err := c.Get(context.Background(), ctrlClient.ObjectKey{Name: supportbundle.Name(wandb), Namespace: "ns"}, &corev1.ConfigMap{})
+	err := c.Get(context.Background(), ctrlClient.ObjectKey{Name: supportbundle.Name(wandb), Namespace: "ns"}, &apiv2.Application{})
 	require.True(t, apierrors.IsNotFound(err), "nothing is installed when the policy cannot be")
 }
 
@@ -682,4 +655,33 @@ func TestSupportBundleCleanupRunsWhenReconcileFailsEarly(t *testing.T) {
 	require.Error(t, err, "the manifest cannot be loaded")
 	err = c.Get(ctx, ctrlClient.ObjectKeyFromObject(leftover), &rbacv1.ClusterRole{})
 	require.True(t, apierrors.IsNotFound(err), "disabled cleanup must not wait for the manifest")
+}
+
+func cronJobArgs(app *apiv2.Application) []string {
+	return app.Spec.CronJobs[0].Spec.JobTemplate.Spec.Template.Spec.Containers[0].Args
+}
+
+func TestSupportBundleRemovesDNSRolesOnUpgrade(t *testing.T) {
+	ctx := context.Background()
+	c := supportBundleEnvtest(t)
+	wandb := createSupportBundleWandb(t, c, "dns-upgrade")
+
+	var stale []ctrlClient.Object
+	for _, namespace := range []string{"default", "kube-system"} {
+		meta := metav1.ObjectMeta{Name: supportbundle.ClusterScopedName(wandb), Namespace: namespace, Labels: supportbundle.SelectorLabels(wandb)}
+		role := &rbacv1.Role{ObjectMeta: meta, Rules: []rbacv1.PolicyRule{{APIGroups: []string{""}, Resources: []string{"pods"}, Verbs: []string{"list"}}}}
+		binding := &rbacv1.RoleBinding{
+			ObjectMeta: *meta.DeepCopy(),
+			RoleRef:    rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "Role", Name: role.Name},
+		}
+		require.NoError(t, c.Create(ctx, role))
+		require.NoError(t, c.Create(ctx, binding))
+		stale = append(stale, role, binding)
+	}
+
+	reconcileSupportBundle(ctx, c, wandb, supportBundleTelemetry)
+	for _, obj := range stale {
+		err := c.Get(ctx, ctrlClient.ObjectKeyFromObject(obj), obj)
+		require.True(t, apierrors.IsNotFound(err), "%T %s/%s from the DNS check should be removed", obj, obj.GetNamespace(), obj.GetName())
+	}
 }

@@ -158,6 +158,71 @@ type SupportBundleSpec struct {
 	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$`
 	// +optional
 	Version string `json:"version,omitempty"`
+
+	// VictoriaStack picks and bounds the Victoria exports
+	// +kubebuilder:default={}
+	// +optional
+	VictoriaStack SupportBundleVictoriaStack `json:"victoriaStack,omitempty"`
+
+	// CustomResources picks which custom resources to collect
+	// +kubebuilder:default={enabled: true}
+	// +optional
+	CustomResources SupportBundleCustomResources `json:"customResources,omitempty"`
+}
+
+// SupportBundleVictoriaStack bounds the Victoria exports
+type SupportBundleVictoriaStack struct {
+	// Lookback is how far back every export reaches, e.g. 24h.
+	// +kubebuilder:validation:MaxLength=32
+	// +kubebuilder:validation:XValidation:rule="duration(self) > duration('0s')",message="must be a positive duration, e.g. 30m or 24h"
+	// +optional
+	Lookback string `json:"lookback,omitempty"`
+
+	// Timeout bounds the whole Victoria collection, e.g. 5m.
+	// +kubebuilder:validation:MaxLength=32
+	// +kubebuilder:validation:XValidation:rule="duration(self) > duration('0s')",message="must be a positive duration, e.g. 30m or 24h"
+	// +optional
+	Timeout string `json:"timeout,omitempty"`
+
+	// +kubebuilder:default={enabled: true}
+	// +optional
+	Metrics SupportBundleVictoriaExport `json:"metrics,omitempty"`
+
+	// +kubebuilder:default={enabled: true}
+	// +optional
+	Logs SupportBundleVictoriaExport `json:"logs,omitempty"`
+
+	// +kubebuilder:default={enabled: true}
+	// +optional
+	Traces SupportBundleVictoriaExport `json:"traces,omitempty"`
+}
+
+// SupportBundleVictoriaExport picks and bounds one of the metrics, logs, or traces exports.
+type SupportBundleVictoriaExport struct {
+	// +kubebuilder:default=true
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// Lookback overrides the stack lookback for this export.
+	// +kubebuilder:validation:MaxLength=32
+	// +kubebuilder:validation:XValidation:rule="duration(self) > duration('0s')",message="must be a positive duration, e.g. 30m or 24h"
+	// +optional
+	Lookback string `json:"lookback,omitempty"`
+
+	// MaxRecords caps the exported lines or spans
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	MaxRecords *int64 `json:"maxRecords,omitempty"`
+}
+
+type SupportBundleCustomResources struct {
+	// +kubebuilder:default=true
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// Resources narrows collection to these CRD names
+	// +optional
+	Resources []string `json:"resources,omitempty"`
 }
 
 const (

@@ -30,7 +30,15 @@ var _ = Describe("WeightsAndBiases supportBundle schema", func() {
 
 		stored := &appsv2.WeightsAndBiases{}
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(wandb), stored)).To(Succeed())
-		Expect(stored.Spec.SupportBundle).To(Equal(appsv2.SupportBundleSpec{Enabled: ptr.To(true)}))
+		Expect(stored.Spec.SupportBundle).To(Equal(appsv2.SupportBundleSpec{
+			Enabled: ptr.To(true),
+			VictoriaStack: appsv2.SupportBundleVictoriaStack{
+				Metrics: appsv2.SupportBundleVictoriaExport{Enabled: ptr.To(true)},
+				Logs:    appsv2.SupportBundleVictoriaExport{Enabled: ptr.To(true)},
+				Traces:  appsv2.SupportBundleVictoriaExport{Enabled: ptr.To(true)},
+			},
+			CustomResources: appsv2.SupportBundleCustomResources{Enabled: ptr.To(true)},
+		}))
 
 		stored.Spec.SupportBundle = appsv2.SupportBundleSpec{Enabled: ptr.To(true), Version: "0.4.8-rc1"}
 		Expect(k8sClient.Update(ctx, stored)).To(Succeed())
@@ -74,7 +82,45 @@ var _ = Describe("WeightsAndBiases supportBundle schema", func() {
 		stored := &appsv2.WeightsAndBiases{}
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(wandb), stored)).To(Succeed())
 		Expect(stored.Spec.SupportBundle.Enabled).To(Equal(ptr.To(true)))
+		Expect(stored.Spec.SupportBundle.VictoriaStack.Traces.Enabled).To(Equal(ptr.To(true)))
+		Expect(stored.Spec.SupportBundle.CustomResources.Enabled).To(Equal(ptr.To(true)))
 	})
+
+	It("keeps explicit opt-outs and bounds and defaults the rest", func() {
+		ctx := context.Background()
+		wandb := newWandb("support-bundle-scope")
+		wandb.Spec.SupportBundle.VictoriaStack = appsv2.SupportBundleVictoriaStack{
+			Lookback: "12h",
+			Logs:     appsv2.SupportBundleVictoriaExport{Enabled: ptr.To(false), MaxRecords: ptr.To[int64](0)},
+		}
+		wandb.Spec.SupportBundle.CustomResources.Resources = []string{"weightsandbiases.apps.wandb.com"}
+		Expect(k8sClient.Create(ctx, wandb)).To(Succeed())
+		DeferCleanup(k8sClient.Delete, ctx, wandb)
+
+		stored := &appsv2.WeightsAndBiases{}
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(wandb), stored)).To(Succeed())
+		stack := stored.Spec.SupportBundle.VictoriaStack
+		Expect(stack.Lookback).To(Equal("12h"))
+		Expect(stack.Logs).To(Equal(appsv2.SupportBundleVictoriaExport{Enabled: ptr.To(false), MaxRecords: ptr.To[int64](0)}))
+		Expect(stack.Metrics.Enabled).To(Equal(ptr.To(true)))
+		Expect(stored.Spec.SupportBundle.CustomResources).To(Equal(appsv2.SupportBundleCustomResources{
+			Enabled: ptr.To(true), Resources: []string{"weightsandbiases.apps.wandb.com"},
+		}))
+	})
+
+	DescribeTable("rejects invalid Victoria bounds",
+		func(field string, edit func(*appsv2.SupportBundleVictoriaStack)) {
+			wandb := newWandb("support-bundle-bad-bounds")
+			edit(&wandb.Spec.SupportBundle.VictoriaStack)
+			err := k8sClient.Create(context.Background(), wandb)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring(field))
+		},
+		Entry("zero lookback", "victoriaStack.lookback", func(s *appsv2.SupportBundleVictoriaStack) { s.Lookback = "0s" }),
+		Entry("unparsable timeout", "victoriaStack.timeout", func(s *appsv2.SupportBundleVictoriaStack) { s.Timeout = "soon" }),
+		Entry("negative lookback", "victoriaStack.traces.lookback", func(s *appsv2.SupportBundleVictoriaStack) { s.Traces.Lookback = "-1h" }),
+		Entry("negative cap", "victoriaStack.metrics.maxRecords", func(s *appsv2.SupportBundleVictoriaStack) { s.Metrics.MaxRecords = ptr.To[int64](-1) }),
+	)
 
 	It("rejects an invalid version tag", func() {
 		wandb := newWandb("support-bundle-bad-version")

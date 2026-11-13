@@ -88,17 +88,6 @@ func applySupportBundle(
 		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
 	}
 
-	configMap, err := supportbundle.ConfigMap(wandb, telemetryConfig)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-	currentConfigMap := &corev1.ConfigMap{ObjectMeta: objectKeyMeta(configMap)}
-	if err := upsertSupportBundleObject(ctx, c, wandb, currentConfigMap, configMap, true, func() {
-		currentConfigMap.Data = configMap.Data
-	}); err != nil {
-		return ctrl.Result{}, err
-	}
-
 	serviceAccount := supportbundle.ServiceAccount(wandb)
 	currentServiceAccount := &corev1.ServiceAccount{ObjectMeta: objectKeyMeta(serviceAccount)}
 	if err := upsertSupportBundleObject(ctx, c, wandb, currentServiceAccount, serviceAccount, true, func() {
@@ -257,7 +246,6 @@ func deleteSupportBundle(ctx context.Context, c ctrlClient.Client, wandb *apiv2.
 	name := supportbundle.Name(wandb)
 	namespaced := []ctrlClient.Object{
 		&apiv2.Application{Name: name, Namespace: wandb.Namespace},
-		&corev1.ConfigMap{Name: name, Namespace: wandb.Namespace},
 		&corev1.ServiceAccount{Name: name, Namespace: wandb.Namespace},
 	}
 	for _, obj := range namespaced {
