@@ -60,6 +60,8 @@ type WeightsAndBiasesReconciler struct {
 
 //+kubebuilder:rbac:groups="",resources=configmaps;events;persistentvolumeclaims;secrets;serviceaccounts;services,verbs=update;delete;get;list;create;patch;watch
 //+kubebuilder:rbac:groups="",resources=endpoints;nodes;nodes/spec;nodes/stats;nodes/metrics;nodes/proxy;namespaces;namespaces/status;replicationcontrollers;replicationcontrollers/status;resourcequotas;pods;pods/log;pods/status,verbs=get;list;watch
+// managed Redis labels its Pods/PVCs for W&B ownership tracking (opstree.ensurePodLabels)
+//+kubebuilder:rbac:groups="",resources=pods,verbs=patch
 //+kubebuilder:rbac:groups=metrics.k8s.io,resources=pods,verbs=get;list
 //+kubebuilder:rbac:groups=apps,resources=deployments/status;daemonsets/status;replicasets/status;statefulsets/status,verbs=get
 //+kubebuilder:rbac:groups=apps,resources=deployments;controllerrevisions;daemonsets;replicasets;statefulsets,verbs=update;delete;get;list;create;patch;watch
