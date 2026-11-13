@@ -293,7 +293,7 @@ def binary():
     return "CGO_ENABLED=0 GOOS=linux GO111MODULE=on go build -o tilt_bin/manager ./cmd/manager && CGO_ENABLED=0 GOOS=linux GO111MODULE=on go build -o tilt_bin/crd-installer ./cmd/crd-installer"
 
 
-def managed_endpoint_resource(name, anchor_object, deps, local_port, remote_port, link_name, pod_selector, labels, local_host="localhost", link_path=""):
+def managed_endpoint_resource(name, anchor_object, deps, local_port, remote_port, link_name, pod_selector, labels, local_host="localhost", link_path="", links=[]):
     k8s_resource(
         new_name=name,
         objects=[anchor_object],
@@ -303,6 +303,7 @@ def managed_endpoint_resource(name, anchor_object, deps, local_port, remote_port
         port_forwards=[
             port_forward(local_port, remote_port, name=link_name, link_path=link_path, host=local_host),
         ],
+        links=links,
         labels=labels,
     )
 
@@ -1025,6 +1026,19 @@ if as_bool(settings.get("includeCR")):
             labels=[GROUP_WANDB_APP],
         )
 
+    wandb_endpoint_links = []
+    if ADMIN_CONSOLE_ENABLED:
+        wandb_endpoint_links.append(link(url_origin(WANDB_HOSTNAME) + "/console/", "Console"))
+        local_resource(
+            "Console-Password",
+            "kubectl get secret -n %s %s -o jsonpath='{.data.password}' | base64 -d && echo" % (
+                shell_quote(WANDB_NAMESPACE),
+                shell_quote(WANDB_NAME + "-watchtower-auth"),
+            ),
+            auto_init=False,
+            labels=[GROUP_WANDB_APP],
+        )
+
     if LOCAL_NETWORKING_MODE == "gateway":
         managed_endpoint_resource(
             name="Wandb-Endpoint",
@@ -1034,6 +1048,7 @@ if as_bool(settings.get("includeCR")):
             remote_port=WANDB_ENDPOINT_PORT,
             link_name="W&B gateway",
             local_host=WANDB_ENDPOINT_HOST,
+            links=wandb_endpoint_links,
             pod_selector={
                 "app.kubernetes.io/instance": "nginx-gateway-fabric",
                 "app.kubernetes.io/managed-by": "nginx-gateway-fabric-nginx",
@@ -1050,6 +1065,7 @@ if as_bool(settings.get("includeCR")):
             remote_port=80,
             link_name="W&B ingress",
             local_host=WANDB_ENDPOINT_HOST,
+            links=wandb_endpoint_links,
             pod_selector={
                 "app.kubernetes.io/component": "controller",
                 "app.kubernetes.io/instance": "ingress-nginx",
