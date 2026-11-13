@@ -221,7 +221,7 @@ func TestTelemetryReadEndpointsMatchChartServices(t *testing.T) {
 	)
 
 	cfg := DefaultTelemetryRuntimeConfig()
-	cfg.Enabled = true
+	cfg.Mode = telemetryModeFull
 	cfg.Normalize()
 	resolved := cfg.ResolveEndpoints()
 

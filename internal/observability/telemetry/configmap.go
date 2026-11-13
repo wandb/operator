@@ -50,9 +50,8 @@ func LoadTelemetryRuntimeConfigFromConfigMap(
 		}
 		cfg.Enabled = enabled
 	}
-	if value, ok := cm.Data[telemetryConfigKeyMode]; ok {
-		cfg.Mode = value
-	}
+	// Legacy ConfigMaps have no MODE key; let Normalize derive it from ENABLED.
+	cfg.Mode = cm.Data[telemetryConfigKeyMode]
 	if value, ok := cm.Data[telemetryConfigKeyManagedNamespace]; ok {
 		cfg.Namespace = value
 	}
