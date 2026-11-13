@@ -122,6 +122,35 @@ func TestCollectionArgsTelemetryInInstallNamespace(t *testing.T) {
 	require.Contains(t, args, "--victoria-metrics=http://vmsingle-victoria-instance:8428")
 }
 
+func TestCollectionArgsPassVictoriaBounds(t *testing.T) {
+	wandb := withTelemetryStatus(testWandb(), telemetryOn("telemetry-ns"))
+	wandb.Spec.SupportBundle.VictoriaStack = apiv2.SupportBundleVictoriaStack{
+		Lookback: "12h",
+		Timeout:  "2m",
+		Metrics:  apiv2.SupportBundleVictoriaExport{Enabled: ptr.To(false), MaxRecords: ptr.To[int64](1000)},
+		Logs:     apiv2.SupportBundleVictoriaExport{Lookback: "1h", MaxRecords: ptr.To[int64](0)},
+		Traces:   apiv2.SupportBundleVictoriaExport{MaxRecords: ptr.To[int64](500)},
+	}
+	args := collectionArgs(wandb)
+	require.Equal(t, []string{
+		"--victoria-option=lookback=12h",
+		"--victoria-option=timeout=2m",
+		"--victoria-option=logs.lookback=1h",
+		"--victoria-option=metrics.maxLines=1000",
+		"--victoria-option=logs.maxLines=0",
+		"--victoria-option=traces.maxSpans=500",
+	}, args[len(args)-6:])
+	require.Contains(t, args, "--victoria-metrics=http://vmsingle-victoria-instance.telemetry-ns.svc:8428", "in-cluster ignores the enabled flags")
+}
+
+func TestCollectionArgsSkipVictoriaBoundsWithoutTelemetry(t *testing.T) {
+	wandb := testWandb()
+	wandb.Spec.SupportBundle.VictoriaStack.Lookback = "12h"
+	for _, arg := range collectionArgs(wandb) {
+		require.False(t, strings.HasPrefix(arg, "--victoria-"), "Lumen rejects options without an endpoint: %s", arg)
+	}
+}
+
 func TestCollectionArgsHaveNoCredentials(t *testing.T) {
 	args := strings.Join(collectionArgs(withTelemetryStatus(testWandb(), telemetryOn("telemetry-ns"))), " ")
 	for _, forbidden := range []string{"s3://", "gs://", "az://", "AccessKey", "conn"} {
@@ -313,6 +342,7 @@ func TestRolesWithoutTelemetry(t *testing.T) {
 	for _, resource := range []string{"actionruns", "applications", "weightsandbiases"} {
 		require.True(t, grants(roles[0].Rules, resource, "list"), "collector must read every collected %s", resource)
 	}
+	require.False(t, grants(roles[0].Rules, "vmsingles", "list"), "the operator holds Victoria reads only with telemetry on")
 
 }
 
@@ -324,6 +354,8 @@ func TestRolesWithTelemetryNamespace(t *testing.T) {
 
 	telemetryRole := roleIn(t, roles, "telemetry-ns")
 	require.Equal(t, ClusterScopedName(wandb), telemetryRole.Name)
+	require.True(t, grants(telemetryRole.Rules, "vmsingles", "list"))
+	require.True(t, grants(roles[0].Rules, "vmsingles", "list"))
 	require.True(t, grants(telemetryRole.Rules, "pods", "create"))
 	require.True(t, grants(telemetryRole.Rules, "pods/exec", "create"))
 
