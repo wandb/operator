@@ -1,6 +1,8 @@
 package supportbundle
 
 import (
+	"fmt"
+
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/observability/telemetry"
 )
@@ -46,10 +48,35 @@ func collectionArgs(wandb *apiv2.WeightsAndBiases) []string {
 	if namespace == "" {
 		namespace = wandb.Namespace
 	}
-	return append(args,
+	args = append(args,
 		"--victoria-namespace="+namespace,
 		"--victoria-metrics="+conn.MetricsReadEndpoint,
 		"--victoria-logs="+conn.LogsReadEndpoint,
 		"--victoria-traces="+conn.TracesReadEndpoint,
 	)
+	return append(args, victoriaOptions(wandb.Spec.SupportBundle.VictoriaStack)...)
+}
+
+// victoriaOptions passes the CR's bounds through; anything unset keeps the collector's default.
+func victoriaOptions(stack apiv2.SupportBundleVictoriaStack) []string {
+	var options []string
+	text := func(key, value string) {
+		if value != "" {
+			options = append(options, "--victoria-option="+key+"="+value)
+		}
+	}
+	limit := func(key string, value *int64) {
+		if value != nil {
+			options = append(options, fmt.Sprintf("--victoria-option=%s=%d", key, *value))
+		}
+	}
+	text("lookback", stack.Lookback)
+	text("timeout", stack.Timeout)
+	text("metrics.lookback", stack.Metrics.Lookback)
+	text("logs.lookback", stack.Logs.Lookback)
+	text("traces.lookback", stack.Traces.Lookback)
+	limit("metrics.maxLines", stack.Metrics.MaxRecords)
+	limit("logs.maxLines", stack.Logs.MaxRecords)
+	limit("traces.maxSpans", stack.Traces.MaxRecords)
+	return options
 }

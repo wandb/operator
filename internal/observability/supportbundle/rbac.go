@@ -36,8 +36,12 @@ var namespacedReadRules = []rbacv1.PolicyRule{
 	{APIGroups: []string{"clickhouse.altinity.com"}, Resources: []string{"clickhouseinstallations"}, Verbs: readVerbs},
 	{APIGroups: []string{"clickhouse-keeper.altinity.com"}, Resources: []string{"clickhousekeeperinstallations"}, Verbs: readVerbs},
 	{APIGroups: []string{"redis.redis.opstreelabs.in"}, Resources: []string{"redis", "redisreplications", "redissentinels"}, Verbs: readVerbs},
-	{APIGroups: []string{"operator.victoriametrics.com"}, Resources: []string{"vmagents", "vmsingles", "vlsingles", "vtsingles"}, Verbs: readVerbs},
 	{APIGroups: []string{"gateway.networking.k8s.io"}, Resources: []string{"gateways", "httproutes"}, Verbs: readVerbs},
+}
+
+// victoriaReadRules are only granted with telemetry on
+var victoriaReadRules = []rbacv1.PolicyRule{
+	{APIGroups: []string{"operator.victoriametrics.com"}, Resources: []string{"vmagents", "vmsingles", "vlsingles", "vtsingles"}, Verbs: readVerbs},
 }
 
 // victoriaExportRules let the collector run its short-lived export pod in the telemetry namespace.
@@ -80,6 +84,9 @@ func Roles(wandb *apiv2.WeightsAndBiases, cfg telemetry.TelemetryRuntimeConfig) 
 
 	for _, namespace := range collectionNamespaces(wandb, cfg) {
 		grant(namespace, namespacedReadRules...)
+		if collectsTelemetry(cfg) {
+			grant(namespace, victoriaReadRules...)
+		}
 	}
 	if collectsTelemetry(cfg) {
 		grant(telemetryNamespace(wandb, cfg), victoriaExportRules...)
