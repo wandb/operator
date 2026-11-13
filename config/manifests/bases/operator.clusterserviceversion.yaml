@@ -119,6 +119,12 @@ spec:
       `spec.objectStore.default.externalObjectStore` (as the sample does), or install those
       operators from their upstream Helm charts before using `managedMysql` /
       `managedObjectStore`.
+    - **Managed Redis requires a Redis operator feature gate.** Managed Redis runs with a
+      read-only root filesystem, which only works when the Redis operator generates its
+      config in an init container. After OLM installs the `redis-operator` dependency, set
+      `spec.config.env` on its Subscription to `FEATURE_GATES=GenerateConfigInInitContainer=true`
+      (or use `externalRedis`). Without it the Redis Pod stays in protected mode and never
+      becomes ready.
     - Create the Secrets referenced by the sample (`wandb-mysql`, `wandb-object-store`)
       in the same namespace as the `WeightsAndBiases` resource before applying it.
     - `spec.wandb.hostname` (public URL) and `spec.wandb.version` (a published W&B Server

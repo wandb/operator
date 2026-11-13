@@ -145,6 +145,21 @@ the package dependency and the `redisreplications` / `redissentinels`
 `required` CRDs are declared. Catalog releases <= 0.15.1 cannot reconcile the
 HA Redis CRs this operator writes, hence the floor.
 
+The OLM-installed redis-operator does not carry the Helm chart's
+`featureGates.GenerateConfigInInitContainer=true`
+(see [redis_runtime_security.md](../../docs/design/wandb_v2/redis_runtime_security.md)).
+Without it, managed Redis runs under a read-only root but the image entrypoint
+cannot write `/etc/redis`, so Redis starts in protected mode and its probes fail.
+Users must set it on the dependency Subscription after install:
+
+```sh
+oc patch subscription -n <operator-ns> <redis-operator-subscription> --type merge \
+  -p '{"spec":{"config":{"env":[{"name":"FEATURE_GATES","value":"GenerateConfigInInitContainer=true"}]}}}'
+```
+
+OLM offers no way for a dependent bundle to set this on the dependency; the
+CSV description calls it out as a prerequisite.
+
 ### Managed MySQL and object store
 
 Moco and SeaweedFS are not in the catalog. On an OLM-only cluster, use
