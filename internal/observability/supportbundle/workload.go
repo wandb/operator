@@ -15,7 +15,6 @@ const (
 	collectorExecutable = "/app/bin/collector"
 	collectorWorkingDir = "/app"
 
-	collectionMountPath   = "/etc/support-bundle"
 	stagingMountPath      = "/staging"
 	tmpMountPath          = "/tmp"
 	resultPath            = "/dev/termination-log"
@@ -28,9 +27,8 @@ const (
 	selfPodNameEnv      = "SELF_POD_NAME"
 	selfPodNamespaceEnv = "SELF_POD_NAMESPACE"
 
-	collectionVolumeName = "collection"
-	stagingVolumeName    = "staging"
-	tmpVolumeName        = "tmp"
+	stagingVolumeName = "staging"
+	tmpVolumeName     = "tmp"
 
 	runAsUser int64 = 65532
 
@@ -117,7 +115,7 @@ func podSpec(wandb *apiv2.WeightsAndBiases, bucket BucketConnection) corev1.PodS
 			Name:       supportBundleContainerName,
 			Image:      Image(wandb),
 			Command:    []string{collectorExecutable},
-			Args:       collectorArgs(),
+			Args:       collectorArgs(wandb),
 			WorkingDir: collectorWorkingDir,
 			Env:        collectorEnv(bucket),
 			Resources: corev1.ResourceRequirements{
@@ -131,7 +129,6 @@ func podSpec(wandb *apiv2.WeightsAndBiases, bucket BucketConnection) corev1.PodS
 				},
 			},
 			VolumeMounts: []corev1.VolumeMount{
-				{Name: collectionVolumeName, MountPath: collectionMountPath, ReadOnly: true},
 				{Name: stagingVolumeName, MountPath: stagingMountPath},
 				{Name: tmpVolumeName, MountPath: tmpMountPath},
 			},
@@ -141,8 +138,6 @@ func podSpec(wandb *apiv2.WeightsAndBiases, bucket BucketConnection) corev1.PodS
 			SecurityContext:          containerSecurityContext(),
 		}},
 		Volumes: []corev1.Volume{
-			{Name: collectionVolumeName,
-				ConfigMap: &corev1.ConfigMapVolumeSource{Name: Name(wandb)}},
 			{Name: stagingVolumeName,
 				EmptyDir: &corev1.EmptyDirVolumeSource{SizeLimit: &stagingSizeLimit}},
 			{Name: tmpVolumeName, EmptyDir: &corev1.EmptyDirVolumeSource{}},
@@ -151,16 +146,18 @@ func podSpec(wandb *apiv2.WeightsAndBiases, bucket BucketConnection) corev1.PodS
 }
 
 // collectorArgs is what will run to retrieve the support bundle
-func collectorArgs() []string {
-	return []string{
+func collectorArgs(wandb *apiv2.WeightsAndBiases) []string {
+	args := []string{
 		"--log-format=json",
 		"agent",
 		"--lumen-collection=false",
 		"--support-bundle",
-		"--support-bundle-spec=" + collectionMountPath + "/" + defaultPreset + ".yaml",
-		"--staging-root=file://" + stagingMountPath,
-		"--support-bundle-id=$(" + bundleIDEnv + ")",
 	}
+	args = append(args, collectionArgs(wandb)...)
+	return append(args,
+		"--staging-root=file://"+stagingMountPath,
+		"--support-bundle-id=$("+bundleIDEnv+")",
+	)
 }
 
 func collectorEnv(bucket BucketConnection) []corev1.EnvVar {

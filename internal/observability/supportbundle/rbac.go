@@ -27,7 +27,7 @@ var namespacedReadRules = []rbacv1.PolicyRule{
 	{APIGroups: []string{"autoscaling"}, Resources: []string{"horizontalpodautoscalers"}, Verbs: readVerbs},
 	{APIGroups: []string{"networking.k8s.io"}, Resources: []string{"ingresses", "networkpolicies"}, Verbs: readVerbs},
 	{APIGroups: []string{"policy"}, Resources: []string{"poddisruptionbudgets"}, Verbs: readVerbs},
-	{APIGroups: []string{"apps.wandb.com"}, Resources: []string{"actionruns", "applications", "weightsandbiases"}, Verbs: readVerbs},
+	{APIGroups: []string{apiv2.GroupVersion.Group}, Resources: operatorResources, Verbs: readVerbs},
 	{APIGroups: []string{"coordination.k8s.io"}, Resources: []string{"leases"}, Verbs: readVerbs},
 	{APIGroups: []string{"discovery.k8s.io"}, Resources: []string{"endpointslices"}, Verbs: readVerbs},
 	{APIGroups: []string{"rbac.authorization.k8s.io"}, Resources: []string{"roles", "rolebindings"}, Verbs: readVerbs},
@@ -44,24 +44,6 @@ var namespacedReadRules = []rbacv1.PolicyRule{
 var victoriaExportRules = []rbacv1.PolicyRule{
 	{APIGroups: []string{""}, Resources: []string{"pods"}, Verbs: []string{"create", "delete"}},
 	{APIGroups: []string{""}, Resources: []string{"pods/exec"}, Verbs: []string{"create", "get"}},
-}
-
-// The DNS check is hardcoded by the collector to run its test pod in default and read DNS config from kube-system.
-const (
-	dnsTestNamespace   = "default"
-	dnsSystemNamespace = "kube-system"
-)
-
-var dnsTestRules = []rbacv1.PolicyRule{
-	{APIGroups: []string{""}, Resources: []string{"pods"}, Verbs: []string{"get", "list", "watch", "create", "delete"}},
-	{APIGroups: []string{""}, Resources: []string{"pods/log"}, Verbs: []string{"get"}},
-	{APIGroups: []string{""}, Resources: []string{"services"}, ResourceNames: []string{"kubernetes"}, Verbs: []string{"get"}},
-}
-
-var dnsSystemRules = []rbacv1.PolicyRule{
-	{APIGroups: []string{""}, Resources: []string{"configmaps"}, ResourceNames: []string{"coredns", "kube-dns"}, Verbs: []string{"get"}},
-	{APIGroups: []string{""}, Resources: []string{"services", "endpoints"}, ResourceNames: []string{"kube-dns"}, Verbs: []string{"get"}},
-	{APIGroups: []string{""}, Resources: []string{"pods"}, Verbs: []string{"list"}},
 }
 
 // clusterReadRules are the cluster-scoped lists clusterResources checks before it runs
@@ -101,10 +83,6 @@ func Roles(wandb *apiv2.WeightsAndBiases, cfg telemetry.TelemetryRuntimeConfig) 
 	}
 	if collectsTelemetry(cfg) {
 		grant(telemetryNamespace(wandb, cfg), victoriaExportRules...)
-	}
-	if presetCollects(DNS) {
-		grant(dnsTestNamespace, dnsTestRules...)
-		grant(dnsSystemNamespace, dnsSystemRules...)
 	}
 
 	roles := make([]*rbacv1.Role, 0, len(namespaces))
@@ -202,8 +180,9 @@ func WatchtowerJobPolicyName(wandb *apiv2.WeightsAndBiases) string {
 // WatchtowerJobPolicy confines collection and WSM manager Jobs to the collector identity and inputs.
 func WatchtowerJobPolicy(wandb *apiv2.WeightsAndBiases, watchtowerServiceAccount string) *admissionregistrationv1.ValidatingAdmissionPolicy {
 	pod := "object.spec.template.spec"
-	args := make([]string, 0, len(collectorArgs()))
-	for _, arg := range collectorArgs() {
+	collector := collectorArgs(wandb)
+	args := make([]string, 0, len(collector))
+	for _, arg := range collector {
 		args = append(args, fmt.Sprintf("%q", arg))
 	}
 	return &admissionregistrationv1.ValidatingAdmissionPolicy{
@@ -253,14 +232,13 @@ func WatchtowerJobPolicy(wandb *apiv2.WeightsAndBiases, watchtowerServiceAccount
 				},
 				{
 					Expression: fmt.Sprintf("!has(%[1]s.volumes) || %[1]s.volumes.all(v, "+
-						"(v.name == 'tmp' && has(v.emptyDir)) || (!variables.manager && ((v.name == 'staging' && has(v.emptyDir)) || "+
-						"(v.name == 'collection' && has(v.configMap) && v.configMap.name == '%[2]s'))))", pod, Name(wandb)),
-					Message: "Watchtower jobs may only mount the collector's ConfigMap and scratch volumes",
+						"(v.name == 'tmp' && has(v.emptyDir)) || (!variables.manager && v.name == 'staging' && has(v.emptyDir)))", pod),
+					Message: "Watchtower jobs may only mount the collector's scratch volumes",
 				},
 				{
 					Expression: "!has(variables.container.volumeDevices) && (!has(variables.container.volumeMounts) || variables.container.volumeMounts.all(m, " +
 						"!has(m.subPath) && !has(m.subPathExpr) && ((m.name == 'tmp' && m.mountPath == '/tmp') || " +
-						"(!variables.manager && ((m.name == 'staging' && m.mountPath == '/staging') || (m.name == 'collection' && m.mountPath == '/etc/support-bundle' && m.readOnly == true))))))",
+						"(!variables.manager && m.name == 'staging' && m.mountPath == '/staging'))))",
 					Message: "Watchtower jobs must use the collector's volume mount paths",
 				},
 				{
