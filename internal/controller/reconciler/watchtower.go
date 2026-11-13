@@ -67,7 +67,7 @@ const (
 )
 
 // reconcileWatchtower brings the operator-managed Watchtower deployment in line
-// with spec.watchtower. Watchtower is not published in the server manifest, so
+// with spec.adminConsoleEnabled. Watchtower is not published in the server manifest, so
 // the operator owns its Application, Service account and RBAC outright.
 func reconcileWatchtower(
 	ctx context.Context,
@@ -287,8 +287,7 @@ func watchtowerEnv(wandb *apiv2.WeightsAndBiases, authService, basePath string) 
 // correct across manifest renames.
 //
 // Failing here is deliberate: without an auth service Watchtower would serve
-// cluster administration unauthenticated. spec.watchtower.authService is the
-// escape hatch for deployments whose manifest does not declare the path.
+// cluster administration unauthenticated. There is no override.
 func watchtowerAuthService(wandb *apiv2.WeightsAndBiases, manifest serverManifest.Manifest) (string, error) {
 	for _, app := range sortedManifestApplications(manifest) {
 		if app.Ingress == nil || app.Service == nil {
@@ -304,8 +303,9 @@ func watchtowerAuthService(wandb *apiv2.WeightsAndBiases, manifest serverManifes
 	}
 
 	return "", fmt.Errorf(
-		"cannot derive spec.watchtower.authService: no manifest application serves the %q ingress path; set it explicitly",
-		watchtowerOIDCIngressPath,
+		"cannot derive the Watchtower auth service: no enabled application in server manifest %q serves the %q ingress path; "+
+			"use a server version whose manifest declares it, or set spec.adminConsoleEnabled=false",
+		wandb.Spec.Wandb.Version, watchtowerOIDCIngressPath,
 	)
 }
 
@@ -480,10 +480,9 @@ func reconcileWatchtowerServiceAccount(ctx context.Context, c ctrlClient.Client,
 // can therefore delegate: the apiserver rejects a binding that would escalate
 // beyond the operator's own permissions.
 //
-// Deliberately absent, because the operator does not hold them today:
-// apiextensions.k8s.io/customresourcedefinitions (v2 served-version detection)
-// and pods/portforward (telemetry port-forward). Both need the operator's own
-// ClusterRole widened first.
+// Not granted yet: CRD get/list (v2 served-version detection), which the
+// operator holds, and pods/portforward (telemetry port-forward), which it
+// does not.
 func reconcileWatchtowerRBAC(ctx context.Context, c ctrlClient.Client, wandb *apiv2.WeightsAndBiases) error {
 	labels := watchtowerLabels(wandb)
 	serviceAccountName := watchtowerServiceAccountName(wandb)
