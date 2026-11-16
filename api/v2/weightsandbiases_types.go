@@ -164,23 +164,25 @@ type SupportBundleSpec struct {
 	// +optional
 	VictoriaStack SupportBundleVictoriaStack `json:"victoriaStack,omitempty"`
 
-	// CustomResources picks which custom resources to collect
+	// SelectedResources picks which custom resources to collect
 	// +kubebuilder:default={enabled: true}
 	// +optional
-	CustomResources SupportBundleCustomResources `json:"customResources,omitempty"`
+	SelectedResources SupportBundleSelectedResources `json:"selectedResources,omitempty"`
 }
 
 // SupportBundleVictoriaStack bounds the Victoria exports
 type SupportBundleVictoriaStack struct {
-	// Lookback is how far back every export reaches, e.g. 24h.
+	// LookbackDuration is how far back every export reaches, e.g. 24h.
+	// A long window with maxRecords 0 (unlimited) can fill the collector's 30Gi staging volume.
 	// +kubebuilder:validation:MaxLength=32
 	// +kubebuilder:validation:XValidation:rule="duration(self) > duration('0s')",message="must be a positive duration, e.g. 30m or 24h"
 	// +optional
-	Lookback string `json:"lookback,omitempty"`
+	LookbackDuration string `json:"lookbackDuration,omitempty"`
 
 	// Timeout bounds the whole Victoria collection, e.g. 5m.
 	// +kubebuilder:validation:MaxLength=32
 	// +kubebuilder:validation:XValidation:rule="duration(self) > duration('0s')",message="must be a positive duration, e.g. 30m or 24h"
+	// +kubebuilder:validation:XValidation:rule="duration(self) <= duration('25m')",message="must be at most 25m so the bundle uploads before the Job's 30m deadline"
 	// +optional
 	Timeout string `json:"timeout,omitempty"`
 
@@ -203,26 +205,60 @@ type SupportBundleVictoriaExport struct {
 	// +optional
 	Enabled *bool `json:"enabled,omitempty"`
 
-	// Lookback overrides the stack lookback for this export.
+	// LookbackDuration overrides the stack lookbackDuration for this export.
 	// +kubebuilder:validation:MaxLength=32
 	// +kubebuilder:validation:XValidation:rule="duration(self) > duration('0s')",message="must be a positive duration, e.g. 30m or 24h"
 	// +optional
-	Lookback string `json:"lookback,omitempty"`
+	LookbackDuration string `json:"lookbackDuration,omitempty"`
 
 	// MaxRecords caps the exported lines or spans
 	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:XValidation:rule="self <= 9223372036854775806",message="must be at most 9223372036854775806"
 	// +optional
 	MaxRecords *int64 `json:"maxRecords,omitempty"`
 }
 
-type SupportBundleCustomResources struct {
+type SupportBundleSelectedResources struct {
 	// +kubebuilder:default=true
 	// +optional
 	Enabled *bool `json:"enabled,omitempty"`
 
-	// Resources narrows collection to these CRD names
+	// Selectors replace the operator's defaults when set
+	// +kubebuilder:validation:MaxItems=32
 	// +optional
-	Resources []string `json:"resources,omitempty"`
+	Selectors []SupportBundleResourceSelector `json:"selectors,omitempty"`
+}
+
+// SupportBundleResourceSelector picks custom resources (or, with kind CustomResourceDefinition, their CRDs); fields are ANDed.
+// +kubebuilder:validation:XValidation:rule="has(self.kind) || has(self.resource)",message="set kind or resource"
+// +kubebuilder:validation:XValidation:rule="!(has(self.kind) && self.kind == 'CustomResourceDefinition' && has(self.namespace))",message="CustomResourceDefinitions are cluster-scoped; remove namespace"
+type SupportBundleResourceSelector struct {
+	// Kind is a case-sensitive kind such as WeightsAndBiases
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^[A-Za-z]([-A-Za-z0-9]*[A-Za-z0-9])?$`
+	// +optional
+	Kind string `json:"kind,omitempty"`
+
+	// Resource is a fully qualified type such as weightsandbiases.apps.wandb.com; set it with kind when another group shares the kind
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^[a-z]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?){2,}$`
+	// +optional
+	Resource string `json:"resource,omitempty"`
+
+	// Namespace defaults to the install's
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+
+	// +kubebuilder:validation:MaxLength=1024
+	// +optional
+	LabelSelector string `json:"labelSelector,omitempty"`
+
+	// FieldSelector such as metadata.name=wandb picks objects by name
+	// +kubebuilder:validation:MaxLength=1024
+	// +optional
+	FieldSelector string `json:"fieldSelector,omitempty"`
 }
 
 const (
@@ -1240,6 +1276,8 @@ type SupportBundleStatusSummary struct {
 	Version            string       `json:"version,omitempty"`
 	Running            bool         `json:"running,omitempty"`
 	LastSuccessfulTime *metav1.Time `json:"lastSuccessfulTime,omitempty"`
+	// BlockedReason says why a collection would gather nothing; the template stays installed
+	BlockedReason string `json:"blockedReason,omitempty"`
 }
 
 type WatchtowerStatusSummary struct {

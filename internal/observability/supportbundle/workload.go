@@ -148,15 +148,19 @@ func podSpec(wandb *apiv2.WeightsAndBiases, bucket BucketConnection) corev1.PodS
 // collectorArgs is what will run to retrieve the support bundle
 func collectorArgs(wandb *apiv2.WeightsAndBiases) []string {
 	args := []string{
-		"--log-format=json",
-		"agent",
-		"--lumen-collection=false",
-		"--support-bundle",
+		flagLogFormat + "=json",
+		cmdAgent,
+		flagLumenCollection + "=false",
+		flagSupportBundle,
 	}
-	args = append(args, collectionArgs(wandb)...)
+	if collection := collectionArgs(wandb); len(collection) > 0 {
+		args = append(args, collection...)
+	} else {
+		args = append(args, nothingToCollectArg)
+	}
 	return append(args,
-		"--staging-root=file://"+stagingMountPath,
-		"--support-bundle-id=$("+bundleIDEnv+")",
+		flagStagingRoot+"=file://"+stagingMountPath,
+		flagSupportBundleID+"=$("+bundleIDEnv+")",
 	)
 }
 

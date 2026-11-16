@@ -316,14 +316,48 @@ func TestSupportBundleLifecycle(t *testing.T) {
 	})
 
 	t.Run("removes the telemetry namespace Role when telemetry is turned off", func(t *testing.T) {
+		running := launchSupportBundleJob(t, c, wandb, "sb-telemetry-off")
 		connection := wandb.Status.TelemetryStatus.Connection
 		wandb.Status.TelemetryStatus.Connection = apiv2.TelemetryConnectionStatus{}
+		result := reconcileSupportBundle(ctx, c, wandb, telemetry.DefaultTelemetryRuntimeConfig())
+		require.NoError(t, c.Get(ctx, ctrlClient.ObjectKeyFromObject(objects.telemetryRole), &rbacv1.Role{}),
+			"a running export keeps its Role until the collection ends")
+		require.Equal(t, supportBundleActiveJobRequeue, result.RequeueAfter)
+
+		failJob(t, c, running)
 		reconcileSupportBundle(ctx, c, wandb, telemetry.DefaultTelemetryRuntimeConfig())
 		err := c.Get(ctx, ctrlClient.ObjectKeyFromObject(objects.telemetryRole), &rbacv1.Role{})
 		require.True(t, apierrors.IsNotFound(err))
+
+		// New access must not wait: a Job started right after this run would otherwise lack it.
+		next := launchSupportBundleJob(t, c, wandb, "sb-telemetry-on")
+		wandb.Status.TelemetryStatus.Connection = connection
+		reconcileSupportBundle(ctx, c, wandb, supportBundleTelemetry)
+		require.NoError(t, c.Get(ctx, ctrlClient.ObjectKeyFromObject(objects.telemetryRole), &rbacv1.Role{}),
+			"grants apply even while a collection runs")
+		failJob(t, c, next)
+		wandb.Status.TelemetryStatus.Connection = apiv2.TelemetryConnectionStatus{}
+		reconcileSupportBundle(ctx, c, wandb, telemetry.DefaultTelemetryRuntimeConfig())
 		require.NoError(t, c.Get(ctx, ctrlClient.ObjectKeyFromObject(objects.application), objects.application))
 		require.NotContains(t, cronJobArgs(objects.application), "--victoria-namespace="+supportBundleTelemetryNS)
 		wandb.Status.TelemetryStatus.Connection = connection
+		reconcileSupportBundle(ctx, c, wandb, supportBundleTelemetry)
+		requireAllPresent(t, c, objects)
+	})
+
+	t.Run("reports a blocked collection until telemetry gives it something to collect", func(t *testing.T) {
+		connection := wandb.Status.TelemetryStatus.Connection
+		wandb.Spec.SupportBundle.SelectedResources.Enabled = ptr.To(false)
+		wandb.Status.TelemetryStatus.Connection = apiv2.TelemetryConnectionStatus{}
+		reconcileSupportBundle(ctx, c, wandb, telemetry.DefaultTelemetryRuntimeConfig())
+		require.NotEmpty(t, wandb.Status.SupportBundle.BlockedReason)
+		require.NoError(t, c.Get(ctx, ctrlClient.ObjectKeyFromObject(objects.application), objects.application))
+		require.Contains(t, cronJobArgs(objects.application), "--selected-resource-name=nothing-to-collect", "the template stays rendered")
+
+		wandb.Status.TelemetryStatus.Connection = connection
+		reconcileSupportBundle(ctx, c, wandb, supportBundleTelemetry)
+		require.Empty(t, wandb.Status.SupportBundle.BlockedReason)
+		wandb.Spec.SupportBundle.SelectedResources.Enabled = nil
 		reconcileSupportBundle(ctx, c, wandb, supportBundleTelemetry)
 		requireAllPresent(t, c, objects)
 	})

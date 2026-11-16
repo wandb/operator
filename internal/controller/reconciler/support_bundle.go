@@ -3,6 +3,7 @@ package reconciler
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	apiv2 "github.com/wandb/operator/api/v2"
@@ -70,9 +71,10 @@ func applySupportBundle(
 	telemetryConfig telemetry.TelemetryRuntimeConfig,
 ) (ctrl.Result, error) {
 	status := &apiv2.SupportBundleStatusSummary{
-		CronJob: supportbundle.CronJobName(wandb),
-		Version: supportbundle.Version(wandb),
-		Image:   supportbundle.Image(wandb),
+		CronJob:       supportbundle.CronJobName(wandb),
+		Version:       supportbundle.Version(wandb),
+		Image:         supportbundle.Image(wandb),
+		BlockedReason: supportbundle.BlockedReason(wandb),
 	}
 	wandb.Status.SupportBundle = status
 
@@ -96,7 +98,10 @@ func applySupportBundle(
 		return ctrl.Result{}, err
 	}
 
-	if err := applySupportBundleRBAC(ctx, c, wandb, telemetryConfig); err != nil {
+	if status.Running, err = supportBundleJobRunning(ctx, c, wandb); err != nil {
+		return ctrl.Result{}, err
+	}
+	if err := applySupportBundleRBAC(ctx, c, wandb, telemetryConfig, status.Running); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -115,15 +120,16 @@ func applySupportBundle(
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	if status.Running, err = supportBundleJobRunning(ctx, c, wandb); err != nil {
-		return ctrl.Result{}, err
-	}
 	if run, ok := currentApplication.Status.CronJobStatuses[supportbundle.CronJobName(wandb)]; ok {
 		status.LastSuccessfulTime = run.LastSuccessfulTime
 	}
 	status.Ready = currentApplication.Status.Ready && current
 	if !status.Ready {
 		return ctrl.Result{RequeueAfter: defaultRequeueDuration}, nil
+	}
+	if status.Running {
+		// Role changes wait for the run to finish
+		return ctrl.Result{RequeueAfter: supportBundleActiveJobRequeue}, nil
 	}
 	return ctrl.Result{}, nil
 }
@@ -180,30 +186,9 @@ func applySupportBundleRBAC(
 	c ctrlClient.Client,
 	wandb *apiv2.WeightsAndBiases,
 	telemetryConfig telemetry.TelemetryRuntimeConfig,
+	running bool,
 ) error {
-	desiredRoles := map[ctrlClient.ObjectKey]bool{}
-	for _, role := range supportbundle.Roles(wandb, telemetryConfig) {
-		// Owner references cannot cross namespaces, so a Role elsewhere is tracked by labels.
-		controlled := role.Namespace == wandb.Namespace
-		desiredRoles[ctrlClient.ObjectKeyFromObject(role)] = true
-
-		currentRole := &rbacv1.Role{ObjectMeta: objectKeyMeta(role)}
-		if err := upsertSupportBundleObject(ctx, c, wandb, currentRole, role, controlled, func() {
-			currentRole.Rules = role.Rules
-		}); err != nil {
-			return err
-		}
-
-		binding := supportbundle.RoleBinding(wandb, role)
-		currentBinding := &rbacv1.RoleBinding{ObjectMeta: objectKeyMeta(binding)}
-		if err := upsertSupportBundleObject(ctx, c, wandb, currentBinding, binding, controlled, func() {
-			currentBinding.RoleRef = binding.RoleRef
-			currentBinding.Subjects = binding.Subjects
-		}); err != nil {
-			return err
-		}
-	}
-	if err := deleteSupportBundleRoles(ctx, c, wandb, desiredRoles); err != nil {
+	if err := applySupportBundleRoles(ctx, c, wandb, telemetryConfig, running); err != nil {
 		return err
 	}
 
@@ -221,6 +206,55 @@ func applySupportBundleRBAC(
 		currentClusterBinding.RoleRef = clusterBinding.RoleRef
 		currentClusterBinding.Subjects = clusterBinding.Subjects
 	})
+}
+
+func applySupportBundleRoles(
+	ctx context.Context,
+	c ctrlClient.Client,
+	wandb *apiv2.WeightsAndBiases,
+	telemetryConfig telemetry.TelemetryRuntimeConfig,
+	running bool,
+) error {
+	desiredRoles := map[ctrlClient.ObjectKey]bool{}
+	for _, role := range supportbundle.Roles(wandb, telemetryConfig) {
+		// Owner references cannot cross namespaces, so a Role elsewhere is tracked by labels.
+		controlled := role.Namespace == wandb.Namespace
+		desiredRoles[ctrlClient.ObjectKeyFromObject(role)] = true
+
+		currentRole := &rbacv1.Role{ObjectMeta: objectKeyMeta(role)}
+		if err := upsertSupportBundleObject(ctx, c, wandb, currentRole, role, controlled, func() {
+			currentRole.Rules = desiredRoleRules(currentRole.Rules, role.Rules, running)
+		}); err != nil {
+			return err
+		}
+
+		binding := supportbundle.RoleBinding(wandb, role)
+		currentBinding := &rbacv1.RoleBinding{ObjectMeta: objectKeyMeta(binding)}
+		if err := upsertSupportBundleObject(ctx, c, wandb, currentBinding, binding, controlled, func() {
+			currentBinding.RoleRef = binding.RoleRef
+			currentBinding.Subjects = binding.Subjects
+		}); err != nil {
+			return err
+		}
+	}
+	if running {
+		return nil
+	}
+	return deleteSupportBundleRoles(ctx, c, wandb, desiredRoles)
+}
+
+// desiredRoleRules keeps the current rules alongside the desired ones while a collection runs
+func desiredRoleRules(current, desired []rbacv1.PolicyRule, running bool) []rbacv1.PolicyRule {
+	if !running {
+		return desired
+	}
+	rules := slices.Clone(desired)
+	for _, rule := range current {
+		if !slices.ContainsFunc(rules, func(r rbacv1.PolicyRule) bool { return apiequality.Semantic.DeepEqual(r, rule) }) {
+			rules = append(rules, rule)
+		}
+	}
+	return rules
 }
 
 // deleteSupportBundle waits for running collections when disabling, but stops them on install deletion so the finalizer cannot hang.
