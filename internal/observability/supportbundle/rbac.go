@@ -27,7 +27,7 @@ var namespacedReadRules = []rbacv1.PolicyRule{
 	{APIGroups: []string{"autoscaling"}, Resources: []string{"horizontalpodautoscalers"}, Verbs: readVerbs},
 	{APIGroups: []string{"networking.k8s.io"}, Resources: []string{"ingresses", "networkpolicies"}, Verbs: readVerbs},
 	{APIGroups: []string{"policy"}, Resources: []string{"poddisruptionbudgets"}, Verbs: readVerbs},
-	{APIGroups: []string{apiv2.GroupVersion.Group}, Resources: operatorResources, Verbs: readVerbs},
+	{APIGroups: []string{apiv2.GroupVersion.Group}, Resources: operatorPlurals(), Verbs: readVerbs},
 	{APIGroups: []string{"coordination.k8s.io"}, Resources: []string{"leases"}, Verbs: readVerbs},
 	{APIGroups: []string{"discovery.k8s.io"}, Resources: []string{"endpointslices"}, Verbs: readVerbs},
 	{APIGroups: []string{"rbac.authorization.k8s.io"}, Resources: []string{"roles", "rolebindings"}, Verbs: readVerbs},
@@ -88,8 +88,8 @@ func Roles(wandb *apiv2.WeightsAndBiases, cfg telemetry.TelemetryRuntimeConfig) 
 			grant(namespace, victoriaReadRules...)
 		}
 	}
-	if collectsTelemetry(cfg) {
-		grant(telemetryNamespace(wandb, cfg), victoriaExportRules...)
+	if namespace, exports := victoriaExports(wandb); len(exports) > 0 {
+		grant(namespace, victoriaExportRules...)
 	}
 
 	roles := make([]*rbacv1.Role, 0, len(namespaces))
