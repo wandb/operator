@@ -15,6 +15,10 @@ const (
 	envGorillaTracer = "GORILLA_TRACER"
 	envGorillaStatsd = "GORILLA_STATSD_ADDRESS"
 
+	envPodName      = "POD_NAME"
+	envPodNamespace = "POD_NAMESPACE"
+	envDDEntityID   = "DD_ENTITY_ID"
+
 	envDDTraceAgentURL  = "DD_TRACE_AGENT_URL"
 	envDDAgentHost      = "DD_AGENT_HOST"
 	envDDTraceAgentPort = "DD_TRACE_AGENT_PORT"
