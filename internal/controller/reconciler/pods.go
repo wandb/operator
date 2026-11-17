@@ -9,6 +9,7 @@ import (
 	"github.com/wandb/operator/internal/logx"
 	"github.com/wandb/operator/internal/observability/telemetry"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
+	"github.com/wandb/operator/pkg/wandb/sizing"
 	"k8s.io/api/core/v1"
 	"k8s.io/utils/ptr"
 	ctrlClient "sigs.k8s.io/controller-runtime/pkg/client"
@@ -122,7 +123,7 @@ func resolveContainers(app serverManifest.Application, wandb *v2.WeightsAndBiase
 				VolumeMounts: volumeMounts,
 			}
 
-			if resources := ResolveResources(app, wandb, container.Resources); resources != nil {
+			if resources := sizing.ResolveResources(app, wandb, container.Resources); resources != nil {
 				c.Resources = *resources
 			}
 
@@ -149,7 +150,7 @@ func resolveContainers(app serverManifest.Application, wandb *v2.WeightsAndBiase
 			VolumeMounts: volumeMounts,
 		}
 
-		if resources := ResolveResources(app, wandb, nil); resources != nil {
+		if resources := sizing.ResolveResources(app, wandb, nil); resources != nil {
 			c.Resources = *resources
 		}
 		containers = append(containers, c)

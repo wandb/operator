@@ -14,6 +14,9 @@ const (
 	ProxyCheck          = "proxyCheck"
 	CustomCACertsCheck  = "customCACertsCheck"
 	ServerManifestCheck = "serverManifestCheck"
+
+	ClusterCapacityCheck        = "clusterCapacityCheck"
+	ExternalMysqlInClusterCheck = "externalMysqlInClusterCheck"
 )
 
 var Checks = map[string]Check{
@@ -42,4 +45,8 @@ var Checks = map[string]Check{
 	// Matches "spec" rather than "spec.wandb" so a CR that omits spec.wandb still fails instead of matching nothing.
 	ServerManifestCheck: typedCheck(ServerManifestCheck, "spec",
 		TypeConnection, []ResourceReq{ReqReadOnly}, RunServerManifestCheck),
+
+	// In Cluster Checks
+	ClusterCapacityCheck:        typedCheck(ClusterCapacityCheck, "spec", TypeCluster, []ResourceReq{ReqReadOnly}, RunClusterCapacityCheck),
+	ExternalMysqlInClusterCheck: typedCheck(ExternalMysqlInClusterCheck, "spec.mysql.*.externalMysql", TypeCluster, []ResourceReq{ReqResourceCreate}, RunExternalMysqlInClusterCheck),
 }

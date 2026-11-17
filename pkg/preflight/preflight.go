@@ -16,6 +16,7 @@ import (
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/pkg/wandb/manifest"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // SkipPreflightsAnnotation holds a comma-separated list of check names to skip; empty runs all checks.
@@ -65,6 +66,12 @@ type Env struct {
 	OperatorVersion string
 	// RegistryAuth pulls the server manifest from a private registry; nil pulls anonymously.
 	RegistryAuth *manifest.RegistryAuth
+	// Reader reads cluster objects; nil (e.g. wsm offline) makes checks that need it report skipped.
+	Reader client.Reader
+	// Client creates probe pods
+	Client client.Client
+	// Namespace -- same namespace as CR, where the pod runs
+	Namespace string
 }
 
 // ValueResolver turns a ValueOrSecret into its value; callers supply Secret access so checks stay client-agnostic.

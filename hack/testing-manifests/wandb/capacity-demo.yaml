@@ -1,0 +1,28 @@
+apiVersion: apps.wandb.com/v2
+kind: WeightsAndBiases
+metadata:
+  name: wandb
+  namespace: wandb
+spec:
+  size: small
+  wandb:
+    hostname: http://localhost:8080
+    version: "0.86.0"
+    manifestRepository: file:///Users/colander/operator/hack/testing-manifests/server-manifest
+  mysql:
+    default: { managedMysql: { } }
+    ext:
+      externalMysql:
+        host: { value: mysql.wandb.svc.cluster.local }
+        port: { value: "3306" }
+        database: { value: mysql }
+        username: { value: root }
+        password: { value: demo }
+  redis:
+    default: {managedRedis: {}}
+  objectStore:
+    default: {managedObjectStore: {}}
+  clickhouse:
+    default: {managedClickhouse: {}}
+  kafka:
+    managedKafka: {}

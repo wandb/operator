@@ -35,6 +35,7 @@ import (
 	"github.com/wandb/operator/internal/observability/telemetry"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
 	"github.com/wandb/operator/pkg/wandb/manifest/registryauth"
+	"github.com/wandb/operator/pkg/wandb/sizing"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
@@ -212,7 +213,7 @@ func Reconcile(
 	}
 
 	// Apply manifest-derived infra sizing before provisioning
-	ApplyInfraSizing(wandb, manifest)
+	sizing.ApplyInfraSizing(wandb, manifest)
 
 	/////////////////////////
 	// Write Infra State
@@ -649,7 +650,7 @@ func reconcileApplications(
 		application.Spec.PodTemplate.Spec.ImagePullSecrets = wandb.Spec.Global.ImagePullSecrets
 		setCustomCACertsChecksumAnnotation(&application.Spec.PodTemplate, caChecksum)
 
-		application.Spec.HpaTemplate = ResolveAutoscaling(app, wandb)
+		application.Spec.HpaTemplate = sizing.ResolveAutoscaling(app, wandb)
 		application.Spec.Triage = resolveApplicationTriage(app.Triage)
 
 		// Set shared service account for all W&B applications

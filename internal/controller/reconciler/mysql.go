@@ -13,6 +13,7 @@ import (
 	"github.com/wandb/operator/pkg/preflight"
 	"github.com/wandb/operator/pkg/utils"
 	"github.com/wandb/operator/pkg/wandb/manifest"
+	"github.com/wandb/operator/pkg/wandb/sizing"
 	"k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -341,7 +342,7 @@ func allMysqlInitSucceeded(wandb *apiv2.WeightsAndBiases) bool {
 // mysqlManifestConfig returns the manifest infra config for the instance key,
 // falling back to the manifest "default" entry.
 func mysqlManifestConfig(mfst manifest.Manifest, key string) manifest.InfraConfig {
-	cfg, _ := infraSizingConfig(mfst.Mysql, key)
+	cfg, _ := sizing.InfraSizingConfig(mfst.Mysql, key)
 	return cfg
 }
 

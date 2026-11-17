@@ -8,8 +8,19 @@ kind: WeightsAndBiases
 metadata:
   name: wandb
   namespace: wandb
-  annotations:
-    skipPreflights: ""
 spec:
+  size: small
+  wandb:
+    hostname: http://localhost:8080
+    version: "0.86.0"
+    manifestRepository: file:///Users/colander/operator/hack/testing-manifests/server-manifest
   mysql:
-    default: {}
+    default: {managedMysql: {}}
+  redis:
+    default: {managedRedis: {}}
+  objectStore:
+    default: {managedObjectStore: {}}
+  clickhouse:
+    default: {managedClickhouse: {}}
+  kafka:
+    managedKafka: {}
