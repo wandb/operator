@@ -10,7 +10,7 @@ import (
 	"github.com/wandb/operator/internal/controller/infra/managed/objectstore/seaweedfs"
 	seaweedv1 "github.com/wandb/operator/pkg/vendored/seaweedfs-operator/seaweed.seaweedfs.com/v1"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
-	v2 "github.com/wandb/operator/pkg/wandb/sizing"
+	"github.com/wandb/operator/pkg/wandb/sizing"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -67,7 +67,7 @@ var _ = Describe("ObjectStore sizing per tier", func() {
 	DescribeTable("renders a healthy Seaweed spec for each size",
 		func(size apiv2.Size, wantReplicas int32, wantVolumeSize, wantReplication string, wantCPU string, wantFilerSize string) {
 			wandb := objectStoreWandb(size)
-			v2.ApplyInfraSizing(wandb, mfst)
+			sizing.ApplyInfraSizing(wandb, mfst)
 
 			seaweed, err := seaweedfs.ToObjectStoreVendorSpec(context.Background(), wandb, wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore, objectStoreScheme(), mfst)
 			Expect(err).NotTo(HaveOccurred())
@@ -103,7 +103,7 @@ var _ = Describe("ObjectStore sizing per tier", func() {
 	It("lets a CR filer size override the manifest metadataVolumeSize", func() {
 		wandb := objectStoreWandb(apiv2.Size("large"))
 		wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore.SeaweedObjectStoreSpec.FilerStorageSize = "100Gi"
-		v2.ApplyInfraSizing(wandb, mfst)
+		sizing.ApplyInfraSizing(wandb, mfst)
 
 		seaweed, err := seaweedfs.ToObjectStoreVendorSpec(context.Background(), wandb, wandb.Spec.ObjectStore[apiv2.DefaultInstanceName].ManagedObjectStore, objectStoreScheme(), mfst)
 		Expect(err).NotTo(HaveOccurred())

@@ -13,7 +13,7 @@ spec:
   wandb:
     hostname: http://localhost:8080
     version: "0.86.0"
-    manifestRepository: file:///Users/colander/operator/hack/testing-manifests/server-manifest
+    manifestRepository: file://~/operator/hack/testing-manifests/server-manifest
   mysql:
     default: {managedMysql: {}}
   redis:

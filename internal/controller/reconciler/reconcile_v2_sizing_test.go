@@ -5,7 +5,7 @@ import (
 	. "github.com/onsi/gomega"
 	apiv2 "github.com/wandb/operator/api/v2"
 	serverManifest "github.com/wandb/operator/pkg/wandb/manifest"
-	v2 "github.com/wandb/operator/pkg/wandb/sizing"
+	"github.com/wandb/operator/pkg/wandb/sizing"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -33,7 +33,7 @@ var _ = Describe("ReconcileV2 Sizing", func() {
 				},
 			}
 
-			res := v2.ResolveResources(app, wandb, nil)
+			res := sizing.ResolveResources(app, wandb, nil)
 			Expect(res).NotTo(BeNil())
 			Expect(res.Requests.Cpu().String()).To(Equal("100m"))
 		})
@@ -64,7 +64,7 @@ var _ = Describe("ReconcileV2 Sizing", func() {
 				},
 			}
 
-			res := v2.ResolveResources(app, wandb, nil)
+			res := sizing.ResolveResources(app, wandb, nil)
 			Expect(res).NotTo(BeNil())
 			Expect(res.Requests.Cpu().String()).To(Equal("200m"))
 		})
@@ -93,7 +93,7 @@ var _ = Describe("ReconcileV2 Sizing", func() {
 				},
 			}
 
-			res := v2.ResolveResources(app, wandb, containerRes)
+			res := sizing.ResolveResources(app, wandb, containerRes)
 			Expect(res).NotTo(BeNil())
 			Expect(res.Requests.Cpu().String()).To(Equal("300m"))
 		})
@@ -120,7 +120,7 @@ var _ = Describe("ReconcileV2 Sizing", func() {
 				},
 			}
 
-			res := v2.ResolveResources(app, wandb, nil)
+			res := sizing.ResolveResources(app, wandb, nil)
 			Expect(res).NotTo(BeNil())
 			Expect(res.Requests.Cpu().String()).To(Equal("100m"))
 			Expect(res.Limits).To(BeNil())
@@ -164,7 +164,7 @@ var _ = Describe("ReconcileV2 Sizing", func() {
 				},
 			}
 
-			res := v2.ResolveResources(app, wandb, nil)
+			res := sizing.ResolveResources(app, wandb, nil)
 			Expect(res).NotTo(BeNil())
 			// Override wins per resource name; untouched fields survive.
 			Expect(res.Requests.Cpu().String()).To(Equal("2"))
@@ -195,7 +195,7 @@ var _ = Describe("ReconcileV2 Sizing", func() {
 				},
 			}
 
-			res := v2.ResolveResources(app, wandb, nil)
+			res := sizing.ResolveResources(app, wandb, nil)
 			Expect(res).NotTo(BeNil())
 			Expect(res.Requests.Cpu().String()).To(Equal("2"))
 			Expect(res.Limits).To(BeNil())
@@ -232,7 +232,7 @@ var _ = Describe("ReconcileV2 Sizing", func() {
 				},
 			}
 
-			res := v2.ResolveResources(app, wandb, nil)
+			res := sizing.ResolveResources(app, wandb, nil)
 			Expect(res).NotTo(BeNil())
 			Expect(res.Requests.Cpu().String()).To(Equal("100m"))
 		})
@@ -257,7 +257,7 @@ var _ = Describe("ReconcileV2 Sizing", func() {
 				},
 			}
 
-			hpa := v2.ResolveAutoscaling(app, wandb)
+			hpa := sizing.ResolveAutoscaling(app, wandb)
 			Expect(hpa).NotTo(BeNil())
 			Expect(hpa.MaxReplicas).To(Equal(int32(10)))
 		})
@@ -288,7 +288,7 @@ var _ = Describe("ReconcileV2 Sizing", func() {
 				},
 			}
 
-			hpa := v2.ResolveAutoscaling(app, wandb)
+			hpa := sizing.ResolveAutoscaling(app, wandb)
 			Expect(hpa).NotTo(BeNil())
 			Expect(*hpa.MinReplicas).To(Equal(int32(2)))
 			Expect(hpa.MaxReplicas).To(Equal(int32(5)))
@@ -324,7 +324,7 @@ var _ = Describe("ReconcileV2 Sizing", func() {
 				},
 			}
 
-			hpa := v2.ResolveAutoscaling(app, wandb)
+			hpa := sizing.ResolveAutoscaling(app, wandb)
 			Expect(hpa).NotTo(BeNil())
 			Expect(*hpa.MinReplicas).To(Equal(int32(4)))
 			Expect(hpa.MaxReplicas).To(Equal(int32(10)))
@@ -359,7 +359,7 @@ var _ = Describe("ReconcileV2 Sizing", func() {
 				},
 			}
 
-			hpa := v2.ResolveAutoscaling(app, wandb)
+			hpa := sizing.ResolveAutoscaling(app, wandb)
 			Expect(hpa).NotTo(BeNil())
 			Expect(*hpa.MinReplicas).To(Equal(int32(1)))
 			Expect(hpa.MaxReplicas).To(Equal(int32(10)))
@@ -394,7 +394,7 @@ var _ = Describe("ReconcileV2 Sizing", func() {
 				},
 			}
 
-			hpa := v2.ResolveAutoscaling(app, wandb)
+			hpa := sizing.ResolveAutoscaling(app, wandb)
 			Expect(hpa).NotTo(BeNil())
 			Expect(*hpa.MinReplicas).To(Equal(int32(4)))
 			Expect(hpa.MaxReplicas).To(Equal(int32(4)))
@@ -430,7 +430,7 @@ var _ = Describe("ReconcileV2 Sizing", func() {
 				},
 			}
 
-			hpa := v2.ResolveAutoscaling(app, wandb)
+			hpa := sizing.ResolveAutoscaling(app, wandb)
 			Expect(hpa).NotTo(BeNil())
 			Expect(*hpa.MinReplicas).To(Equal(int32(1)))
 			Expect(hpa.MaxReplicas).To(Equal(int32(2)))
