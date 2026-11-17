@@ -28,6 +28,9 @@ func TestManagedWorkloadEnvVars(t *testing.T) {
 				envOTELResourceAttrs,
 				envGorillaTracer,
 				envGorillaStatsd,
+				envPodName,
+				envPodNamespace,
+				envDDEntityID,
 			},
 		},
 		{
@@ -68,6 +71,12 @@ func TestManagedWorkloadEnvVars(t *testing.T) {
 				if sources[i].Name != want {
 					t.Errorf("source %d name = %q, want %q", i, sources[i].Name, want)
 				}
+				if sources[i].ValueFrom != nil {
+					if sources[i].ValueFrom.FieldRef == nil {
+						t.Errorf("source %d (%s) has ValueFrom without FieldRef", i, sources[i].Name)
+					}
+					continue
+				}
 				if sources[i].Name == envDDService {
 					if sources[i].Value != tt.app {
 						t.Errorf("%s = %q, want %q", envDDService, sources[i].Value, tt.app)
@@ -79,6 +88,28 @@ func TestManagedWorkloadEnvVars(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestManagedWorkloadEnvVarsStatsdPodIdentity(t *testing.T) {
+	want := map[string]string{
+		envPodName:      "metadata.name",
+		envPodNamespace: "metadata.namespace",
+		envDDEntityID:   "metadata.uid",
+	}
+
+	for _, app := range []string{"api", "flat-run-fields-updater", "metric-observer"} {
+		got := map[string]string{}
+		for _, ev := range ManagedWorkloadEnvVars(app, TelemetryRuntimeConfig{Enabled: true}) {
+			if ev.ValueFrom != nil && ev.ValueFrom.FieldRef != nil {
+				got[ev.Name] = ev.ValueFrom.FieldRef.FieldPath
+			}
+		}
+		for name, path := range want {
+			if got[name] != path {
+				t.Errorf("app %q: got %q for %q, want %q", app, got[name], name, path)
+			}
+		}
 	}
 }
 

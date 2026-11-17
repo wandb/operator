@@ -82,10 +82,10 @@ func ManagedWorkloadEnvVars(applicationName string, cfg TelemetryRuntimeConfig) 
 	}
 
 	sources := envVarsForFields(fields)
-	if isDatadogWorkload {
+	if isStatsdWorkload {
 		sources = append(sources, podIdentityEnvVars()...)
 	}
-	if isStatsdWorkload {
+	if isDatadogWorkload {
 		sources = append(sources, serverManifest.EnvVar{Name: envDDService, Value: applicationName})
 	}
 	return sources
