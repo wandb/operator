@@ -2329,7 +2329,7 @@
       "gridPos": { "h": 8, "w": 8, "x": 16, "y": 171 },
       "options": {
         "mode": "markdown",
-        "content": "### What is this?\n\nHow many distinct metric keys active runs have. Each sample is a run's **total** keys after a filestream update, so runs that log more often count more.\n\n### Why it matters\n\nRuns with thousands of keys make keys_info writes, run-page loads and history queries slow. A rising **p99** usually means one workload is logging metrics with generated names, such as per-step or per-sample keys.\n\n### What to do\n\nFind the offending runs in the W&B UI (runs with very large metric lists) and ask the owner to consolidate key names. Source metric: `mysql_metadata.keys_info.keys_items{impl=\"v2\"}` (gorilla statsd)."
+        "content": "### What is this?\n\nHow many distinct metric keys active runs have. Each sample is a run's **total** keys when its keys_info updates, so runs that log often count more.\n\n### Why it matters\n\nA large number of unique metrics in one run can slow:\n- **SDK:** live run updates, end-of-run sync\n- **Project workspace:** runs table, charts\n- **Run workspace:** run overview, charts\n- **Reports:** run sets\n\nIt can also put disproportionate load on MySQL and affect performance across the app.\n\n### What to do\n\nThis measures user activity, not a fault. If **p99** is above the limit for this instance's size (see the table below):\n1. Work with the user to understand the use case and whether that many keys per step are needed.\n2. If they are, size the infrastructure for that run cardinality.\n\nSource: `mysql_metadata.keys_info.keys_items{impl=\"v2\"}` (gorilla statsd)."
       }
     },
     {
@@ -2353,6 +2353,15 @@
       "options": {
         "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
         "tooltip": { "mode": "multi" }
+      }
+    },
+    {
+      "type": "text",
+      "title": "Run Keys: recommended limits by instance size",
+      "gridPos": { "h": 11, "w": 24, "x": 0, "y": 187 },
+      "options": {
+        "mode": "markdown",
+        "content": "Compare **p99 keys per run** with the row for this instance's size. If it's consistently above the limit, review the use case with the user, or move up a size. Each step up mainly adds MySQL capacity; Medium → Large and X-Large → XX-Large also increase compute and cache.\n\n| Size | Max keys per run | AWS DB node | GCP DB node | Azure DB node | On-prem, operator-managed MySQL (per replica, 3 replicas) | Bare metal, external MySQL host |\n|---|---|---|---|---|---|---|\n| Small | 1k | r6g.large | db-n1-highmem-2 | E2ds_v4 | 2 vCPU / 8 GiB, 100 GiB disk | 2 vCPU / 16 GB |\n| Medium | 25k | r6g.xlarge | db-n1-highmem-4 | E4ds_v4 | 4 vCPU / 16 GiB, 200 GiB disk | 4 vCPU / 32 GB |\n| Large | 50k | r6g.2xlarge | db-n1-highmem-8 | E8ds_v4 | 8 vCPU / 30 GiB, 500 GiB disk | 8 vCPU / 64 GB |\n| X-Large | 75k | r6g.4xlarge | db-n1-highmem-16 | E16ds_v4 | 15 vCPU / 60 GiB, 1 TiB disk | 16 vCPU / 128 GB |\n| XX-Large | 100k | r6g.8xlarge | db-n1-highmem-32 | E32ds_v4 | 30 vCPU / 120 GiB, 2 TiB disk | 32 vCPU / 256 GB |\n| FMB | 200k | Custom sizing, contact W&B | | | | |\n\nThe on-prem column is the operator v2 `mysql` sizing profile. The bare-metal column matches the cloud DB node for the same size; use fast local NVMe storage."
       }
     }
   ],
