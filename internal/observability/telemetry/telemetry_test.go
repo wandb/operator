@@ -18,7 +18,7 @@ import (
 
 func TestTelemetryRuntimeConfigResolveEndpointsEnabled(t *testing.T) {
 	cfg := DefaultTelemetryRuntimeConfig()
-	cfg.Enabled = true
+	cfg.Mode = telemetryModeForward
 	cfg.Namespace = "wandb"
 	cfg.Normalize()
 
@@ -70,7 +70,7 @@ func TestTelemetryRuntimeConfigResolveReadEndpointsEnabledModes(t *testing.T) {
 
 func TestTelemetryRuntimeConfigResolveReadEndpointsSameNamespace(t *testing.T) {
 	cfg := DefaultTelemetryRuntimeConfig()
-	cfg.Enabled = true
+	cfg.Mode = telemetryModeForward
 	cfg.Normalize()
 
 	resolved := cfg.ResolveEndpoints()
@@ -237,6 +237,63 @@ func TestLoadTelemetryRuntimeConfigFromConfigMapMissingReturnsDisabledDefaults(t
 
 	if cfg != defaults {
 		t.Fatalf("expected missing configmap to return disabled defaults, got %#v", cfg)
+	}
+}
+
+func TestLoadTelemetryRuntimeConfigFromConfigMapModeAndEnabled(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed adding corev1 to scheme: %v", err)
+	}
+
+	tests := []struct {
+		name        string
+		data        map[string]string
+		wantMode    string
+		wantEnabled bool
+	}{
+		{
+			name: "explicit off wins over enabled",
+			data: map[string]string{
+				"TELEMETRY_ENABLED": "true",
+				"TELEMETRY_MODE":    "off",
+			},
+			wantMode:    telemetryModeOff,
+			wantEnabled: false,
+		},
+		{
+			name: "legacy enabled without mode is forward",
+			data: map[string]string{
+				"TELEMETRY_ENABLED":          "true",
+				"TELEMETRY_OTEL_SECRET_NAME": "wandb-otel-connection",
+			},
+			wantMode:    telemetryModeForward,
+			wantEnabled: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cm := &corev1.ConfigMap{
+				Name:      "wandb-operator-telemetry-config",
+				Namespace: "wandb-operator",
+				Data:      tt.data,
+			}
+			client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cm).Build()
+
+			cfg, err := LoadTelemetryRuntimeConfigFromConfigMap(
+				context.Background(),
+				client,
+				types.NamespacedName{Name: cm.Name, Namespace: cm.Namespace},
+				DefaultTelemetryRuntimeConfig(),
+			)
+			if err != nil {
+				t.Fatalf("LoadTelemetryRuntimeConfigFromConfigMap returned error: %v", err)
+			}
+			if cfg.Mode != tt.wantMode || cfg.Enabled != tt.wantEnabled {
+				t.Fatalf("got mode=%q enabled=%t, want mode=%q enabled=%t", cfg.Mode, cfg.Enabled, tt.wantMode, tt.wantEnabled)
+			}
+		})
 	}
 }
 
@@ -430,7 +487,7 @@ func TestReconcileTelemetryConnectionSecretCreateManaged(t *testing.T) {
 	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(wandb).Build()
 
 	cfg := DefaultTelemetryRuntimeConfig()
-	cfg.Enabled = true
+	cfg.Mode = telemetryModeForward
 	cfg.OTel.SecretName = "wandb-otel-connection"
 	cfg.Normalize()
 	wandb.Status.TelemetryStatus = SummarizeTelemetryInfraStatus(context.Background(), client, cfg)
@@ -559,7 +616,7 @@ func TestReconcileTelemetryConnectionSecretUpdateManaged(t *testing.T) {
 	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(wandb, secret).Build()
 
 	cfg := DefaultTelemetryRuntimeConfig()
-	cfg.Enabled = true
+	cfg.Mode = telemetryModeForward
 	cfg.Namespace = "wandb"
 	cfg.OTel.SecretName = "wandb-otel-connection"
 	cfg.Normalize()

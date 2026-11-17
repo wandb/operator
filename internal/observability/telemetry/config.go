@@ -87,11 +87,7 @@ func (cfg *TelemetryRuntimeConfig) Normalize() {
 			cfg.Mode = telemetryModeOff
 		}
 	case telemetryModeOff:
-		if cfg.Enabled {
-			cfg.Mode = telemetryModeForward
-		} else {
-			cfg.Enabled = false
-		}
+		cfg.Enabled = false
 	default:
 		cfg.Enabled = true
 	}
