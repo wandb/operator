@@ -400,6 +400,11 @@ func LoadManifestFromFile(ctx context.Context, repository string, version string
 	}
 	basePath := repositoryURL.Path
 
+	// file:relative/path parses into Opaque, not Path
+	if repositoryURL.Opaque != "" {
+		basePath = repositoryURL.Opaque
+	}
+
 	rootManifestFile := path.Join(basePath, fmt.Sprintf("%s.yaml", version))
 	if rootManifestFileInfo, err := os.Stat(rootManifestFile); err == nil && !rootManifestFileInfo.IsDir() {
 		return loadManifestFromFiles(ctx, []string{rootManifestFile})

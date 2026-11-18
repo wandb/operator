@@ -93,7 +93,7 @@ func effectiveManifestRepository(spec *apiv2.WeightsAndBiasesSpec) string {
 	if repo == "" {
 		repo = apiv2.ManifestRepositoryFor(spec.Global.ImageRegistry)
 	}
-	if !strings.Contains(repo, "://") {
+	if !strings.Contains(repo, "://") && !strings.HasPrefix(repo, "file:") {
 		repo = "oci://" + repo
 	}
 	return repo

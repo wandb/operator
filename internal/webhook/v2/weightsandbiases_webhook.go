@@ -109,7 +109,7 @@ func (d *WeightsAndBiasesCustomDefaulter) Default(ctx context.Context, obj runti
 		wandb.Spec.Wandb.ManifestRepository = appsv2.ManifestRepositoryFor(wandb.Spec.Global.ImageRegistry)
 	}
 
-	if !strings.Contains(wandb.Spec.Wandb.ManifestRepository, "://") {
+	if !strings.Contains(wandb.Spec.Wandb.ManifestRepository, "://") && !strings.HasPrefix(wandb.Spec.Wandb.ManifestRepository, "file:") {
 		// Prepend a default scheme (e.g., oci://) to ensure proper parsing of the host.
 		wandb.Spec.Wandb.ManifestRepository = "oci://" + wandb.Spec.Wandb.ManifestRepository
 	}
