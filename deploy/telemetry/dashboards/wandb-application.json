@@ -42,7 +42,7 @@
       "gridPos": {"h": 6, "w": 24, "x": 0, "y": 0},
       "options": {
         "mode": "markdown",
-        "content": "# W&B Application\n\nAnswers **\"is the whole W&B app slow or erroring for this customer?\"** Start here when a customer reports the UI is slow, requests fail, or the SDK can't reach the server.\n\nThe top sections cover **overall API health** — request rate, error codes, and latency. The **GraphQL errors** section attributes failures to the specific service/operation responsible. The **Operations & background** section shows read-path, artifact, and export span latencies from traces. The **Run Keys** section shows how many distinct metric keys active runs log, with recommended limits by instance size.\n\nUse the **W&B Namespace** dropdown to pick the customer's install. Use **Open Traces in Explore** (top-right) to drill from any symptom to a real trace."
+        "content": "# W&B Application\n\nAnswers **\"is the whole W&B app slow or erroring for this customer?\"** Start here when a customer reports the UI is slow, requests fail, or the SDK can't reach the server.\n\nThe top sections cover **overall API health** — request rate, error codes, and latency. The **GraphQL errors** section attributes failures to the specific service/operation responsible. The **Operations & background** section shows read-path, artifact, and export span latencies from traces. The **Run Keys** section shows how many distinct metric keys active runs log, with recommended limits by instance size. The **FileStream** section shows whether live run logging (history, events, console logs) is failing or slow.\n\nUse the **W&B Namespace** dropdown to pick the customer's install. Use **Open Traces in Explore** (top-right) to drill from any symptom to a real trace."
       }
     },
     {
@@ -598,6 +598,178 @@
       "options": {
         "mode": "markdown",
         "content": "Compare **p99 keys per run** with the row for this instance's size. If it's consistently above the limit, review the use case with the user, or move up a size. Each step up mainly adds MySQL capacity; Medium → Large and X-Large → XX-Large also increase compute and cache.\n\n| Size | Max keys per run | AWS DB node | GCP DB node | Azure DB node | On-prem, operator-managed MySQL (per replica, 3 replicas) | Bare metal, external MySQL host |\n|---|---|---|---|---|---|---|\n| Small | 1k | r6g.large | db-n1-highmem-2 | E2ds_v4 | 2 vCPU / 8 GiB, 100 GiB disk | 2 vCPU / 16 GB |\n| Medium | 25k | r6g.xlarge | db-n1-highmem-4 | E4ds_v4 | 4 vCPU / 16 GiB, 200 GiB disk | 4 vCPU / 32 GB |\n| Large | 50k | r6g.2xlarge | db-n1-highmem-8 | E8ds_v4 | 8 vCPU / 30 GiB, 500 GiB disk | 8 vCPU / 64 GB |\n| X-Large | 75k | r6g.4xlarge | db-n1-highmem-16 | E16ds_v4 | 15 vCPU / 60 GiB, 1 TiB disk | 16 vCPU / 128 GB |\n| XX-Large | 100k | r6g.8xlarge | db-n1-highmem-32 | E32ds_v4 | 30 vCPU / 120 GiB, 2 TiB disk | 32 vCPU / 256 GB |\n| FMB | 200k | Custom sizing, contact W&B | | | | |\n\nThe on-prem column is the operator v2 `mysql` sizing profile. The bare-metal column matches the cloud DB node for the same size; use fast local NVMe storage."
+      }
+    },
+    {
+      "type": "row",
+      "title": "FileStream (live run logging)",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 168},
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "FileStream write errors / sec",
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 8, "w": 16, "x": 0, "y": 169},
+      "targets": [
+        {
+          "expr": "sum by (service) (rate_over_sum({__name__=~\".+FileStreamStore_operation_errors(_total)?\", operation=\"StoreChunks\", namespace=\"$namespace\"}[$__rate_interval]))",
+          "legendFormat": "{{service}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate_over_sum({__name__=~\".+FileStreamStore_operation_errors(_total)?\", operation=\"StoreChunks\", namespace=\"$namespace\"}[$__rate_interval])) or vector(0)",
+          "legendFormat": "total",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "short", "min": 0}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "right", "calcs": ["mean", "max"]}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "description": "Failed writes of live run data to the FileStream store (MySQL) per second, by service. On-prem these come from the api deployment, shown as service \"gorilla\". Statsd samples arrive as 15s deltas, so the rate uses rate_over_sum. The errors counter only exists once an error has happened, hence the 'or vector(0)' total."
+    },
+    {
+      "type": "text",
+      "title": "About: FileStream write errors",
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 169},
+      "options": {
+        "mode": "markdown",
+        "content": "**What it shows** \u2014 writes of live run data (history, events, console logs) to the FileStream store that failed. The `api` deployment does these writes. Answers \"are users' runs delaying logged data?\"\n\n**What bad looks like** \u2014 anything sustained above zero. A failed write means the SDK retries, so users see charts stall.\n\n**Do next** \u2014 confirm whether users' (AI engineers') runs are losing or delaying logged data, and check **Request latency (p50 / p95 / p99)** above, which should also rise if writes are delayed. Then check the `api` pod's logs in VictoriaLogs for the error, and the backing store (MySQL, ClickHouse or object storage)."
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "FileStream write error rate",
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 8, "w": 16, "x": 0, "y": 177},
+      "targets": [
+        {
+          "expr": "(sum(rate_over_sum({__name__=~\".+FileStreamStore_operation_errors(_total)?\", operation=\"StoreChunks\", namespace=\"$namespace\"}[$__rate_interval])) or vector(0)) / sum(rate_over_sum({__name__=~\".+FileStreamStore_operation_duration_count\", operation=\"StoreChunks\", namespace=\"$namespace\"}[$__rate_interval]))",
+          "legendFormat": "error rate",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "right", "calcs": ["mean", "max", "lastNotNull"]}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "description": "Failed FileStream store writes divided by all FileStream store writes."
+    },
+    {
+      "type": "text",
+      "title": "About: FileStream write error rate",
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 177},
+      "options": {
+        "mode": "markdown",
+        "content": "**What it shows** — the share of FileStream store writes that failed.\n\n**What bad looks like** — a sustained non-zero rate. A low rate under heavy load is a different problem from a high rate with few writes: compare with the errors/sec panel above.\n\n**Do next** — same as write errors. If the rate jumps at a specific minute, line it up with the MySQL and storage panels on the Telemetry Overview."
+      }
+    },
+    {
+      "type": "stat",
+      "title": "FileStream P50 Latency",
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 8, "w": 4, "x": 0, "y": 185},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, sum by (vmrange) (sum_over_time({__name__=~\".+FileStreamStore_operation_duration_bucket\", operation=\"StoreChunks\", namespace=\"$namespace\"}[$__rate_interval])))",
+          "legendFormat": "FileStream P50 Latency",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "s", "min": 0, "decimals": 1}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "value", "graphMode": "area", "textMode": "auto"},
+      "description": "Median time the api pod takes to write one batch of live run data to the FileStream store (MySQL on-prem)."
+    },
+    {
+      "type": "timeseries",
+      "title": "FileStream Ingest Latency",
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 8, "w": 12, "x": 4, "y": 185},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, sum by (vmrange) (sum_over_time({__name__=~\".+FileStreamStore_operation_duration_bucket\", operation=\"StoreChunks\", namespace=\"$namespace\"}[$__rate_interval])))",
+          "legendFormat": "P50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.9, sum by (vmrange) (sum_over_time({__name__=~\".+FileStreamStore_operation_duration_bucket\", operation=\"StoreChunks\", namespace=\"$namespace\"}[$__rate_interval])))",
+          "legendFormat": "P90",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (vmrange) (sum_over_time({__name__=~\".+FileStreamStore_operation_duration_bucket\", operation=\"StoreChunks\", namespace=\"$namespace\"}[$__rate_interval])))",
+          "legendFormat": "P99",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "s", "min": 0}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "right", "calcs": ["mean", "max", "lastNotNull"]}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "description": "P50 / P90 / P99 time the api pod takes to write one batch of live run data to the FileStream store (MySQL on-prem). Buckets use VictoriaMetrics' vmrange label; quantiles use sum_over_time because statsd samples are 15s deltas."
+    },
+    {
+      "type": "text",
+      "title": "About: FileStream Ingest Latency",
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 185},
+      "options": {
+        "mode": "markdown",
+        "content": "**What it shows** — server-side FileStream ingest latency: how long the W&B `api` pod takes to write each batch of logged run data (history, events, console logs) to the FileStream store (MySQL on-prem).\n\n**What bad looks like** — P99 climbing into seconds, or P50 rising with load. Under healthy load P50 typically stays below 50 ms.\n\n**Do next** — P50 and P99 rising together: MySQL is slow. Check queries/s, row locks, buffer pool and connections vs max on the Telemetry Overview. P99 spiking alone: check that pod's CPU throttling and restarts/OOMs (Workload Resources) before blaming the database, then row-lock time."
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "FileStream lines per write (p50 / p99)",
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 8, "w": 16, "x": 0, "y": 193},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, sum by (vmrange, item) (sum_over_time({__name__=~\".+FileStreamStore_operation_size_bucket\", operation=\"StoreChunks\", namespace=\"$namespace\"}[$__rate_interval])))",
+          "legendFormat": "{{item}} p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (vmrange, item) (sum_over_time({__name__=~\".+FileStreamStore_operation_size_bucket\", operation=\"StoreChunks\", namespace=\"$namespace\"}[$__rate_interval])))",
+          "legendFormat": "{{item}} p99",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "short", "min": 0}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "right", "calcs": ["mean", "max"]}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "description": "Lines carried by each FileStream store write, by item type (history, event, log)."
+    },
+    {
+      "type": "text",
+      "title": "About: FileStream lines per write",
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 193},
+      "options": {
+        "mode": "markdown",
+        "content": "**What it shows** — how many lines of history, events or console logs each write carries.\n\n**What bad looks like** — p99 jumping well above normal: a few runs are logging very large batches, which slows their writes and can hold up others.\n\n**Do next** — if latency rose at the same time, find the heavy runs (see the Run Keys section above) and check their logging pattern with the user."
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Active-run updates from FileStream",
+      "datasource": {"type": "prometheus", "uid": "${DS_VICTORIAMETRICS}"},
+      "gridPos": {"h": 8, "w": 16, "x": 0, "y": 201},
+      "targets": [
+        {
+          "expr": "sum by (service) (rate_over_sum({__name__=~\".+RunUpdater_operation_duration_count\", operation=\"UpdateRunForFileStream\", namespace=\"$namespace\"}[$__rate_interval]))",
+          "legendFormat": "{{service}} updates / sec",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate_over_sum({__name__=~\".+RunUpdater_operation_errors(_total)?\", operation=\"UpdateRunForFileStream\", namespace=\"$namespace\"}[$__rate_interval])) or vector(0)",
+          "legendFormat": "errors / sec",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "short", "min": 0}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "right", "calcs": ["mean", "max"]}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "description": "Run-metadata updates per second made by the flat-run-fields-updater deployment (shown as service \"gorilla-flat-run-fields-updater\") as live run data arrives, roughly how many active runs are sending updates, plus failures."
+    },
+    {
+      "type": "text",
+      "title": "About: Active-run updates",
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 201},
+      "options": {
+        "mode": "markdown",
+        "content": "**What it shows** — run-metadata updates driven by FileStream (summary, step, heartbeat). It tracks how many runs are actively logging.\n\n**What bad looks like** — errors above zero, or the update rate dropping while users say runs are still training (updates aren't getting through).\n\n**Do next** — check flat-run-fields-updater logs in VictoriaLogs and MySQL load. A high, steady update rate is normal for many concurrent runs, not a fault."
       }
     }
   ],
