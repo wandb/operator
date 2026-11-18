@@ -14,7 +14,7 @@ jobs:
     # Temporarily paused while AWS nightly scenarios are disabled.
     # TODO: Remove this guard when AWS scenarios are re-enabled later this week.
     if: ${{ false }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER_LIGHT || 'ubuntu-latest' }}
     permissions:
       contents: read
     steps:
@@ -24,7 +24,7 @@ jobs:
 
   test:
     name: Test
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER_LIGHT || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Setup Go
@@ -56,7 +56,7 @@ jobs:
 
   build:
     name: Build
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER_LIGHT || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Setup Go
@@ -68,7 +68,7 @@ jobs:
 
   dependency-check:
     name: Dependency Check
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER_LIGHT || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Setup Go

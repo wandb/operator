@@ -6,7 +6,7 @@ on:
 jobs:
   release:
     name: Publish development chart
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER_HEAVY || 'ubuntu-latest-8-cores' }}
     permissions:
       contents: read
       id-token: write
