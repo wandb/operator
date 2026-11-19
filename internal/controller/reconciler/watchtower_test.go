@@ -474,6 +474,7 @@ func TestWatchtowerAuthServiceFailsWhenNoApplicationServesOIDC(t *testing.T) {
 
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "/oidc")
+	require.Contains(t, err.Error(), "spec.adminConsoleEnabled")
 }
 
 // --- routing -----------------------------------------------------------------

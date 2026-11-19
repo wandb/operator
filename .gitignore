@@ -46,9 +46,6 @@ hack/testing-manifests/wandb/.generated/*.yaml
 
 .DS_Store
 
-# Local webhook development certificates
-.local-webhook-certs/
-
 # various util artifacts
 .k8s-images
 
