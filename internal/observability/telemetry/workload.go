@@ -69,9 +69,12 @@ func ManagedWorkloadEnvVars(applicationName string, cfg TelemetryRuntimeConfig) 
 	if _, ok := otelWorkloads[applicationName]; ok {
 		fields = append(fields, otelFields...)
 	}
+	isStatsdWorkload := false
 	if _, ok := statsdWorkloads[applicationName]; ok {
 		fields = append(fields, statsdFields...)
+		isStatsdWorkload = true
 	}
+
 	isDatadogWorkload := false
 	if _, ok := datadogWorkloads[applicationName]; ok {
 		fields = append(fields, datadogFields...)
@@ -79,6 +82,9 @@ func ManagedWorkloadEnvVars(applicationName string, cfg TelemetryRuntimeConfig) 
 	}
 
 	sources := envVarsForFields(fields)
+	if isStatsdWorkload {
+		sources = append(sources, podIdentityEnvVars()...)
+	}
 	if isDatadogWorkload {
 		sources = append(sources, serverManifest.EnvVar{Name: envDDService, Value: applicationName})
 	}
@@ -100,6 +106,20 @@ func envVarsForFields(fields []string) []serverManifest.EnvVar {
 		})
 	}
 	return sources
+}
+
+// otelcol's statsd receiver silently drops any line with an empty tag value, and gorilla
+// emits pod/namespace/entity_id tags from these vars on every metric, so unset vars lose all of them.
+func podIdentityEnvVars() []serverManifest.EnvVar {
+	fieldRef := func(path string) *corev1.EnvVarSource {
+		return &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: path}}
+	}
+	return []serverManifest.EnvVar{
+		{Name: envPodName, ValueFrom: fieldRef("metadata.name")},
+		{Name: envPodNamespace, ValueFrom: fieldRef("metadata.namespace")},
+		// Datadog's convention: entity ID is the pod UID.
+		{Name: envDDEntityID, ValueFrom: fieldRef("metadata.uid")},
+	}
 }
 
 func hasAnyEnv(envVars []corev1.EnvVar, names ...string) bool {

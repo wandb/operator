@@ -62,6 +62,12 @@ func TestResolveEnvvarsTelemetrySourceUsesStatusSecret(t *testing.T) {
 			},
 		},
 		{
+			Name: "POD_NAME",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.name"},
+			},
+		},
+		{
 			Name: "DD_TRACE_AGENT_URL",
 			Sources: []serverManifest.EnvSource{
 				{Type: "telemetry", Field: "datadogTraceAgentURL"},
@@ -135,6 +141,11 @@ func TestResolveEnvvarsTelemetrySourceUsesStatusSecret(t *testing.T) {
 	}
 	if gorillaTracer.ValueFrom.SecretKeyRef.Key != "GORILLA_TRACER" {
 		t.Fatalf("unexpected gorilla tracer key: %s", gorillaTracer.ValueFrom.SecretKeyRef.Key)
+	}
+	podName := mustFindEnvVar(t, resolved, "POD_NAME")
+	if podName.ValueFrom == nil || podName.ValueFrom.FieldRef == nil ||
+		podName.ValueFrom.FieldRef.FieldPath != "metadata.name" {
+		t.Fatalf("POD_NAME = %#v, want fieldRef metadata.name", podName.ValueFrom)
 	}
 
 	statsdAddress := mustFindEnvVar(t, resolved, "GORILLA_STATSD_ADDRESS")
