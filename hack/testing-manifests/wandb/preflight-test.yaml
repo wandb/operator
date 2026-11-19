@@ -1,0 +1,15 @@
+# Base CR for exercising the externalMysqlCheck preflight in Tilt. Use it with
+# "crFile": "hack/testing-manifests/wandb/preflight-test.yaml" and "useExternalMysql": True
+# in tilt-settings.star; Tilt then fills spec.mysql.default.externalMysql from the
+# test-infra MySQL. Applied directly with kubectl, it defaults to managed MySQL and
+# no preflight runs.
+apiVersion: apps.wandb.com/v2
+kind: WeightsAndBiases
+metadata:
+  name: wandb
+  namespace: wandb
+  annotations:
+    skipPreflights: ""
+spec:
+  mysql:
+    default: {}
