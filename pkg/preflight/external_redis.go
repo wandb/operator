@@ -3,6 +3,7 @@ package preflight
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net"
 	"strconv"
@@ -61,7 +62,15 @@ func RunExternalRedisCheck(ctx context.Context, conn *apiv2.RedisConnection, env
 	ctx, cancel := context.WithTimeout(ctx, externalRedisTimeout)
 	defer cancel()
 	if err := client.Ping(ctx).Err(); err != nil {
-		return Result{Check: ExternalRedisCheck, Outcome: OutcomeFail, Message: fmt.Sprintf("cannot connect to %s: %s", addr, redact(err.Error(), v["password"]))}
+		// A Redis error reply (NOAUTH, WRONGPASS, ...) means the server was reached and refused us; anything else
+		// (DNS, dial, timeout, TLS) depends on where the check ran.
+		kind := FailureUnreachable
+		var rErr redis.Error
+		if errors.As(err, &rErr) {
+			kind = FailureRejected
+		}
+		return Result{Check: ExternalRedisCheck, Outcome: OutcomeFail, Failure: kind,
+			Message: fmt.Sprintf("cannot connect to %s: %s", addr, redact(err.Error(), v["password"]))}
 	}
 	// Some hosted Redis offerings disable INFO; PING has already proven reachability and auth.
 	info, err := client.Info(ctx, "server").Result()

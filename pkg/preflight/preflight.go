@@ -52,10 +52,20 @@ const (
 	ReqResourceCreate ResourceReq = "resourceCreate"
 )
 
+// FailureKind says whether a FAIL depends on where the check ran.
+type FailureKind string
+
+const (
+	FailureUnreachable FailureKind = "unreachable" // DNS, dial, timeout, untrusted cert: depends on the vantage point
+	FailureRejected    FailureKind = "rejected"    // reached the service and it refused: wrong wherever it runs
+)
+
 type Result struct {
-	Check   string
-	Outcome Outcome
-	Message string
+	Check     string
+	Outcome   Outcome
+	Message   string
+	Failure   FailureKind // only set when outcome is Fail
+	CoveredBy string
 }
 
 type Env struct {
@@ -99,8 +109,10 @@ type Check struct {
 	Type         CheckType
 	ResourceReqs []ResourceReq
 	// NewSpec returns an empty value of the CRField's type, so callers can decode the matched field into it.
-	NewSpec func() any
-	Run     CheckFunc
+	NewSpec   func() any
+	Run       CheckFunc
+	DependsOn []string
+	Covers    []string
 }
 
 func (c Check) Requires(req ResourceReq) bool {

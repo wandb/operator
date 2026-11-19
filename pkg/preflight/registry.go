@@ -1,5 +1,7 @@
 package preflight
 
+import "slices"
+
 const (
 	ExternalMysqlCheck       = "externalMysqlCheck"
 	ExternalRedisCheck       = "externalRedisCheck"
@@ -47,6 +49,18 @@ var Checks = map[string]Check{
 		TypeConnection, []ResourceReq{ReqReadOnly}, RunServerManifestCheck),
 
 	// In Cluster Checks
-	ClusterCapacityCheck:        typedCheck(ClusterCapacityCheck, "spec", TypeCluster, []ResourceReq{ReqReadOnly}, RunClusterCapacityCheck),
-	ExternalMysqlInClusterCheck: typedCheck(ExternalMysqlInClusterCheck, "spec.mysql.*.externalMysql", TypeCluster, []ResourceReq{ReqResourceCreate}, RunExternalMysqlInClusterCheck),
+	ClusterCapacityCheck:        withDependsOn(typedCheck(ClusterCapacityCheck, "spec", TypeCluster, []ResourceReq{ReqReadOnly}, RunClusterCapacityCheck), ServerManifestCheck),
+	ExternalMysqlInClusterCheck: withCovers(typedCheck(ExternalMysqlInClusterCheck, "spec.mysql.*.externalMysql", TypeCluster, []ResourceReq{ReqResourceCreate}, RunExternalMysqlInClusterCheck), ExternalMysqlCheck),
+}
+
+// withDependsOn makes c report SKIPPED unless every named check passes first on the same run.
+func withDependsOn(c Check, names ...string) Check {
+	c.DependsOn = append(slices.Clone(c.DependsOn), names...)
+	return c
+}
+
+// withCovers lets c's result stand in for unreachable failures of each named check on the same FieldPath.
+func withCovers(c Check, names ...string) Check {
+	c.Covers = append(slices.Clone(c.Covers), names...)
+	return c
 }

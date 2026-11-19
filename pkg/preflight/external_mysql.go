@@ -71,7 +71,14 @@ func RunExternalMysqlCheck(ctx context.Context, conn *apiv2.MysqlConnection, env
 	ctx, cancel := context.WithTimeout(ctx, externalMysqlTimeout)
 	defer cancel()
 	if err := db.PingContext(ctx); err != nil {
-		return Result{Check: ExternalMysqlCheck, Outcome: OutcomeFail, Message: fmt.Sprintf("cannot connect to %s: %s", cfg.Addr, redact(err.Error(), v["password"]))}
+		// A server error packet (1045 access denied, 1049 unknown database, ...) means MySQL was reached and refused us.
+		kind := FailureUnreachable
+		var myErr *mysql.MySQLError
+		if errors.As(err, &myErr) {
+			kind = FailureRejected
+		}
+		return Result{Check: ExternalMysqlCheck, Outcome: OutcomeFail, Failure: kind,
+			Message: fmt.Sprintf("cannot connect to %s: %s", cfg.Addr, redact(err.Error(), v["password"]))}
 	}
 	return Result{Check: ExternalMysqlCheck, Outcome: OutcomePass}
 }
