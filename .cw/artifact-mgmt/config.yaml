@@ -1,0 +1,11 @@
+apiVersion: artifacts.devx.coreweave.com/v1
+kind: ArtifactRepositoryConfig
+spec:
+  owner:
+    team: wandb/on-prem-team
+  providers:
+    artifactory:
+      repositories:
+        oci:
+          prod:
+            visibility: internal
