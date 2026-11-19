@@ -33,9 +33,9 @@ it does not need namespace-wide Secret creation permission.
 When `generated` is present, the operator generates a random value in the `key`
 entry if that key is missing. Other data entries and existing generated values
 are preserved. An empty `generated: {}` requests the existing default generator
-with a length of 32. `length` and `type` retain their legacy generation behavior;
-`type: password` is the form used by current manifests. This change does not add
-new generators or key rotation.
+with a length of 32. Only `length` affects generation; `type` is accepted but
+ignored, as it was for legacy declarations. `type: password` is the form used by
+current manifests. This change does not add new generators or key rotation.
 
 Only generated declarations register a selector in `status.generatedSecrets`.
 Existing environment sources using `type: generatedSecret` and the declaration's
@@ -49,7 +49,7 @@ manifest can use both forms for distinct Secrets, but duplicate logical names
 or resulting Kubernetes names are rejected before writes. New `secrets` lists
 are combined across manifest files; the legacy merge behavior is unchanged.
 
-The local `0.86.0` manifest uses the unified declaration for its two
+The local `manifest.next` fixture uses the unified declaration for its two
 operator-generated values and its signer-populated Secret. Published manifests
 must require an operator version supporting `secrets` before migrating to it.
 

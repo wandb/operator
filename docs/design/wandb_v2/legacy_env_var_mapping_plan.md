@@ -1,5 +1,8 @@
 # Implementation plan: reconcile-time legacy env-var → CR mapping (Option A)
 
+> Status: Historical implementation plan; implemented in `internal/controller/reconciler/legacy_env_mapping.go`.
+> Current guidance: [developer guide](../../developer/api-development.md).
+
 Companion to [legacy_env_var_mapping.md](legacy_env_var_mapping.md). Implements
 **Option A**: the structured `global.clickhouse.replicated` flag is mapped to the
 typed field in the conversion webhook (a plain structured mapping); the raw env
@@ -440,7 +443,7 @@ field + its `fill` (fed by the structured flag). The env mapper now owns
 
 - No `*_types.go` change, so codegen is a no-op — but run
   `make manifests generate sync-crd-embed` to be safe (CI gates on it).
-- Update [docs/infra-connection-settings.md](../../infra-connection-settings.md):
+- Update [connection internals](../../developer/connection-internals.md) (formerly `docs/infra-connection-settings.md`):
   note the two replication env vars are now promoted to typed fields at reconcile.
 - `make lint && make test`.
 
