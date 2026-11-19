@@ -250,7 +250,7 @@
       "gridPos": {"h": 10, "w": 16, "x": 0, "y": 64},
       "targets": [
         {
-          "expr": "topk(20, sum by (span_name) (increase(traces_spanmetrics_duration_milliseconds_count{service_name=\"gorilla\"}[$__range]) - increase(traces_spanmetrics_duration_milliseconds_bucket{service_name=\"gorilla\", le=\"2500\"}[$__range])))",
+          "expr": "topk(20, sum by (span_name) (increase(traces_spanmetrics_duration_milliseconds_count{service_name=\"gorilla\"}[$__range]) - ignoring(le) increase(traces_spanmetrics_duration_milliseconds_bucket{service_name=\"gorilla\", le=\"2500\"}[$__range])) > 0)",
           "format": "table",
           "instant": true,
           "refId": "A"
@@ -307,7 +307,7 @@
       "gridPos": {"h": 8, "w": 16, "x": 0, "y": 75},
       "targets": [
         {
-          "expr": "topk(10, sum by (span_name) (rate(traces_spanmetrics_calls_milliseconds_total{graphql_service!=\"\"}[$__rate_interval])))",
+          "expr": "topk(10, sum by (span_name) (rate(traces_spanmetrics_calls_total{graphql_service!=\"\"}[$__rate_interval])))",
           "legendFormat": "{{span_name}}",
           "refId": "A"
         }
@@ -363,7 +363,7 @@
       "gridPos": {"h": 4, "w": 12, "x": 0, "y": 92},
       "targets": [
         {
-          "expr": "sum(increase(traces_spanmetrics_calls_milliseconds_total{graphql_service!=\"\", status_code=\"STATUS_CODE_ERROR\"}[$__range]))",
+          "expr": "sum(increase(traces_spanmetrics_calls_total{graphql_service!=\"\", status_code=\"STATUS_CODE_ERROR\"}[$__range]))",
           "instant": true,
           "refId": "A"
         }
@@ -378,7 +378,7 @@
       "gridPos": {"h": 4, "w": 12, "x": 12, "y": 92},
       "targets": [
         {
-          "expr": "count(count by (graphql_service) (increase(traces_spanmetrics_calls_milliseconds_total{graphql_service!=\"\", status_code=\"STATUS_CODE_ERROR\"}[$__range]) > 0))",
+          "expr": "count(count by (graphql_service) (increase(traces_spanmetrics_calls_total{graphql_service!=\"\", status_code=\"STATUS_CODE_ERROR\"}[$__range]) > 0))",
           "instant": true,
           "refId": "A"
         }
@@ -402,7 +402,7 @@
       "gridPos": {"h": 9, "w": 12, "x": 0, "y": 100},
       "targets": [
         {
-          "expr": "topk(15, sum by (graphql_service) (increase(traces_spanmetrics_calls_milliseconds_total{graphql_service!=\"\", status_code=\"STATUS_CODE_ERROR\"}[$__range])))",
+          "expr": "topk(15, sum by (graphql_service) (increase(traces_spanmetrics_calls_total{graphql_service!=\"\", status_code=\"STATUS_CODE_ERROR\"}[$__range])))",
           "legendFormat": "{{graphql_service}}",
           "instant": true,
           "refId": "A"
@@ -418,7 +418,7 @@
       "gridPos": {"h": 9, "w": 12, "x": 12, "y": 100},
       "targets": [
         {
-          "expr": "topk(50, sum by (graphql_service, graphql_operationName) (increase(traces_spanmetrics_calls_milliseconds_total{graphql_service!=\"\", status_code=\"STATUS_CODE_ERROR\"}[$__range])))",
+          "expr": "topk(50, sum by (graphql_service, graphql_operationName) (increase(traces_spanmetrics_calls_total{graphql_service!=\"\", status_code=\"STATUS_CODE_ERROR\"}[$__range])))",
           "format": "table",
           "instant": true,
           "refId": "A"
@@ -461,7 +461,7 @@
       "gridPos": {"h": 9, "w": 16, "x": 0, "y": 114},
       "targets": [
         {
-          "expr": "sum by (graphql_service) (rate(traces_spanmetrics_calls_milliseconds_total{graphql_service!=\"\", status_code=\"STATUS_CODE_ERROR\"}[$__rate_interval])) * 60",
+          "expr": "sum by (graphql_service) (rate(traces_spanmetrics_calls_total{graphql_service!=\"\", status_code=\"STATUS_CODE_ERROR\"}[$__rate_interval])) * 60",
           "legendFormat": "{{graphql_service}}",
           "refId": "A"
         }
@@ -556,7 +556,7 @@
       "gridPos": {"h": 9, "w": 16, "x": 0, "y": 147},
       "targets": [
         {
-          "expr": "topk(15, sum by (span_name) (increase(traces_spanmetrics_calls_milliseconds_total{span_name=~\".*(parquet|glue).*\"}[$__range])))",
+          "expr": "topk(15, sum by (span_name) (increase(traces_spanmetrics_calls_total{span_name=~\".*(parquet|glue).*\"}[$__range])))",
           "legendFormat": "{{span_name}}",
           "instant": true,
           "refId": "A"
@@ -571,7 +571,7 @@
       "gridPos": {"h": 9, "w": 8, "x": 16, "y": 147},
       "options": {
         "mode": "markdown",
-        "content": "**What it shows** — trace-derived (spanmetrics) call counts for spans whose name mentions parquet or glue. This is the background export/compaction work as seen from tracing.\n\n**Note** — spanmetrics are **not** namespace-scoped and are **sampled**: trust the *shape* (which span dominates), not exact counts.\n\n**Do next** — to see an actual slow/failed export, use **Open Traces in Explore** (top-right) and filter by the span name shown here. If this panel is empty, the span name pattern may differ on your stack — check `label_values(traces_spanmetrics_calls_milliseconds_total, span_name)`."
+        "content": "**What it shows** — trace-derived (spanmetrics) call counts for spans whose name mentions parquet or glue. This is the background export/compaction work as seen from tracing.\n\n**Note** — spanmetrics are **not** namespace-scoped and are **sampled**: trust the *shape* (which span dominates), not exact counts.\n\n**Do next** — to see an actual slow/failed export, use **Open Traces in Explore** (top-right) and filter by the span name shown here. If this panel is empty, the span name pattern may differ on your stack — check `label_values(traces_spanmetrics_calls_total, span_name)`."
       }
     },
     {
@@ -602,7 +602,7 @@
           "refId": "C"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "short", "min": 0 }, "overrides": [] },
+      "fieldConfig": { "defaults": { "noValue": "No runs logged", "unit": "short", "min": 0 }, "overrides": [] },
       "options": {
         "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "lastNotNull"] },
         "tooltip": { "mode": "multi" }
@@ -635,7 +635,7 @@
           "refId": "B"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "short", "min": 0 }, "overrides": [] },
+      "fieldConfig": { "defaults": { "noValue": "No runs logged", "unit": "short", "min": 0 }, "overrides": [] },
       "options": {
         "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
         "tooltip": { "mode": "multi" }
@@ -698,7 +698,7 @@
           "refId": "A"
         }
       ],
-      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0}, "overrides": []},
+      "fieldConfig": {"defaults": {"noValue": "No runs logged", "unit": "percentunit", "min": 0}, "overrides": []},
       "options": {"legend": {"displayMode": "table", "placement": "right", "calcs": ["mean", "max", "lastNotNull"]}, "tooltip": {"mode": "multi", "sort": "desc"}},
       "description": "Failed FileStream store writes divided by all FileStream store writes."
     },
@@ -723,7 +723,7 @@
           "refId": "A"
         }
       ],
-      "fieldConfig": {"defaults": {"unit": "s", "min": 0, "decimals": 1}, "overrides": []},
+      "fieldConfig": {"defaults": {"noValue": "No runs logged", "unit": "s", "min": 0, "decimals": 1}, "overrides": []},
       "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "value", "graphMode": "area", "textMode": "auto"},
       "description": "Median time the api pod takes to write one batch of live run data to the FileStream store (MySQL on-prem)."
     },
@@ -749,7 +749,7 @@
           "refId": "C"
         }
       ],
-      "fieldConfig": {"defaults": {"unit": "s", "min": 0}, "overrides": []},
+      "fieldConfig": {"defaults": {"noValue": "No runs logged", "unit": "s", "min": 0}, "overrides": []},
       "options": {"legend": {"displayMode": "table", "placement": "right", "calcs": ["mean", "max", "lastNotNull"]}, "tooltip": {"mode": "multi", "sort": "desc"}},
       "description": "P50 / P90 / P99 time the api pod takes to write one batch of live run data to the FileStream store (MySQL on-prem). Buckets use VictoriaMetrics' vmrange label; quantiles use sum_over_time because statsd samples are 15s deltas."
     },
@@ -779,7 +779,7 @@
           "refId": "B"
         }
       ],
-      "fieldConfig": {"defaults": {"unit": "short", "min": 0}, "overrides": []},
+      "fieldConfig": {"defaults": {"noValue": "No runs logged", "unit": "short", "min": 0}, "overrides": []},
       "options": {"legend": {"displayMode": "table", "placement": "right", "calcs": ["mean", "max"]}, "tooltip": {"mode": "multi", "sort": "desc"}},
       "description": "Lines carried by each FileStream store write, by item type (history, event, log)."
     },
