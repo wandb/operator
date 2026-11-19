@@ -684,24 +684,24 @@
       "gridPos": {"h": 8, "w": 12, "x": 4, "y": 185},
       "targets": [
         {
-          "expr": "histogram_quantile(0.5, sum by (vmrange) (sum_over_time({__name__=~\".+FileStreamStore_operation_duration_bucket\", operation=\"StoreChunks\", namespace=\"$namespace\"}[$__rate_interval])))",
+         "expr": "histogram_quantile(0.5, sum by (vmrange) (sum_over_time({__name__=~\".*ingest_operation_duration_bucket\", operation=\"to_store\", namespace=\"$namespace\"}[$__rate_interval])))",
           "legendFormat": "P50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.9, sum by (vmrange) (sum_over_time({__name__=~\".+FileStreamStore_operation_duration_bucket\", operation=\"StoreChunks\", namespace=\"$namespace\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.9, sum by (vmrange) (sum_over_time({__name__=~\".*ingest_operation_duration_bucket\", operation=\"to_store\", namespace=\"$namespace\"}[$__rate_interval])))",
           "legendFormat": "P90",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, sum by (vmrange) (sum_over_time({__name__=~\".+FileStreamStore_operation_duration_bucket\", operation=\"StoreChunks\", namespace=\"$namespace\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.99, sum by (vmrange) (sum_over_time({__name__=~\".*ingest_operation_duration_bucket\", operation=\"to_store\", namespace=\"$namespace\"}[$__rate_interval])))",
           "legendFormat": "P99",
           "refId": "C"
         }
       ],
       "fieldConfig": {"defaults": {"unit": "s", "min": 0}, "overrides": []},
       "options": {"legend": {"displayMode": "table", "placement": "right", "calcs": ["mean", "max", "lastNotNull"]}, "tooltip": {"mode": "multi", "sort": "desc"}},
-      "description": "P50 / P90 / P99 time the api pod takes to write one batch of live run data to the FileStream store (MySQL on-prem). Buckets use VictoriaMetrics' vmrange label; quantiles use sum_over_time because statsd samples are 15s deltas."
+      "description": "P50 / P90 / P99 time from the api pod accepting a batch of live run data to that batch landing in the FileStream store (MySQL on-prem): the lag users see between logging and charts updating. Buckets use VictoriaMetrics' vmrange label; quantiles use sum_over_time because statsd samples are 15s deltas."
     },
     {
       "type": "text",
