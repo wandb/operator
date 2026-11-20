@@ -1,0 +1,19 @@
+dependencies:
+  - type: olm.package
+    value:
+      packageName: clickhouse
+      version: ">=0.26.3"
+  - type: olm.package
+    value:
+      packageName: grafana-operator
+      version: ">=5.21.0"
+  - type: olm.package
+    value:
+      packageName: victoriametrics-operator
+      version: ">=0.66.3"
+  # Helm pins 0.22.2; older catalog releases (<=0.15.1) cannot reconcile the
+  # HA Redis CRs this operator writes.
+  - type: olm.package
+    value:
+      packageName: redis-operator
+      version: ">=0.22.2"
