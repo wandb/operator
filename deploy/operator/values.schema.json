@@ -136,6 +136,9 @@
             "kubeletCadvisor": {
               "type": "boolean"
             },
+            "kubeletVolumeStats": {
+              "type": "boolean"
+            },
             "operators": {
               "type": "boolean"
             },
