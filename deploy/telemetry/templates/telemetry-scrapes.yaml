@@ -24,6 +24,39 @@ spec:
       regex: (.+)
       targetLabel: __metrics_path__
       replacement: /api/v1/nodes/$1/proxy/metrics/cadvisor
+{{- end }}
+{{- if .Values.scrape.kubeletVolumeStats }}
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMNodeScrape
+metadata:
+  name: kubelet-volume-stats
+  namespace: {{ include "telemetry.namespace" . }}
+  labels:
+    app.kubernetes.io/component: telemetry
+    app.kubernetes.io/part-of: wandb
+spec:
+  scheme: https
+  tlsConfig:
+    insecureSkipVerify: true
+    caFile: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+  bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+  relabelConfigs:
+    - action: labelmap
+      regex: __meta_kubernetes_node_label_(.+)
+    - targetLabel: __address__
+      replacement: kubernetes.default.svc:443
+    - sourceLabels: [__meta_kubernetes_node_name]
+      regex: (.+)
+      targetLabel: __metrics_path__
+      replacement: /api/v1/nodes/$1/proxy/metrics
+  # The kubelet's main endpoint has ~1k series per node; PV free space is all the dashboards use.
+  metricRelabelConfigs:
+    - sourceLabels: [__name__]
+      regex: kubelet_volume_stats_(available|capacity|used)_bytes|kubelet_volume_stats_inodes(_free|_used)?
+      action: keep
+{{- end }}
+{{- if or .Values.scrape.kubeletCadvisor .Values.scrape.kubeletVolumeStats }}
 ---
 # The scrape above goes through the apiserver proxy, which needs nodes/proxy. The VM
 # operator's generated role only grants nodes and nodes/metrics, so add it separately.
