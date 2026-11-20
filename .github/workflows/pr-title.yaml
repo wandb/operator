@@ -4,35 +4,33 @@ on:
   pull_request_target:
     types: [opened, edited, synchronize]
 
+permissions:
+  pull-requests: read
+
 jobs:
   main:
     name: Validate PR title
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER_LIGHT || 'ubuntu-latest' }}
     steps:
-      # https://github.com/amannn/action-semantic-pull-request/releases
-      - uses: amannn/action-semantic-pull-request@0eb081bc9c35210408951834a444794406eff6f8 # v4.2.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         with:
-          # Allowed types: https://github.com/commitizen/conventional-commit-types
-          types: |
-            fix
-            feat
-            docs
-            style
-            refactor
-            perf
-            test
-            build
-            ci
-            chore
-            revert
-          requireScope: false
-          subjectPattern: ^[A-Z].+$
-          subjectPatternError: |
-            The subject "{subject}" found in the pull request title "{title}"
-            didn't match the configured pattern. Please ensure that the subject
-            starts with an uppercase character.
-          wip: true
-          validateSingleCommit: true
-          validateSingleCommitMatchesPrTitle: true
+          script: |
+            // Reads only the event payload, so no API call is needed.
+            const pr = context.payload.pull_request;
+            const title = pr.title || "";
+            // Dependabot writes lowercase subjects ("bump x from y to z").
+            if (pr.user.login === "dependabot[bot]") {
+              core.info("Skipping title check for Dependabot.");
+              return;
+            }
+            if (/^\[WIP\]\s/.test(title)) {
+              core.info("Skipping title check while the PR is marked [WIP].");
+              return;
+            }
+            const types = "fix|feat|docs|style|refactor|perf|test|build|ci|chore|revert";
+            const m = title.match(new RegExp(`^(${types})(\\(.*\\))?(!)?: (.*)$`));
+            if (!m) {
+              core.setFailed(`PR title "${title}" is not a Conventional Commit. Format: type(scope)!: Subject\nTypes: ${types.replace(/\|/g, ", ")}`);
+            } else if (!/^[A-Z].+$/.test(m[4])) {
+              core.setFailed(`The subject "${m[4]}" must start with an uppercase letter.`);
+            }

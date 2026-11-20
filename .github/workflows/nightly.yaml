@@ -83,7 +83,7 @@ jobs:
     needs: build
     # Run when the build succeeded OR was skipped (published-version mode).
     if: ${{ always() && needs.build.result != 'failure' && needs.build.result != 'cancelled' }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER_LIGHT || 'ubuntu-latest' }}
     permissions:
       contents: read
     outputs:
@@ -132,7 +132,7 @@ jobs:
     if: ${{ !cancelled() && needs.setup.result == 'success' && needs.setup.outputs.has_local == 'true' }}
     # The full local-kind stack needs >=8 vCPU; a standard runner leaves MySQL and
     # the ClickHouse keeper Pending on Insufficient cpu.
-    runs-on: ubuntu-latest-8-cores
+    runs-on: ${{ vars.RUNNER_HEAVY || 'ubuntu-latest-8-cores' }}
     permissions:
       contents: read
     # Upgrade runs deploy and verify both the baseline and the chart under test.
@@ -158,7 +158,7 @@ jobs:
     name: ${{ matrix.scenario }}
     needs: [build, setup]
     if: ${{ !cancelled() && github.ref == 'refs/heads/main' && needs.setup.result == 'success' && needs.setup.outputs.has_cloud == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER_LIGHT || 'ubuntu-latest' }}
     environment: ${{ matrix.environment }}
     permissions:
       contents: read
@@ -202,7 +202,7 @@ jobs:
   report:
     needs: [build, setup, local-test, cloud-test]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER_LIGHT || 'ubuntu-latest' }}
     permissions:
       contents: read
     steps:

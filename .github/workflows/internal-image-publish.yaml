@@ -11,7 +11,7 @@ on:
 jobs:
   release:
     name: Publish development image
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER_HEAVY || 'ubuntu-latest-8-cores' }}
     permissions:
       contents: read
       id-token: write
@@ -53,10 +53,11 @@ jobs:
         # this repo's GITHUB_TOKEN can't reach it.
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
-          app-id: ${{ secrets.WESTEST_APP_ID }}
-          private-key: ${{ secrets.WESTEST_APP_PRIVATE_KEY }}
+          client-id: ${{ vars.WANDBOT_3000_APP_ID }}
+          private-key: ${{ secrets.WANDBOT_3000_PRIVATE_KEY }}
           owner: wandb
           repositories: watchtower
+          permission-contents: read
 
       - name: Download the Watchtower binary
         env:
