@@ -32,6 +32,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation"
@@ -372,6 +374,9 @@ func validateSpec(_ context.Context, newWandb, oldWandb *appsv2.WeightsAndBiases
 	allErrors = append(allErrors, networkingErrors...)
 	warnings = append(warnings, networkingWarnings...)
 	allErrors = append(allErrors, validateProxySpec(newWandb)...)
+	supportBundleErrors, supportBundleWarnings := validateSupportBundleSpec(newWandb)
+	allErrors = append(allErrors, supportBundleErrors...)
+	warnings = append(warnings, supportBundleWarnings...)
 
 	if len(allErrors) == 0 {
 		return warnings, nil
@@ -382,6 +387,29 @@ func validateSpec(_ context.Context, newWandb, oldWandb *appsv2.WeightsAndBiases
 		newWandb.Name,
 		allErrors,
 	)
+}
+
+// validateSupportBundleSpec catches selector typos at apply time instead of in a failed collector Job
+func validateSupportBundleSpec(wandb *appsv2.WeightsAndBiases) (field.ErrorList, admission.Warnings) {
+	var errors field.ErrorList
+	var warnings admission.Warnings
+	path := field.NewPath("spec", "supportBundle", "selectedResources", "selectors")
+	for i, selector := range wandb.Spec.SupportBundle.SelectedResources.Selectors {
+		if selector.Kind != "CustomResourceDefinition" && strings.EqualFold(selector.Kind, "CustomResourceDefinition") {
+			errors = append(errors, field.Invalid(path.Index(i).Child("kind"), selector.Kind, "must be spelled CustomResourceDefinition"))
+		}
+		if selector.Namespace != "" && selector.Namespace != wandb.Namespace {
+			warnings = append(warnings, fmt.Sprintf("%s: the in-cluster collector can only read namespace %q",
+				path.Index(i).Child("namespace"), wandb.Namespace))
+		}
+		if _, err := labels.Parse(selector.LabelSelector); err != nil {
+			errors = append(errors, field.Invalid(path.Index(i).Child("labelSelector"), selector.LabelSelector, err.Error()))
+		}
+		if _, err := fields.ParseSelector(selector.FieldSelector); err != nil {
+			errors = append(errors, field.Invalid(path.Index(i).Child("fieldSelector"), selector.FieldSelector, err.Error()))
+		}
+	}
+	return errors, warnings
 }
 
 func validateNotificationSpec(wandb *appsv2.WeightsAndBiases) field.ErrorList {

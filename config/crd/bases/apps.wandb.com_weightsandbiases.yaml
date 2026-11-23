@@ -4502,9 +4502,130 @@ spec:
                   enabled:
                     default: true
                     type: boolean
+                  selectedResources:
+                    default:
+                      enabled: true
+                    properties:
+                      enabled:
+                        default: true
+                        type: boolean
+                      selectors:
+                        items:
+                          properties:
+                            fieldSelector:
+                              maxLength: 1024
+                              type: string
+                            kind:
+                              maxLength: 63
+                              pattern: ^[A-Za-z]([-A-Za-z0-9]*[A-Za-z0-9])?$
+                              type: string
+                            labelSelector:
+                              maxLength: 1024
+                              type: string
+                            namespace:
+                              maxLength: 63
+                              pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                              type: string
+                            resource:
+                              maxLength: 253
+                              pattern: ^[a-z]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?){2,}$
+                              type: string
+                          type: object
+                          x-kubernetes-validations:
+                          - message: set kind or resource
+                            rule: has(self.kind) || has(self.resource)
+                          - message: CustomResourceDefinitions are cluster-scoped;
+                              remove namespace
+                            rule: '!(has(self.kind) && self.kind == ''CustomResourceDefinition''
+                              && has(self.namespace))'
+                        maxItems: 32
+                        type: array
+                    type: object
                   version:
                     pattern: ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$
                     type: string
+                  victoriaStack:
+                    default: {}
+                    properties:
+                      logs:
+                        default:
+                          enabled: true
+                        properties:
+                          enabled:
+                            default: true
+                            type: boolean
+                          lookbackDuration:
+                            maxLength: 32
+                            type: string
+                            x-kubernetes-validations:
+                            - message: must be a positive duration, e.g. 30m or 24h
+                              rule: duration(self) > duration('0s')
+                          maxRecords:
+                            format: int64
+                            minimum: 0
+                            type: integer
+                            x-kubernetes-validations:
+                            - message: must be at most 9223372036854775806
+                              rule: self <= 9223372036854775806
+                        type: object
+                      lookbackDuration:
+                        maxLength: 32
+                        type: string
+                        x-kubernetes-validations:
+                        - message: must be a positive duration, e.g. 30m or 24h
+                          rule: duration(self) > duration('0s')
+                      metrics:
+                        default:
+                          enabled: true
+                        properties:
+                          enabled:
+                            default: true
+                            type: boolean
+                          lookbackDuration:
+                            maxLength: 32
+                            type: string
+                            x-kubernetes-validations:
+                            - message: must be a positive duration, e.g. 30m or 24h
+                              rule: duration(self) > duration('0s')
+                          maxRecords:
+                            format: int64
+                            minimum: 0
+                            type: integer
+                            x-kubernetes-validations:
+                            - message: must be at most 9223372036854775806
+                              rule: self <= 9223372036854775806
+                        type: object
+                      timeout:
+                        maxLength: 32
+                        type: string
+                        x-kubernetes-validations:
+                        - message: must be a positive duration, e.g. 30m or 24h
+                          rule: duration(self) > duration('0s')
+                        - message: must be at most 8m so Victoria (3x timeout) finishes
+                            before the Job's 30m deadline
+                          rule: duration(self) <= duration('8m')
+                      traces:
+                        default:
+                          enabled: true
+                        properties:
+                          enabled:
+                            default: true
+                            type: boolean
+                          lookbackDuration:
+                            maxLength: 32
+                            type: string
+                            x-kubernetes-validations:
+                            - message: must be a positive duration, e.g. 30m or 24h
+                              rule: duration(self) > duration('0s')
+                          maxRecords:
+                            format: int64
+                            minimum: 0
+                            type: integer
+                            x-kubernetes-validations:
+                            - message: must be at most 9223372036854775806
+                              rule: self <= 9223372036854775806
+                        type: object
+                    type: object
                 type: object
               tolerations:
                 items:
@@ -6822,6 +6943,8 @@ spec:
                 type: object
               supportBundle:
                 properties:
+                  blockedReason:
+                    type: string
                   cronJob:
                     type: string
                   image:

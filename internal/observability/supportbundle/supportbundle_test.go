@@ -1,12 +1,11 @@
 package supportbundle
 
 import (
+	"fmt"
 	"io"
-	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strings"
 	"testing"
 
@@ -32,6 +31,18 @@ func testWandb() *apiv2.WeightsAndBiases {
 
 func telemetryOn(namespace string) telemetry.TelemetryRuntimeConfig {
 	return telemetry.TelemetryRuntimeConfig{Enabled: true, Mode: "full", Namespace: namespace}
+}
+
+// withTelemetryStatus mirrors the connection status the reconcile records from an enabled telemetry config.
+func withTelemetryStatus(wandb *apiv2.WeightsAndBiases, cfg telemetry.TelemetryRuntimeConfig) *apiv2.WeightsAndBiases {
+	endpoints := cfg.ResolveEndpoints()
+	wandb.Status.TelemetryStatus.Connection = apiv2.TelemetryConnectionStatus{
+		ManagedNamespace:    cfg.Namespace,
+		MetricsReadEndpoint: endpoints.MetricsReadEndpoint,
+		LogsReadEndpoint:    endpoints.LogsReadEndpoint,
+		TracesReadEndpoint:  endpoints.TracesReadEndpoint,
+	}
+	return wandb
 }
 
 func testBucket() BucketConnection {
@@ -72,107 +83,237 @@ func TestNamesFitCronJobBudget(t *testing.T) {
 	require.True(t, strings.HasSuffix(CronJobName(wandb), "-support-bundle-collector"))
 }
 
-func renderedCollection(t *testing.T, wandb *apiv2.WeightsAndBiases, cfg telemetry.TelemetryRuntimeConfig) collection {
-	t.Helper()
-	configMap, err := ConfigMap(wandb, cfg)
-	require.NoError(t, err)
-	require.Equal(t, []string{"full.yaml"}, slices.Collect(maps.Keys(configMap.Data)))
-	var out collection
-	require.NoError(t, yaml.Unmarshal([]byte(configMap.Data["full.yaml"]), &out))
-	return out
+// defaultSelectorArgs select each operator CR in the install namespace and its CRD
+var defaultSelectorArgs = []string{
+	"--selected-resource-option=s0.kind=ActionRun",
+	"--selected-resource-option=s0.resource=actionruns.apps.wandb.com",
+	"--selected-resource-option=s0.namespace=wandb-ns",
+	"--selected-resource-option=s0.labelSelector=",
+	"--selected-resource-option=s0.fieldSelector=",
+	"--selected-resource-option=s1.kind=CustomResourceDefinition",
+	"--selected-resource-option=s1.resource=actionruns.apps.wandb.com",
+	"--selected-resource-option=s1.namespace=",
+	"--selected-resource-option=s1.labelSelector=",
+	"--selected-resource-option=s1.fieldSelector=",
+	"--selected-resource-option=s2.kind=Application",
+	"--selected-resource-option=s2.resource=applications.apps.wandb.com",
+	"--selected-resource-option=s2.namespace=wandb-ns",
+	"--selected-resource-option=s2.labelSelector=",
+	"--selected-resource-option=s2.fieldSelector=",
+	"--selected-resource-option=s3.kind=CustomResourceDefinition",
+	"--selected-resource-option=s3.resource=applications.apps.wandb.com",
+	"--selected-resource-option=s3.namespace=",
+	"--selected-resource-option=s3.labelSelector=",
+	"--selected-resource-option=s3.fieldSelector=",
+	"--selected-resource-option=s4.kind=WeightsAndBiases",
+	"--selected-resource-option=s4.resource=weightsandbiases.apps.wandb.com",
+	"--selected-resource-option=s4.namespace=wandb-ns",
+	"--selected-resource-option=s4.labelSelector=",
+	"--selected-resource-option=s4.fieldSelector=",
+	"--selected-resource-option=s5.kind=CustomResourceDefinition",
+	"--selected-resource-option=s5.resource=weightsandbiases.apps.wandb.com",
+	"--selected-resource-option=s5.namespace=",
+	"--selected-resource-option=s5.labelSelector=",
+	"--selected-resource-option=s5.fieldSelector=",
 }
 
-func renderedVictoria(c collection) *victoriaStack {
-	for _, col := range c.Spec.Collectors {
-		if col.VictoriaStack != nil {
-			return col.VictoriaStack
-		}
-	}
-	return nil
-}
-
-func TestCollectionWithoutTelemetry(t *testing.T) {
-	out := renderedCollection(t, testWandb(), telemetry.DefaultTelemetryRuntimeConfig())
-
-	require.Equal(t, "lumen.wandb.ai/v1alpha1", out.APIVersion)
-	require.Equal(t, "Support-Bundle", out.Kind)
-	require.Len(t, out.Spec.Collectors, 4)
-	require.NotNil(t, out.Spec.Collectors[0].ClusterInfo)
-	require.Equal(t, []string{"wandb-ns"}, out.Spec.Collectors[1].ClusterResources.Namespaces)
-	require.Equal(t, "wandb-ns", out.Spec.Collectors[2].Logs.Namespace)
-	require.Equal(t, &dnsCheck{}, out.Spec.Collectors[3].DNS)
-	require.Nil(t, renderedVictoria(out))
-	require.NotEmpty(t, out.Spec.Redactors)
-}
-
-func TestCollectionWithTelemetry(t *testing.T) {
-	out := renderedCollection(t, testWandb(), telemetryOn("telemetry-ns"))
-
-	require.Equal(t, []string{"wandb-ns", "telemetry-ns"}, out.Spec.Collectors[1].ClusterResources.Namespaces)
-	victoria := renderedVictoria(out)
-	require.NotNil(t, victoria)
-	require.Equal(t, "victoria-stack", victoria.Name)
-	require.Equal(t, "telemetry-ns", victoria.Namespace)
-	require.Len(t, out.Spec.Collectors, 5)
-	require.Equal(t, "http://vmsingle-victoria-instance.telemetry-ns.svc:8428", victoria.Metrics.Endpoint)
-	require.Equal(t, "http://vlsingle-victoria-logs.telemetry-ns.svc:9428", victoria.Logs.Endpoint)
-	require.Equal(t, "http://vtsingle-victoria-traces.telemetry-ns.svc:10428", victoria.Traces.Endpoint)
-}
-
-func TestCollectionSkipsVictoriaUntilTelemetryIsReady(t *testing.T) {
+func TestCollectionArgsUseCRSelectors(t *testing.T) {
 	wandb := testWandb()
-	wandb.Status.TelemetryStatus.Ready = false
-	cfg := telemetryOn("telemetry-ns")
+	wandb.Spec.SupportBundle.SelectedResources.Selectors = []apiv2.SupportBundleResourceSelector{
+		{Kind: "WeightsAndBiases", LabelSelector: "app in (api,worker)", FieldSelector: "metadata.name=wandb"},
+		{Resource: "mysqlclusters.moco.cybozu.com", Namespace: "mysql"},
+		{Kind: "CustomResourceDefinition", Resource: "weightsandbiases.apps.wandb.com"},
+	}
+	require.Equal(t, []string{
+		"--selected-resource-option=s0.kind=WeightsAndBiases",
+		"--selected-resource-option=s0.resource=",
+		"--selected-resource-option=s0.namespace=wandb-ns",
+		"--selected-resource-option=s0.labelSelector=app in (api,worker)",
+		"--selected-resource-option=s0.fieldSelector=metadata.name=wandb",
+		"--selected-resource-option=s1.kind=",
+		"--selected-resource-option=s1.resource=mysqlclusters.moco.cybozu.com",
+		"--selected-resource-option=s1.namespace=mysql",
+		"--selected-resource-option=s1.labelSelector=",
+		"--selected-resource-option=s1.fieldSelector=",
+		"--selected-resource-option=s2.kind=CustomResourceDefinition",
+		"--selected-resource-option=s2.resource=weightsandbiases.apps.wandb.com",
+		"--selected-resource-option=s2.namespace=",
+		"--selected-resource-option=s2.labelSelector=",
+		"--selected-resource-option=s2.fieldSelector=",
+	}, collectionArgs(wandb))
+}
 
-	out := renderedCollection(t, wandb, cfg)
-	require.Nil(t, renderedVictoria(out))
-	require.Equal(t, []string{"wandb-ns", "telemetry-ns"}, out.Spec.Collectors[1].ClusterResources.Namespaces)
+// requireBlocked checks a collection with nothing to gather still renders, says why, and can't fall back to the full spec
+func requireBlocked(t *testing.T, wandb *apiv2.WeightsAndBiases) {
+	t.Helper()
+	require.NotEmpty(t, BlockedReason(wandb))
+	app := Application(wandb, testBucket())
+	require.Len(t, app.Spec.CronJobs, 1, "a blocked template is still rendered")
+	// Lumen rejects --selected-resource-name without --selected-resource-option (lumen cmd/collector/workflows.go:214).
+	// If a Lumen bump changes that, a blocked run would collect Lumen's full default spec instead of failing.
+	require.Equal(t, []string{
+		"--log-format=json",
+		"agent",
+		"--lumen-collection=false",
+		"--support-bundle",
+		"--selected-resource-name=nothing-to-collect",
+		"--staging-root=file:///staging",
+		"--support-bundle-id=$(SUPPORT_BUNDLE_ID)",
+	}, app.Spec.CronJobs[0].Spec.JobTemplate.Spec.Template.Spec.Containers[0].Args)
+}
+
+func TestBlockedWhenSelectorsDisabledWithoutTelemetry(t *testing.T) {
+	wandb := testWandb()
+	wandb.Spec.SupportBundle.SelectedResources = apiv2.SupportBundleSelectedResources{
+		Enabled:   ptr.To(false),
+		Selectors: []apiv2.SupportBundleResourceSelector{{Kind: "WeightsAndBiases"}},
+	}
+	requireBlocked(t, wandb)
+
+	require.Empty(t, BlockedReason(withTelemetryStatus(wandb, telemetryOn("telemetry-ns"))), "Victoria exports give it something to collect")
+}
+
+func TestSelectorNamespaceDefaultsToInstall(t *testing.T) {
+	wandb := testWandb()
+	wandb.Spec.SupportBundle.SelectedResources.Selectors = []apiv2.SupportBundleResourceSelector{
+		{Resource: "mysqlclusters.moco.cybozu.com"},
+		{Kind: "CustomResourceDefinition", Resource: "mysqlclusters.moco.cybozu.com"},
+	}
+	args := collectionArgs(wandb)
+	require.Contains(t, args, "--selected-resource-option=s0.namespace=wandb-ns")
+	require.Contains(t, args, "--selected-resource-option=s1.namespace=", "CRDs are cluster-scoped")
+}
+
+func TestSelectorNamespacesHaveARole(t *testing.T) {
+	wandb := withTelemetryStatus(testWandb(), telemetryOn("telemetry-ns"))
+	wandb.Spec.SupportBundle.SelectedResources.Selectors = []apiv2.SupportBundleResourceSelector{
+		{Resource: "mysqlclusters.moco.cybozu.com"},
+		{Kind: "WeightsAndBiases", Namespace: "wandb-ns"},
+	}
+	roles := Roles(wandb, telemetryOn("telemetry-ns"))
+	for _, arg := range collectionArgs(wandb) {
+		_, namespace, ok := strings.Cut(arg, ".namespace=")
+		if !ok || namespace == "" {
+			continue
+		}
+		role := roleIn(t, roles, namespace)
+		require.True(t, grants(role.Rules, "mysqlclusters", "list"), "the collector can read what %s asks for", arg)
+	}
+}
+
+func TestSelectorValuesAreNotExpandedByTheKubelet(t *testing.T) {
+	wandb := testWandb()
+	wandb.Spec.SupportBundle.SelectedResources.Selectors = []apiv2.SupportBundleResourceSelector{
+		{Kind: "Application", FieldSelector: "metadata.name=$(WANDB_DATA_ROOT)"},
+	}
+	escaped := "--selected-resource-option=s0.fieldSelector=metadata.name=$$(WANDB_DATA_ROOT)"
+	app := Application(wandb, testBucket())
+	require.Contains(t, app.Spec.CronJobs[0].Spec.JobTemplate.Spec.Template.Spec.Containers[0].Args, escaped)
+	require.Contains(t, WatchtowerJobPolicy(wandb, "wandb-watchtower").Spec.Validations[2].Expression, fmt.Sprintf("%q", escaped))
+}
+
+func TestCollectionArgsWithoutTelemetry(t *testing.T) {
+	require.Equal(t, defaultSelectorArgs, collectionArgs(testWandb()))
+}
+
+func TestCollectionArgsWithTelemetry(t *testing.T) {
+	require.Equal(t, append(append([]string{}, defaultSelectorArgs...),
+		"--victoria-namespace=telemetry-ns",
+		"--victoria-metrics=http://vmsingle-victoria-instance.telemetry-ns.svc:8428",
+		"--victoria-logs=http://vlsingle-victoria-logs.telemetry-ns.svc:9428",
+		"--victoria-traces=http://vtsingle-victoria-traces.telemetry-ns.svc:10428",
+	), collectionArgs(withTelemetryStatus(testWandb(), telemetryOn("telemetry-ns"))))
+}
+
+func TestCollectionArgsIgnoreTelemetryReadiness(t *testing.T) {
+	cfg := telemetryOn("telemetry-ns")
+	wandb := withTelemetryStatus(testWandb(), cfg)
+	wandb.Status.TelemetryStatus.Ready = false
+
+	require.Contains(t, collectionArgs(wandb), "--victoria-metrics=http://vmsingle-victoria-instance.telemetry-ns.svc:8428")
 
 	telemetryRole := roleIn(t, Roles(wandb, cfg), "telemetry-ns")
-	require.True(t, grants(telemetryRole.Rules, "pods/exec", "create"), "permissions follow the mode, not readiness")
+	require.True(t, grants(telemetryRole.Rules, "pods/exec", "create"), "export permissions follow the exports that will run, not readiness")
 }
 
-func TestCollectionTelemetryInInstallNamespace(t *testing.T) {
-	out := renderedCollection(t, testWandb(), telemetryOn(""))
-
-	require.Equal(t, []string{"wandb-ns"}, out.Spec.Collectors[1].ClusterResources.Namespaces)
-	require.Equal(t, "wandb-ns", renderedVictoria(out).Namespace)
+func TestCollectionArgsTelemetryInInstallNamespace(t *testing.T) {
+	args := collectionArgs(withTelemetryStatus(testWandb(), telemetryOn("")))
+	require.Contains(t, args, "--victoria-namespace=wandb-ns")
+	require.Contains(t, args, "--victoria-metrics=http://vmsingle-victoria-instance:8428")
 }
 
-func TestCollectionImageRegistryKeepsScope(t *testing.T) {
+func TestCollectionArgsPassVictoriaBounds(t *testing.T) {
+	wandb := withTelemetryStatus(testWandb(), telemetryOn("telemetry-ns"))
+	wandb.Spec.SupportBundle.SelectedResources.Enabled = ptr.To(false)
+	wandb.Spec.SupportBundle.VictoriaStack = apiv2.SupportBundleVictoriaStack{
+		LookbackDuration: "12h",
+		Timeout:          "2m",
+		Metrics:          apiv2.SupportBundleVictoriaExport{LookbackDuration: "6h", MaxRecords: ptr.To[int64](1000)},
+		Logs:             apiv2.SupportBundleVictoriaExport{LookbackDuration: "1h", MaxRecords: ptr.To[int64](0)},
+		Traces:           apiv2.SupportBundleVictoriaExport{MaxRecords: ptr.To[int64](500)},
+	}
+	require.Equal(t, []string{
+		"--victoria-namespace=telemetry-ns",
+		"--victoria-metrics=http://vmsingle-victoria-instance.telemetry-ns.svc:8428",
+		"--victoria-logs=http://vlsingle-victoria-logs.telemetry-ns.svc:9428",
+		"--victoria-traces=http://vtsingle-victoria-traces.telemetry-ns.svc:10428",
+		"--victoria-option=lookbackDuration=12h",
+		"--victoria-option=timeout=2m",
+		"--victoria-option=metrics.lookbackDuration=6h",
+		"--victoria-option=metrics.maxLines=1000",
+		"--victoria-option=logs.lookbackDuration=1h",
+		"--victoria-option=logs.maxLines=0",
+		"--victoria-option=traces.maxSpans=500",
+	}, collectionArgs(wandb))
+}
+
+func TestCollectionArgsSkipDisabledVictoriaExports(t *testing.T) {
+	wandb := withTelemetryStatus(testWandb(), telemetryOn("telemetry-ns"))
+	wandb.Spec.SupportBundle.SelectedResources.Enabled = ptr.To(false)
+	wandb.Spec.SupportBundle.VictoriaStack = apiv2.SupportBundleVictoriaStack{
+		LookbackDuration: "12h",
+		Metrics:          apiv2.SupportBundleVictoriaExport{Enabled: ptr.To(false), LookbackDuration: "6h", MaxRecords: ptr.To[int64](1000)},
+		Logs:             apiv2.SupportBundleVictoriaExport{Enabled: ptr.To(true), MaxRecords: ptr.To[int64](10)},
+		Traces:           apiv2.SupportBundleVictoriaExport{Enabled: ptr.To(false), MaxRecords: ptr.To[int64](500)},
+	}
+	require.Equal(t, []string{
+		"--victoria-namespace=telemetry-ns",
+		"--victoria-logs=http://vlsingle-victoria-logs.telemetry-ns.svc:9428",
+		"--victoria-option=lookbackDuration=12h",
+		"--victoria-option=logs.maxLines=10",
+	}, collectionArgs(wandb))
+
+	wandb.Spec.SupportBundle.VictoriaStack.Logs.Enabled = ptr.To(false)
+	requireBlocked(t, wandb)
+	for _, role := range Roles(wandb, telemetryOn("telemetry-ns")) {
+		require.False(t, grants(role.Rules, "pods/exec", "create"), "no export runs, so no helper pod is allowed in %s", role.Namespace)
+	}
+}
+
+func TestCollectionArgsSkipExportsWithoutEndpoint(t *testing.T) {
+	wandb := withTelemetryStatus(testWandb(), telemetryOn("telemetry-ns"))
+	wandb.Spec.SupportBundle.SelectedResources.Enabled = ptr.To(false)
+	wandb.Status.TelemetryStatus.Connection.LogsReadEndpoint = ""
+	wandb.Spec.SupportBundle.VictoriaStack.Logs.MaxRecords = ptr.To[int64](10)
+	args := strings.Join(collectionArgs(wandb), " ")
+	require.Contains(t, args, "--victoria-metrics=")
+	require.NotContains(t, args, "--victoria-logs")
+	require.NotContains(t, args, "logs.maxLines", "Lumen rejects options for an export it wasn't given")
+}
+
+func TestCollectionArgsSkipVictoriaBoundsWithoutTelemetry(t *testing.T) {
 	wandb := testWandb()
-	wandb.Spec.Global.ImageRegistry = "registry.corp"
-	out := renderedCollection(t, wandb, telemetryOn("telemetry-ns"))
-	require.NotNil(t, renderedVictoria(out))
-	require.NotNil(t, out.Spec.Collectors[3].DNS)
+	wandb.Spec.SupportBundle.VictoriaStack.LookbackDuration = "12h"
+	for _, arg := range collectionArgs(wandb) {
+		require.False(t, strings.HasPrefix(arg, "--victoria-"), "Lumen rejects options without an endpoint: %s", arg)
+	}
 }
 
-func TestRenderCollectionSelectsCollectors(t *testing.T) {
-	data, err := renderCollection(testWandb(), telemetryOn("telemetry-ns"), []CollectorName{PodLogs, VictoriaTraces})
-	require.NoError(t, err)
-	var out collection
-	require.NoError(t, yaml.Unmarshal(data, &out))
-
-	require.Len(t, out.Spec.Collectors, 2)
-	require.NotNil(t, out.Spec.Collectors[0].Logs)
-	victoria := out.Spec.Collectors[1].VictoriaStack
-	require.Nil(t, victoria.Metrics)
-	require.Nil(t, victoria.Logs)
-	require.Equal(t, "http://vtsingle-victoria-traces.telemetry-ns.svc:10428", victoria.Traces.Endpoint)
-}
-
-func TestRenderCollectionDropsVictoriaWithoutTelemetry(t *testing.T) {
-	data, err := renderCollection(testWandb(), telemetry.DefaultTelemetryRuntimeConfig(), []CollectorName{VictoriaTraces})
-	require.NoError(t, err)
-	require.NotContains(t, string(data), "victoriaStack")
-}
-
-func TestRedactorsCoverPodLogs(t *testing.T) {
-	files := defaultRedactors[0].FileSelector.Files
-	require.Contains(t, files, "cluster-resources/pods/logs/*/*/*.log")
-	matched, err := filepath.Match("cluster-resources/pods/logs/*/*/*.log", "cluster-resources/pods/logs/wandb/api-0/api.log")
-	require.NoError(t, err)
-	require.True(t, matched)
+func TestCollectionArgsHaveNoCredentials(t *testing.T) {
+	args := strings.Join(collectionArgs(withTelemetryStatus(testWandb(), telemetryOn("telemetry-ns"))), " ")
+	for _, forbidden := range []string{"s3://", "gs://", "az://", "AccessKey", "conn"} {
+		require.NotContains(t, args, forbidden)
+	}
 }
 
 func TestPodAdmissionPolicyTargetsOnlyTheCollector(t *testing.T) {
@@ -188,24 +329,18 @@ func TestPodAdmissionPolicyTargetsOnlyTheCollector(t *testing.T) {
 }
 
 func TestWatchtowerJobPolicyTargetsOnlyWatchtower(t *testing.T) {
-	wandb := testWandb()
+	wandb := withTelemetryStatus(testWandb(), telemetryOn("telemetry-ns"))
 	policy := WatchtowerJobPolicy(wandb, "wandb-watchtower")
 	require.Equal(t, "request.userInfo.username == 'system:serviceaccount:wandb-ns:wandb-watchtower'", policy.Spec.MatchConditions[0].Expression)
 	require.Equal(t, []string{"jobs"}, policy.Spec.MatchConstraints.ResourceRules[0].Resources)
 	require.Contains(t, policy.Spec.Validations[2].Expression, "'"+Image(wandb)+"'")
+	for _, arg := range collectorArgs(wandb) {
+		require.Contains(t, policy.Spec.Validations[2].Expression, fmt.Sprintf("%q", arg), "the policy pins the CronJob's args")
+	}
 
 	binding := WatchtowerJobPolicyBinding(wandb)
 	require.Equal(t, policy.Name, binding.Spec.PolicyName)
 	require.Equal(t, []admissionregistrationv1.ValidationAction{admissionregistrationv1.Deny}, binding.Spec.ValidationActions)
-}
-
-func TestConfigMapHasNoCredentials(t *testing.T) {
-	configMap, err := ConfigMap(testWandb(), telemetryOn("telemetry-ns"))
-	require.NoError(t, err)
-	data := configMap.Data["full.yaml"]
-	for _, forbidden := range []string{"s3://", "gs://", "az://", "AccessKey", "conn"} {
-		require.NotContains(t, data, forbidden)
-	}
 }
 
 func TestApplicationIsSuspendedCronJobTemplate(t *testing.T) {
@@ -248,15 +383,18 @@ func TestApplicationIsSuspendedCronJobTemplate(t *testing.T) {
 	require.Len(t, pod.Containers, 1)
 	container := pod.Containers[0]
 	require.Equal(t, []string{"/app/bin/collector"}, container.Command)
-	require.Equal(t, []string{
+	require.Equal(t, append(append([]string{
 		"--log-format=json",
 		"agent",
 		"--lumen-collection=false",
 		"--support-bundle",
-		"--support-bundle-spec=/etc/support-bundle/full.yaml",
+	}, defaultSelectorArgs...),
 		"--staging-root=file:///staging",
 		"--support-bundle-id=$(SUPPORT_BUNDLE_ID)",
-	}, container.Args)
+	), container.Args)
+	for _, volume := range pod.Volumes {
+		require.Nil(t, volume.ConfigMap, "the collector takes flags, not a mounted spec")
+	}
 	require.Equal(t, "/dev/termination-log", container.TerminationMessagePath)
 	require.Equal(t, corev1.TerminationMessageReadFile, container.TerminationMessagePolicy)
 	require.True(t, *container.SecurityContext.ReadOnlyRootFilesystem)
@@ -349,35 +487,30 @@ func roleIn(t *testing.T, roles []*rbacv1.Role, namespace string) *rbacv1.Role {
 func TestRolesWithoutTelemetry(t *testing.T) {
 	wandb := testWandb()
 	roles := Roles(wandb, telemetry.DefaultTelemetryRuntimeConfig())
-	require.Len(t, roles, 3)
+	require.Len(t, roles, 1)
 	require.Equal(t, "wandb-ns", roles[0].Namespace)
 	require.Equal(t, "wandb-support-bundle", roles[0].Name)
 	require.True(t, grants(roles[0].Rules, "pods/log", "get"))
 	require.False(t, grants(roles[0].Rules, "pods", "create"))
 	require.False(t, grants(roles[0].Rules, "pods/exec", "create"))
 
-	dnsPods := roleIn(t, roles, "default")
-	require.Equal(t, ClusterScopedName(wandb), dnsPods.Name)
-	require.True(t, grants(dnsPods.Rules, "pods", "create"))
-	require.False(t, grants(dnsPods.Rules, "pods/exec", "create"))
-
-	dnsConfig := roleIn(t, roles, "kube-system")
-	require.False(t, grants(dnsConfig.Rules, "pods", "create"))
-	for _, rule := range dnsConfig.Rules {
-		if slices.Contains(rule.Resources, "configmaps") {
-			require.ElementsMatch(t, []string{"coredns", "kube-dns"}, rule.ResourceNames)
-		}
+	for _, resource := range []string{"actionruns", "applications", "weightsandbiases"} {
+		require.True(t, grants(roles[0].Rules, resource, "list"), "collector must read every collected %s", resource)
 	}
+	require.False(t, grants(roles[0].Rules, "vmsingles", "list"), "the operator holds Victoria reads only with telemetry on")
+
 }
 
 func TestRolesWithTelemetryNamespace(t *testing.T) {
-	wandb := testWandb()
+	wandb := withTelemetryStatus(testWandb(), telemetryOn("telemetry-ns"))
 	roles := Roles(wandb, telemetryOn("telemetry-ns"))
-	require.Len(t, roles, 4)
+	require.Len(t, roles, 2)
 	require.False(t, grants(roles[0].Rules, "pods", "create"))
 
 	telemetryRole := roleIn(t, roles, "telemetry-ns")
 	require.Equal(t, ClusterScopedName(wandb), telemetryRole.Name)
+	require.True(t, grants(telemetryRole.Rules, "vmsingles", "list"))
+	require.True(t, grants(roles[0].Rules, "vmsingles", "list"))
 	require.True(t, grants(telemetryRole.Rules, "pods", "create"))
 	require.True(t, grants(telemetryRole.Rules, "pods/exec", "create"))
 
@@ -389,14 +522,14 @@ func TestRolesWithTelemetryNamespace(t *testing.T) {
 func TestRolesMergeWhenInstallIsInDefault(t *testing.T) {
 	wandb := testWandb()
 	wandb.Namespace = "default"
+	wandb = withTelemetryStatus(wandb, telemetryOn(""))
 	roles := Roles(wandb, telemetryOn(""))
-	require.Len(t, roles, 2)
+	require.Len(t, roles, 1)
 
 	install := roleIn(t, roles, "default")
 	require.Equal(t, "wandb-support-bundle", install.Name)
 	require.True(t, grants(install.Rules, "configmaps", "list"))
 	require.True(t, grants(install.Rules, "pods/exec", "create"))
-	roleIn(t, roles, "kube-system")
 }
 
 func TestClusterRoleIsListOnly(t *testing.T) {

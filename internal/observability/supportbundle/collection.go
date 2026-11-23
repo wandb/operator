@@ -1,57 +1,33 @@
 package supportbundle
 
 import (
-	"slices"
+	"fmt"
+	"strings"
 
 	apiv2 "github.com/wandb/operator/api/v2"
 	"github.com/wandb/operator/internal/observability/telemetry"
-	"gopkg.in/yaml.v3"
-	corev1 "k8s.io/api/core/v1"
 )
 
-// CollectorName is a constrained enum holding all compatible collectors
-type CollectorName string
-
-const (
-	ClusterInfo      CollectorName = "cluster-info"
-	ClusterResources CollectorName = "cluster-resources"
-	PodLogs          CollectorName = "pod-logs"
-	DNS              CollectorName = "dns"
-	VictoriaMetrics  CollectorName = "victoria-metrics"
-	VictoriaLogs     CollectorName = "victoria-logs"
-	VictoriaTraces   CollectorName = "victoria-traces"
-)
-
-var allCollectors = []CollectorName{ClusterInfo, ClusterResources, PodLogs, DNS, VictoriaMetrics, VictoriaLogs, VictoriaTraces}
-
-const defaultPreset = "full"
-
-// presets become ConfigMap keys "<preset>.yaml"; a launch picks one with --support-bundle-spec.
-var presets = map[string][]CollectorName{defaultPreset: allCollectors}
-
-// Sets the collection bounds
-const (
-	victoriaLookback = "24h"
-	victoriaTimeout  = "2m"
-
-	podLogsMaxAge   = "24h"
-	podLogsMaxBytes = 50000000
-)
-
-// presetCollects checks whether any preset needs a collector
-func presetCollects(name CollectorName) bool {
-	for _, collectors := range presets {
-		if slices.Contains(collectors, name) {
-			return true
-		}
-	}
-	return false
+// operatorResources are the operator's custom resources; collection and the collector's RBAC both use this list.
+var operatorResources = []struct{ kind, plural string }{
+	{"ActionRun", "actionruns"},
+	{"Application", "applications"},
+	{"WeightsAndBiases", "weightsandbiases"},
 }
 
-// collectsTelemetry reports whether any preset reads from the operator's Victoria stack
+const crdKind = "CustomResourceDefinition"
+
+func operatorPlurals() []string {
+	plurals := make([]string, 0, len(operatorResources))
+	for _, r := range operatorResources {
+		plurals = append(plurals, r.plural)
+	}
+	return plurals
+}
+
+// collectsTelemetry reports whether collection reads from the operator's Victoria stack
 func collectsTelemetry(cfg telemetry.TelemetryRuntimeConfig) bool {
-	// If telemetry is present, and we're asking for one of the victoria resources
-	return cfg.Enabled && (presetCollects(VictoriaMetrics) || presetCollects(VictoriaLogs) || presetCollects(VictoriaTraces))
+	return cfg.Enabled
 }
 
 // telemetryNamespace is where the Victoria stack runs; an unset namespace means the install's own.
@@ -71,83 +47,113 @@ func collectionNamespaces(wandb *apiv2.WeightsAndBiases, cfg telemetry.Telemetry
 	return namespaces
 }
 
-// ConfigMap creates a map of a key per preset
-func ConfigMap(wandb *apiv2.WeightsAndBiases, cfg telemetry.TelemetryRuntimeConfig) (*corev1.ConfigMap, error) {
-	data := map[string]string{}
-	for preset, names := range presets {
-		rendered, err := renderCollection(wandb, cfg, names)
-		if err != nil {
-			return nil, err
+// collectionArgs tells the collector what to gather
+func collectionArgs(wandb *apiv2.WeightsAndBiases) []string {
+	return append(selectorArgs(wandb), victoriaArgs(wandb)...)
+}
+
+// BlockedReason explains why a collection would gather nothing, or is empty when it has something to collect.
+func BlockedReason(wandb *apiv2.WeightsAndBiases) string {
+	if len(collectionArgs(wandb)) > 0 {
+		return ""
+	}
+	return "nothing to collect: selectedResources is disabled and no Victoria export is enabled with telemetry on"
+}
+
+// selectorArgs sends the CR's selectors, or each operator CR and its CRD when none are set
+func selectorArgs(wandb *apiv2.WeightsAndBiases) []string {
+	resources := wandb.Spec.SupportBundle.SelectedResources
+	if resources.Enabled != nil && !*resources.Enabled {
+		return nil
+	}
+	selectors := resources.Selectors
+	if len(selectors) == 0 {
+		for _, r := range operatorResources {
+			resource := r.plural + "." + apiv2.GroupVersion.Group
+			selectors = append(selectors,
+				apiv2.SupportBundleResourceSelector{Kind: r.kind, Resource: resource},
+				apiv2.SupportBundleResourceSelector{Kind: crdKind, Resource: resource},
+			)
 		}
-		data[preset+".yaml"] = string(rendered)
 	}
-	return &corev1.ConfigMap{
-		Name: Name(wandb), Namespace: wandb.Namespace, Labels: objectLabels(wandb),
-		Data: data,
-	}, nil
+
+	var args []string
+	for i, s := range selectors {
+		// the Role only covers the install's namespace, so all namespaces would just be a 403
+		if s.Namespace == "" && s.Kind != crdKind {
+			s.Namespace = wandb.Namespace
+		}
+		option := fmt.Sprintf("%s=s%d.", flagSelectedResourceOption, i)
+		args = append(args,
+			option+selectorKind+"="+escape(s.Kind),
+			option+selectorResource+"="+escape(s.Resource),
+			option+selectorNamespace+"="+escape(s.Namespace),
+			option+selectorLabelSelector+"="+escape(s.LabelSelector),
+			option+selectorFieldSelector+"="+escape(s.FieldSelector),
+		)
+	}
+	return args
 }
 
-// renderCollection renders a YAML based on the compilation of all collectors, redactors, and docs
-func renderCollection(wandb *apiv2.WeightsAndBiases, cfg telemetry.TelemetryRuntimeConfig, names []CollectorName) ([]byte, error) {
-	selected := map[CollectorName]bool{}
-	for _, name := range names {
-		selected[name] = true
-	}
-
-	var collectors []collector
-	if selected[ClusterInfo] {
-		collectors = append(collectors, collector{ClusterInfo: &struct{}{}})
-	}
-	if selected[ClusterResources] {
-		collectors = append(collectors, collector{ClusterResources: &clusterResources{Namespaces: collectionNamespaces(wandb, cfg)}})
-	}
-	if selected[PodLogs] {
-		collectors = append(collectors, collector{Logs: &podLogs{
-			Name:      wandb.Name + "-pod-logs",
-			Namespace: wandb.Namespace,
-			Selector:  []string{},
-			Limits:    podLogLimit{MaxAge: podLogsMaxAge, MaxBytes: podLogsMaxBytes},
-		}})
-	}
-	if selected[DNS] {
-		collectors = append(collectors, collector{DNS: &dnsCheck{}})
-	}
-	if victoria := victoriaCollector(wandb, cfg, selected); victoria != nil {
-		collectors = append(collectors, collector{VictoriaStack: victoria})
-	}
-
-	return yaml.Marshal(collection{
-		APIVersion: collectionAPIVersion,
-		Kind:       collectionKind,
-		Metadata:   collectionMetadata{Name: Name(wandb)},
-		Spec:       collectionSpec{Collectors: collectors, Redactors: defaultRedactors},
-	})
+// escape stops the kubelet expanding $(VAR) in CR values, which could pull Secret-backed env into the args
+func escape(value string) string {
+	return strings.ReplaceAll(value, "$", "$$")
 }
 
-// victoriaCollector checks if Victoria is Ready in order to be collected
-func victoriaCollector(wandb *apiv2.WeightsAndBiases, cfg telemetry.TelemetryRuntimeConfig, selected map[CollectorName]bool) *victoriaStack {
-	// if not available, don't do anything
-	if !cfg.Enabled || !wandb.Status.TelemetryStatus.Ready {
+type victoriaExport struct {
+	name     string
+	flag     string
+	endpoint string
+	capKey   string
+	spec     apiv2.SupportBundleVictoriaExport
+}
+
+// victoriaExports are the exports that will run; the collector's args and its export RBAC both come from this.
+func victoriaExports(wandb *apiv2.WeightsAndBiases) (string, []victoriaExport) {
+	conn := wandb.Status.TelemetryStatus.Connection
+	stack := wandb.Spec.SupportBundle.VictoriaStack
+	var exports []victoriaExport
+	for _, export := range []victoriaExport{
+		{"metrics", flagVictoriaMetrics, conn.MetricsReadEndpoint, victoriaMaxLines, stack.Metrics},
+		{"logs", flagVictoriaLogs, conn.LogsReadEndpoint, victoriaMaxLines, stack.Logs},
+		{"traces", flagVictoriaTraces, conn.TracesReadEndpoint, victoriaMaxSpans, stack.Traces},
+	} {
+		if export.endpoint == "" || (export.spec.Enabled != nil && !*export.spec.Enabled) {
+			continue
+		}
+		exports = append(exports, export)
+	}
+	namespace := conn.ManagedNamespace
+	if namespace == "" {
+		namespace = wandb.Namespace
+	}
+	return namespace, exports
+}
+
+// victoriaArgs sends the enabled exports and their bounds; anything unset keeps the collector's default.
+func victoriaArgs(wandb *apiv2.WeightsAndBiases) []string {
+	namespace, exports := victoriaExports(wandb)
+	if len(exports) == 0 {
 		return nil
 	}
-	endpoints := cfg.ResolveEndpoints()
-	stack := &victoriaStack{
-		Name:      victoriaCollectorName,
-		Namespace: telemetryNamespace(wandb, cfg),
-		Lookback:  victoriaLookback,
-		Timeout:   victoriaTimeout,
+	stack := wandb.Spec.SupportBundle.VictoriaStack
+	args := []string{flagVictoriaNamespace + "=" + namespace}
+	var options []string
+	for _, export := range exports {
+		args = append(args, export.flag+"="+export.endpoint)
+		// the collector rejects options for an export it wasn't given, so they're only sent with the endpoint
+		if export.spec.LookbackDuration != "" {
+			options = append(options, flagVictoriaOption+"="+export.name+"."+victoriaLookbackDuration+"="+export.spec.LookbackDuration)
+		}
+		if export.spec.MaxRecords != nil {
+			options = append(options, fmt.Sprintf("%s=%s.%s=%d", flagVictoriaOption, export.name, export.capKey, *export.spec.MaxRecords))
+		}
 	}
-	if selected[VictoriaMetrics] {
-		stack.Metrics = &victoriaEndpoint{Endpoint: endpoints.MetricsReadEndpoint}
+	if stack.LookbackDuration != "" {
+		args = append(args, flagVictoriaOption+"="+victoriaLookbackDuration+"="+stack.LookbackDuration)
 	}
-	if selected[VictoriaLogs] {
-		stack.Logs = &victoriaEndpoint{Endpoint: endpoints.LogsReadEndpoint}
+	if stack.Timeout != "" {
+		args = append(args, flagVictoriaOption+"="+victoriaTimeout+"="+stack.Timeout)
 	}
-	if selected[VictoriaTraces] {
-		stack.Traces = &victoriaEndpoint{Endpoint: endpoints.TracesReadEndpoint}
-	}
-	if stack.Metrics == nil && stack.Logs == nil && stack.Traces == nil {
-		return nil
-	}
-	return stack
+	return append(args, options...)
 }
