@@ -9,7 +9,7 @@ on:
 jobs:
   chart-validation:
     name: Chart Validation
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER_LIGHT || 'ubuntu-latest' }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
