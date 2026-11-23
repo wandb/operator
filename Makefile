@@ -109,22 +109,6 @@ vet: ## Run go vet against code.
 test: manifests generate sync-crd-embed vet setup-envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test -v $$(go list ./... | grep -v /e2e | grep -v /vendored) -coverprofile cover.out
 
-.PHONY: setup-local-webhook
-setup-local-webhook: ## Setup local webhook development environment with certificates.
-	@./scripts/setup-local-webhook.sh
-
-.PHONY: run-local-webhook
-run-local-webhook: manifests generate fmt vet ## Run controller locally with webhook support.
-	@if [ ! -d ".local-webhook-certs" ]; then \
-		echo "Webhook certificates not found. Run 'make setup-local-webhook' first."; \
-		exit 1; \
-	fi
-	go run ./cmd/manager \
-		--webhook-cert-path=.local-webhook-certs \
-		--webhook-cert-name=tls.crt \
-		--webhook-cert-key=tls.key \
-		--v2-webhook=true
-
 # TODO(user): To use a different vendor for e2e tests, modify the setup under 'tests/e2e'.
 # The default setup assumes Kind is pre-installed and builds/loads the Manager Docker image locally.
 # Prometheus and CertManager are installed by default; skip with:
@@ -349,10 +333,6 @@ endif
 .PHONY: install
 install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/crd | $(KUBECTL) apply -f - --server-side
-
-.PHONY: apply-local-dev
-apply-local-dev: manifests kustomize ## Apply local webhook development configuration (CRDs, RBAC, webhook).
-	$(KUSTOMIZE) build config/local-dev | $(KUBECTL) apply -f - --server-side
 
 .PHONY: uninstall
 uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
