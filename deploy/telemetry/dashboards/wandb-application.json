@@ -42,7 +42,7 @@
       "gridPos": {"h": 6, "w": 24, "x": 0, "y": 0},
       "options": {
         "mode": "markdown",
-        "content": "# W&B Application\n\nAnswers **\"is the whole W&B app slow or erroring for users?\"** Start here when users (AI engineers) report the UI is slow, requests fail, or the SDK can't reach the server.\n\nThe top sections cover **overall API health** — request rate and errors overall and by request type (`graphql`, `files`, filestream, …), and latency. The **GraphQL errors** section attributes failures to the specific service/operation responsible. The **Operations & background** section shows read-path, artifact, and export span latencies from traces. The **Run Keys** section shows how many distinct metric keys active runs log, with recommended limits by instance size. The **FileStream** section shows whether live run logging (history, events, console logs) is failing or slow. The **Nodes & storage capacity** section shows CPU, memory, network, disk and free space per node, and free space on each persistent volume.\n\nUse the **W&B Namespace** dropdown to pick the W&B install. Use **Open Traces in Explore** (top-right) to drill from any symptom to a real trace."
+        "content": "# W&B Application\n\nAnswers **\"is the whole W&B app slow or erroring for users?\"** Start here when users (AI engineers) report the UI is slow, requests fail, or the SDK can't reach the server.\n\nThe top sections cover **overall API health** — request rate and errors overall and by request type (`graphql`, `files`, filestream, …), and latency. The **GraphQL errors** section attributes failures to the specific service/operation responsible. The **Operations & background** section shows read-path, artifact, and export span latencies from traces. The **Run Keys** section shows how many distinct metric keys active runs log, with recommended limits by instance size. The **FileStream** section shows whether live run logging (history, events, console logs) is failing or slow. The **Nodes & storage capacity** section shows CPU, memory, network, disk and free space per node.\n\nUse the **W&B Namespace** dropdown to pick the W&B install. Use **Open Traces in Explore** (top-right) to drill from any symptom to a real trace."
       }
     },
     {
@@ -1098,7 +1098,7 @@
       "type": "timeseries",
       "title": "Node CPU and Memory Utilization",
       "datasource": { "type": "prometheus", "uid": "${DS_VICTORIAMETRICS}" },
-      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 284 },
+      "gridPos": { "h": 13, "w": 16, "x": 0, "y": 284 },
       "targets": [
         {
           "expr": "100 * sum by (node) (rate(container_cpu_usage_seconds_total{id=\"/\"}[$__rate_interval])) / sum by (node) (machine_cpu_cores)",
@@ -1121,17 +1121,17 @@
     {
       "type": "text",
       "title": "About: Node CPU and memory",
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 284 },
+      "gridPos": { "h": 13, "w": 8, "x": 16, "y": 284 },
       "options": {
         "mode": "markdown",
-        "content": "**What it shows** — how busy each node is: CPU in use as a share of its cores, and memory working set as a share of its RAM. Working set is the number the kubelet uses to evict pods, so it tracks real eviction and OOM risk.\n\n**What bad looks like** — CPU sustained above ~80%, or memory above ~85%. Above ~90% memory, expect pod evictions or OOM kills.\n\n**Do next** — check **Workload Resources** on the Telemetry Overview to see which pods use it, and pod restarts/OOMs. If a node stays hot under normal load, add nodes or move up an instance size.\n\n**Note** — these are whole-node numbers (every workload on the node, not just W&B), so they ignore the namespace picker."
+        "content": "**What it shows** — how busy each node is: CPU in use as a share of its cores, and memory working set as a share of its RAM. Working set is what the kubelet uses for memory evictions.\n\n**What bad looks like** — CPU or memory sustained above ~80%. W&B's backend services are CPU-intensive, and that leaves little headroom for load spikes; treat it as urgent when it coincides with slow requests, restarts, OOM kills or evictions. The kubelet evicts pods when free memory falls below its threshold (100Mi by default), and a container is OOM-killed when it exceeds its own memory limit.\n\n**Do next** — find the pods using the node. **Workload Resources** on the Telemetry Overview covers only W&B application pods; for every pod on the node, run these in Explore, replacing `<node>` with the node from the legend:\n\n```\ntopk(10, max by (namespace, pod) (rate(container_cpu_usage_seconds_total{node=\"<node>\", pod!=\"\"}[5m])))\n```\n\n```\ntopk(10, max by (namespace, pod) (container_memory_working_set_bytes{node=\"<node>\", pod!=\"\"}))\n```\n\n**Container Restarts** on W&B Managed Install Performance shows restarts, including OOM kills. Pods with CPU limits also report throttling (`container_cpu_cfs_throttled_periods_total`), which slows requests even when the database is healthy. Then scale what's short:\n\n- **A managed service:** raise its `config.resources`, for example `spec.mysql.<instance>.managedMysql.config.resources`. Explicit values override the size profile.\n- **A W&B application:** raise its replica bounds in `spec.wandb.applications.<app>.autoscaling`.\n- **Everything:** choose a larger `spec.size` (WSM `--size`).\n- **The nodes:** add nodes, or use a node type large enough for your biggest pod's requests. Pods whose requests don't fit stay Pending.\n\n**Note** — whole-node numbers (every workload on the node, not just W&B), so they ignore the namespace picker."
       }
     },
     {
       "type": "timeseries",
       "title": "Node Network I/O",
       "datasource": { "type": "prometheus", "uid": "${DS_VICTORIAMETRICS}" },
-      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 292 },
+      "gridPos": { "h": 11, "w": 16, "x": 0, "y": 297 },
       "targets": [
         {
           "expr": "sum by (node) (rate(container_network_receive_bytes_total{id=\"/\", interface!~\"lo|nodelocaldns|veth.*|cali.*|cilium.*|lxc.*|gke.*|flannel.*|cni.*|tunl.*|vxlan.*|docker.*|br-.*\"}[$__rate_interval]))",
@@ -1154,17 +1154,17 @@
     {
       "type": "text",
       "title": "About: Node network",
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 292 },
+      "gridPos": { "h": 11, "w": 8, "x": 16, "y": 297 },
       "options": {
         "mode": "markdown",
-        "content": "**What it shows** — network throughput on each node's real interfaces. Inbound is above zero, outbound below.\n\n**What bad looks like** — a plateau at the same level during busy periods, which suggests the node or instance type is at its bandwidth limit. Large artifact uploads and downloads show up here.\n\n**Do next** — compare with **Node Disk I/O** and object storage throughput. If a node is pinned at its limit, spread the workload across nodes or use an instance type with more bandwidth."
+        "content": "**What it shows** — network throughput on each node's real interfaces. Inbound is above zero, outbound below. SDK run logging arrives as inbound traffic; artifact uploads and downloads appear here only when they pass through the cluster, such as with in-cluster SeaweedFS.\n\n**What bad looks like** — a plateau at the same level during busy periods, which suggests the node or instance type is at its bandwidth limit.\n\n**Do next** — select the slowdown, then check the same node and time on **Node Disk I/O** below. Then run these in Explore over that window, replacing `<node>` with the node from the legend.\n\nPods writing to disk on that node:\n\n```\ntopk(10, max by (namespace, pod, device) (rate(container_fs_writes_bytes_total{node=\"<node>\", pod!=\"\"}[5m])))\n```\n\nManaged SeaweedFS requests/sec, across all filers (not bytes on this node):\n\n```\nsum(rate(SeaweedFS_filer_request_total[5m]))\n```\n\nFor an external object store, use its bucket metrics. If disk activity rose too, continue with **About: Node disk**. Coincident peaks alone don't prove saturation.\n\n**Note** — whole-node numbers, so they ignore the namespace picker."
       }
     },
     {
       "type": "timeseries",
       "title": "Node Disk I/O",
       "datasource": { "type": "prometheus", "uid": "${DS_VICTORIAMETRICS}" },
-      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 300 },
+      "gridPos": { "h": 15, "w": 16, "x": 0, "y": 308 },
       "targets": [
         {
           "expr": "sum by (node) (rate(container_fs_reads_bytes_total{id=\"/\", device!~\".*(loop|sr|dm-).*\"}[$__rate_interval]))",
@@ -1187,17 +1187,17 @@
     {
       "type": "text",
       "title": "About: Node disk",
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 300 },
+      "gridPos": { "h": 15, "w": 8, "x": 16, "y": 308 },
       "options": {
         "mode": "markdown",
-        "content": "**What it shows** — disk throughput on each node, including the disks behind MySQL, ClickHouse, Kafka and object storage volumes.\n\n**What bad looks like** — writes pinned at the same level during load, often the disk's provisioned throughput limit. That slows MySQL and run logging.\n\n**Do next** — check MySQL row-lock and query time on the Telemetry Overview. If the disk is at its limit, move to a faster disk class (more IOPS/throughput) or a larger disk where throughput scales with size."
+        "content": "**What it shows** — read and write throughput on each node across all its disks, including those behind MySQL, ClickHouse, Kafka and object storage volumes.\n\n**What bad looks like** — reads or writes pinned at the same level during load, often a disk's provisioned throughput limit. Sustained high reads often point to MySQL buffer-pool pressure, and write bursts track run initialization (`wandb.init()`) load on MySQL. Either slows MySQL and run logging.\n\n**Do next** — find the pods writing on that node, replacing `<node>` with the node from the legend:\n\n```\ntopk(10, max by (namespace, pod, device) (rate(container_fs_writes_bytes_total{node=\"<node>\", pod!=\"\"}[5m])))\n```\n\nTo trace a pod to its disk, run these kube-state-metrics queries in Explore as instant tables: the first gives the pod's claim, the second its volume (`volumename`) and StorageClass, and the third its disk (`csi_volume_handle`).\n\n```\nkube_pod_spec_volumes_persistentvolumeclaims_info{namespace=\"$namespace\", pod=\"<pod>\"}\nkube_persistentvolumeclaim_info{namespace=\"$namespace\", persistentvolumeclaim=\"<claim>\"}\nkube_persistentvolume_info{persistentvolume=\"<volumename>\"}\n```\n\nWithout kube-state-metrics (installed and scraped with `telemetry.scrape.kubeStateMetrics`), use `kubectl get pvc -n $namespace -o wide`, then `kubectl get pv <volume> -o jsonpath='{.spec.csi.volumeHandle}'`. In your storage provider, check that disk's latency and throttling during the slowdown; for MySQL, also check row-lock and query time on the Telemetry Overview. Then:\n\n- **A disk is at its limit:** managed claims use the cluster's default StorageClass; the W&B resource sets only their size (for example `spec.mysql.<instance>.managedMysql.storageSize`). A larger size adds performance only on disk types that scale with size, such as GCP pd-balanced or pd-ssd, not AWS gp3 or GCP Hyperdisk. Otherwise, raise provisioned IOPS or throughput with your provider, or migrate the data to a faster StorageClass; changing the default StorageClass affects only new claims.\n- **The node is at its total disk limit:** use a node type with higher disk limits.\n\n**Note** — whole-node numbers, so they ignore the namespace picker."
       }
     },
     {
       "type": "timeseries",
       "title": "Node Filesystem Free",
       "datasource": { "type": "prometheus", "uid": "${DS_VICTORIAMETRICS}" },
-      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 308 },
+      "gridPos": { "h": 10, "w": 16, "x": 0, "y": 323 },
       "targets": [
         {
           "expr": "min by (node, device) (1 - container_fs_usage_bytes{id=\"/\", device=~\"/dev/.+\", device!~\"/dev/(shm|kube_shm)\"} / container_fs_limit_bytes{id=\"/\", device=~\"/dev/.+\", device!~\"/dev/(shm|kube_shm)\"})",
@@ -1224,45 +1224,10 @@
     {
       "type": "text",
       "title": "About: Node filesystem",
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 308 },
+      "gridPos": { "h": 10, "w": 8, "x": 16, "y": 323 },
       "options": {
         "mode": "markdown",
-        "content": "**What it shows** — free space on each node's local disks: container images, pod logs and emptyDir scratch space.\n\n**What bad looks like** — the main data partition below ~15% free. The kubelet starts evicting pods (DiskPressure) at about 10–15%. A small read-only OS partition (for example `/dev/root` on Container-Optimized OS) sits at a fixed level and can be ignored.\n\n**Do next** — clean up unused images, check for pods writing large logs or emptyDir data, or increase the node boot disk size."
-      }
-    },
-    {
-      "type": "bargauge",
-      "title": "Persistent Volume Free",
-      "datasource": { "type": "prometheus", "uid": "${DS_VICTORIAMETRICS}" },
-      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 316 },
-      "targets": [
-        {
-          "expr": "sort(min by (persistentvolumeclaim) (kubelet_volume_stats_available_bytes{namespace=\"$namespace\"} / kubelet_volume_stats_capacity_bytes{namespace=\"$namespace\"}))",
-          "legendFormat": "{{persistentvolumeclaim}}",
-          "refId": "A",
-          "instant": true
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percentunit",
-          "min": 0,
-          "max": 1,
-          "noValue": "No volume stats yet",
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "orange", "value": 0.1 }, { "color": "green", "value": 0.2 }] }
-        },
-        "overrides": []
-      },
-      "options": { "orientation": "horizontal", "displayMode": "gradient", "showUnfilled": true, "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
-      "description": "Free space on each persistent volume claim in the W&B namespace (MySQL, ClickHouse, Kafka, Redis, object storage), lowest first. From the kubelet's kubelet_volume_stats metrics."
-    },
-    {
-      "type": "text",
-      "title": "About: Persistent volumes",
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 316 },
-      "options": {
-        "mode": "markdown",
-        "content": "**What it shows** — how full each persistent volume used by W&B is, lowest free space first. The claim name tells you the service: `mysql-data-…` (MySQL), `…chi…` (ClickHouse), `data-wandb-kafka…` (Kafka), `…seaweedfs…` (object storage), `wandb-redis…` (Redis).\n\n**What bad looks like** — any volume below ~20% free, and anything below 10% is urgent. A full MySQL or Kafka volume stops writes, so runs stop logging.\n\n**Do next** — expand the volume (if the storage class allows it) or raise the size in the W&B resource. For MySQL, check retention and binlog size; for object storage, check artifact retention."
+        "content": "**What it shows** — free space on each node's local disks: container images, pod logs and emptyDir scratch space.\n\n**What bad looks like** — free space falling toward the kubelet's thresholds. By default it deletes unused images once the disk is 85% full; below 10% free (15% for a separate image filesystem), the node reports DiskPressure and can evict pods.\n\n**Do next** — find which pods use the space; this dashboard doesn't collect per-pod ephemeral usage:\n\n```\nkubectl get --raw /api/v1/nodes/<node>/proxy/stats/summary | jq '[.pods[] | {namespace: .podRef.namespace, pod: .podRef.name, bytes: .[\"ephemeral-storage\"].usedBytes}] | sort_by(.bytes) | reverse | .[:10]'\n```\n\nThe bundled VictoriaMetrics, VictoriaLogs and VictoriaTraces stores keep their data on the node disk; `telemetry.retentionPeriod` (default `1d`) controls how much they keep. If space stays low, add nodes to spread the workload or increase the node pool's boot disk size (this usually replaces the nodes).\n\n**Note** — whole-node numbers, so they ignore the namespace picker."
       }
     }
   ],

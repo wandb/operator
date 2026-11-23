@@ -279,7 +279,6 @@ telemetry:
   scrape:
     enabled: true
     kubeletCadvisor: true
-    kubeletVolumeStats: true
     operators: true
     wandbApi: true
     infrastructure: true
