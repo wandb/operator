@@ -1,6 +1,6 @@
 # PR WESTest testing
 
-[The PR workflow](../.github/workflows/pr-westest.yaml) runs eight local Kind
+[The PR workflow](../../.github/workflows/pr-westest.yaml) runs eight local Kind
 scenarios against the PR merge commit's operator checkout:
 
 - `local-kind-ingress`
@@ -30,7 +30,7 @@ in parallel. The workflow prepares the amd64 Watchtower binary and Grafana
 plugins required by the operator Dockerfile, then mounts the checkout read-only
 into the public WESTest `0.8.0` container.
 
-The shared [runner action](../.github/actions/westest-run/action.yml) passes
+The shared [runner action](../../.github/actions/westest-run/action.yml) passes
 `--operator-repo /src/operator` to both `westest config` and `westest run` and
 explicitly enables local builds. For the enabled scenarios, WESTest builds the
 checkout's Dockerfile, loads that image directly into Kind, and installs a
@@ -50,7 +50,7 @@ to the host Docker daemon.
 
 Operator artifacts stay within the test environment; the workflow does not
 publish them to a release registry. The separate
-[nightly workflow](nightly-westest-testing.md) continues to test published charts.
+[nightly workflow](nightly-westest.md) continues to test published charts.
 
 Each scenario has a 60-minute execution budget plus 11 minutes for cancellation
 cleanup, within a 90-minute job limit. Failures do not cancel sibling scenarios.

@@ -8,10 +8,10 @@ name: Nightly WESTest
 #                                    to label it.
 #   - manual + `operator_version` -> skip the build and test that already-published
 #                                    chart version.
-# See docs/nightly-westest-testing.md for setup and first-run validation.
+# See docs/developer/nightly-westest.md for setup and first-run validation.
 #
 # Do NOT enable the schedule trigger until the prerequisites in
-# docs/nightly-westest-testing.md are met and cloud cleanup is validated.
+# docs/developer/nightly-westest.md are met and cloud cleanup is validated.
 
 on:
   workflow_dispatch:

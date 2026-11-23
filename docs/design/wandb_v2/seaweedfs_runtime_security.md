@@ -1,5 +1,8 @@
 # Managed SeaweedFS runtime security
 
+Status: implemented design record. See [workload security development](../../developer/workload-security.md)
+and [user configuration](../../user/workload-security.md) for current guidance.
+
 The renderer uses the supported `podSecurityContext` and
 `containerSecurityContext` fields on all four components: master, volume, filer,
 and S3. The pinned seaweedfs-operator chart 0.1.35 (controller 1.0.32) and its CRD
