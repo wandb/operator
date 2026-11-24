@@ -42,7 +42,7 @@
       "gridPos": {"h": 6, "w": 24, "x": 0, "y": 0},
       "options": {
         "mode": "markdown",
-        "content": "# W&B Application\n\nAnswers **\"is the whole W&B app slow or erroring for this customer?\"** Start here when a customer reports the UI is slow, requests fail, or the SDK can't reach the server.\n\nThe top sections cover **overall API health** — request rate and errors overall and by request type (`graphql`, `files`, filestream, …), and latency. The **GraphQL errors** section attributes failures to the specific service/operation responsible. The **Operations & background** section shows read-path, artifact, and export span latencies from traces. The **Run Keys** section shows how many distinct metric keys active runs log, with recommended limits by instance size. The **FileStream** section shows whether live run logging (history, events, console logs) is failing or slow.\n\nUse the **W&B Namespace** dropdown to pick the customer's install. Use **Open Traces in Explore** (top-right) to drill from any symptom to a real trace."
+        "content": "# W&B Application\n\nAnswers **\"is the whole W&B app slow or erroring for users?\"** Start here when users (AI engineers) report the UI is slow, requests fail, or the SDK can't reach the server.\n\nThe top sections cover **overall API health** — request rate and errors overall and by request type (`graphql`, `files`, filestream, …), and latency. The **GraphQL errors** section attributes failures to the specific service/operation responsible. The **Operations & background** section shows read-path, artifact, and export span latencies from traces. The **Run Keys** section shows how many distinct metric keys active runs log, with recommended limits by instance size. The **FileStream** section shows whether live run logging (history, events, console logs) is failing or slow. The **Nodes & storage capacity** section shows CPU, memory, network, disk and free space per node, and free space on each persistent volume.\n\nUse the **W&B Namespace** dropdown to pick the W&B install. Use **Open Traces in Explore** (top-right) to drill from any symptom to a real trace."
       }
     },
     {
@@ -101,7 +101,7 @@
       "gridPos": {"h": 8, "w": 8, "x": 16, "y": 15},
       "options": {
         "mode": "markdown",
-        "content": "**What it shows** — client errors (`4xx`) vs server errors (`5xx`) as two clean lines, so you can tell whose fault it is.\n\n**What bad looks like** — any sustained `5xx` is a server problem. A `4xx` spike is usually the customer's SDK/auth (version mismatch, bad token, malformed query) and is often *not* an outage.\n\n**Do next** — 5xx → check API pod logs. 4xx → confirm SDK version against **Service Image Versions** on [W&B Field Investigation](/d/wandb-field-investigation).\n\n**Note** — GraphQL errors return HTTP `200` (the error is in the response body), so they don't appear here; use the **GraphQL errors** section below for those. This panel catches HTTP transport/server failures; a flat `0` means healthy."
+        "content": "**What it shows** — client errors (`4xx`) vs server errors (`5xx`) as two clean lines, so you can tell whose fault it is.\n\n**What bad looks like** — any sustained `5xx` is a server problem. A `4xx` spike is usually the user's SDK/auth (version mismatch, bad token, malformed query) and is often *not* an outage.\n\n**Do next** — 5xx → check API pod logs. 4xx → confirm SDK version against **Service Image Versions** on [W&B Field Investigation](/d/wandb-field-investigation).\n\n**Note** — GraphQL errors return HTTP `200` (the error is in the response body), so they don't appear here; use the **GraphQL errors** section below for those. This panel catches HTTP transport/server failures; a flat `0` means healthy."
       }
     },
     {
@@ -322,7 +322,7 @@
       "gridPos": {"h": 8, "w": 8, "x": 16, "y": 75},
       "options": {
         "mode": "markdown",
-        "content": "**What it shows** — the busiest GraphQL operations by request rate, from sampled traces. Good for seeing *what the customer's app is doing* and whether a particular operation surged.\n\n**What bad looks like** — one operation dominating far above normal (a client hot-loop or retry storm), or the whole stream going flat (traffic stopped).\n\n**Do next** — for *errors* by GraphQL service/operation, see the **GraphQL errors** section below. Note: spanmetrics have no namespace label, so this is not scoped to the selected install."
+        "content": "**What it shows** — the busiest GraphQL operations by request rate, from sampled traces. Good for seeing *what users are doing in the app* and whether a particular operation surged.\n\n**What bad looks like** — one operation dominating far above normal (a client hot-loop or retry storm), or the whole stream going flat (traffic stopped).\n\n**Do next** — for *errors* by GraphQL service/operation, see the **GraphQL errors** section below. Note: spanmetrics have no namespace label, so this is not scoped to the selected install."
       }
     },
     {
@@ -347,7 +347,7 @@
       "gridPos": {"h": 8, "w": 8, "x": 16, "y": 83},
       "options": {
         "mode": "markdown",
-        "content": "**What it shows** — the slowest GraphQL operations at p95, in milliseconds, from sampled traces.\n\n**What bad looks like** — an operation's p95 climbing into the seconds, especially if it lines up with the customer's complaint.\n\n**Do next** — Open Traces in Explore (top-right), filter to that operation, and read the resolver chain. For error attribution by service, see the **GraphQL errors** section below."
+        "content": "**What it shows** — the slowest GraphQL operations at p95, in milliseconds, from sampled traces.\n\n**What bad looks like** — an operation's p95 climbing into the seconds, especially if it lines up with a user's complaint.\n\n**Do next** — Open Traces in Explore (top-right), filter to that operation, and read the resolver chain. For error attribution by service, see the **GraphQL errors** section below."
       }
     },
     {
@@ -475,7 +475,7 @@
       "gridPos": {"h": 9, "w": 8, "x": 16, "y": 114},
       "options": {
         "mode": "markdown",
-        "content": "**What it shows** — the same service attribution over time, stacked so you can see *when* a service started erroring and whether it correlates with a deploy.\n\n**What bad looks like** — a service's band appearing or ballooning at a specific minute.\n\n**Do next** — line up the onset time with the **Service Image Versions** panel on [W&B Field Investigation](/d/wandb-field-investigation) (a rollout?) and with the customer's report. Then drill to a trace from that window."
+        "content": "**What it shows** — the same service attribution over time, stacked so you can see *when* a service started erroring and whether it correlates with a deploy.\n\n**What bad looks like** — a service's band appearing or ballooning at a specific minute.\n\n**Do next** — line up the onset time with the **Service Image Versions** panel on [W&B Field Investigation](/d/wandb-field-investigation) (a rollout?) and with the user's report. Then drill to a trace from that window."
       }
     },
     {
@@ -521,7 +521,7 @@
       "gridPos": {"h": 9, "w": 8, "x": 16, "y": 129},
       "options": {
         "mode": "markdown",
-        "content": "**What it shows** — p95 duration of the read-path spans (history reader / ClickHouse query) from sampled traces, split by span. Answers \"why won't the customer's charts load?\"\n\n**What bad looks like** — one span's p95 climbing into seconds, or a new span appearing at a specific minute.\n\n**Do next** — note the slow span and the minute it started, then **Open Traces in Explore** (top-right) and read the actual span chain. If the panel is empty, the span-name regex needs adjusting (see the panel description)."
+        "content": "**What it shows** — p95 duration of the read-path spans (history reader / ClickHouse query) from sampled traces, split by span. Answers \"why won't a user's charts load?\"\n\n**What bad looks like** — one span's p95 climbing into seconds, or a new span appearing at a specific minute.\n\n**Do next** — note the slow span and the minute it started, then **Open Traces in Explore** (top-right) and read the actual span chain. If the panel is empty, the span-name regex needs adjusting (see the panel description)."
       }
     },
     {
@@ -546,7 +546,7 @@
       "gridPos": {"h": 9, "w": 8, "x": 16, "y": 138},
       "options": {
         "mode": "markdown",
-        "content": "**What it shows** — p95 latency of artifact-related spans from sampled traces, split by span. Answers \"why is the customer's artifact upload/download slow?\"\n\n**What bad looks like** — one artifact span's p95 climbing into seconds.\n\n**Do next** — to see an individual slow artifact request end to end, use the **Open Traces in Explore** link (top-right), set the service to gorilla and filter for `duration > 3s` and an artifact operation, then read the span chain. If this panel is empty, adjust the span-name regex (see the panel description)."
+        "content": "**What it shows** — p95 latency of artifact-related spans from sampled traces, split by span. Answers \"why is a user's artifact upload/download slow?\"\n\n**What bad looks like** — one artifact span's p95 climbing into seconds.\n\n**Do next** — to see an individual slow artifact request end to end, use the **Open Traces in Explore** link (top-right), set the service to gorilla and filter for `duration > 3s` and an artifact operation, then read the span chain. If this panel is empty, adjust the span-name regex (see the panel description)."
       }
     },
     {
@@ -1086,6 +1086,183 @@
       "options": {
         "mode": "markdown",
         "content": "**What it shows** \u2014 connections the pool closed on purpose: too old (*max lifetime*), too many idle (*max idle*), or idle too long (*max idle time*).\n\n**What bad looks like** \u2014 a high, steady *max lifetime* or *max idle* rate during busy periods: the pool keeps tearing down and reopening connections, which adds connection-setup load on MySQL.\n\n**Do next** \u2014 a low background rate is normal. If it's high, compare with **Connections vs max_connections** and MySQL CPU on the Telemetry Overview, and share it with W&B support when reporting slowness."
+      }
+    },
+    {
+      "type": "row",
+      "title": "Nodes & storage capacity",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 283 },
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "Node CPU and Memory Utilization",
+      "datasource": { "type": "prometheus", "uid": "${DS_VICTORIAMETRICS}" },
+      "gridPos": { "h": 13, "w": 16, "x": 0, "y": 284 },
+      "targets": [
+        {
+          "expr": "100 * sum by (node) (rate(container_cpu_usage_seconds_total{id=\"/\"}[$__rate_interval])) / sum by (node) (machine_cpu_cores)",
+          "legendFormat": "{{node}} CPU",
+          "refId": "A"
+        },
+        {
+          "expr": "100 * sum by (node) (container_memory_working_set_bytes{id=\"/\"}) / sum by (node) (machine_memory_bytes)",
+          "legendFormat": "{{node}} memory",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100 }, "overrides": [] },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "lastNotNull"] },
+        "tooltip": { "mode": "multi" }
+      },
+      "description": "Whole-node CPU busy % and memory working set % of capacity, from the kubelet's cAdvisor root cgroup (id=\"/\"). Covers every process on the node, not just W&B."
+    },
+    {
+      "type": "text",
+      "title": "About: Node CPU and memory",
+      "gridPos": { "h": 13, "w": 8, "x": 16, "y": 284 },
+      "options": {
+        "mode": "markdown",
+        "content": "**What it shows** — how busy each node is: CPU in use as a share of its cores, and memory working set as a share of its RAM. Working set is what the kubelet uses for memory evictions.\n\n**What bad looks like** — CPU or memory sustained above ~80%. W&B's backend services are CPU-intensive, and that leaves little headroom for load spikes; treat it as urgent when it coincides with slow requests, restarts, OOM kills or evictions. The kubelet evicts pods when free memory falls below its threshold (100Mi by default), and a container is OOM-killed when it exceeds its own memory limit.\n\n**Do next** — find the pods using the node. **Workload Resources** on the Telemetry Overview covers only W&B application pods; for every pod on the node, run these in Explore, replacing `<node>` with the node from the legend:\n\n```\ntopk(10, max by (namespace, pod) (rate(container_cpu_usage_seconds_total{node=\"<node>\", pod!=\"\"}[5m])))\n```\n\n```\ntopk(10, max by (namespace, pod) (container_memory_working_set_bytes{node=\"<node>\", pod!=\"\"}))\n```\n\nLook for OOM kills with `kubectl get pods -n $namespace`, which shows each pod's restart count, then `kubectl describe pod <pod> -n $namespace`, which shows `OOMKilled` under **Last State**. Also look for CPU throttling in pods with CPU limits (`container_cpu_cfs_throttled_periods_total`), which slows requests even when the database is healthy. Once you've identified the OOM-killed or throttled pods, scale what's short:\n\n- **A larger size profile:** set a larger `spec.size` (WSM `--size`), which raises CPU and memory across W&B and the services it runs in the cluster.\n- **More nodes:** add nodes so pods can spread across more capacity.\n- **A larger node type:** use one big enough for your biggest pod's requests; pods whose requests don't fit stay Pending."
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Node Network I/O",
+      "datasource": { "type": "prometheus", "uid": "${DS_VICTORIAMETRICS}" },
+      "gridPos": { "h": 11, "w": 16, "x": 0, "y": 297 },
+      "targets": [
+        {
+          "expr": "sum by (node) (rate(container_network_receive_bytes_total{id=\"/\", interface!~\"lo|nodelocaldns|veth.*|cali.*|cilium.*|lxc.*|gke.*|flannel.*|cni.*|tunl.*|vxlan.*|docker.*|br-.*\"}[$__rate_interval]))",
+          "legendFormat": "{{node}} in",
+          "refId": "A"
+        },
+        {
+          "expr": "-sum by (node) (rate(container_network_transmit_bytes_total{id=\"/\", interface!~\"lo|nodelocaldns|veth.*|cali.*|cilium.*|lxc.*|gke.*|flannel.*|cni.*|tunl.*|vxlan.*|docker.*|br-.*\"}[$__rate_interval]))",
+          "legendFormat": "{{node}} out",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "binBps" }, "overrides": [] },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi" }
+      },
+      "description": "Bytes/sec in (above zero) and out (below zero) on each node's physical interfaces. Pod veths, overlay tunnels and loopback are excluded so traffic isn't double-counted."
+    },
+    {
+      "type": "text",
+      "title": "About: Node network",
+      "gridPos": { "h": 11, "w": 8, "x": 16, "y": 297 },
+      "options": {
+        "mode": "markdown",
+        "content": "**What it shows** — network throughput on each node's real interfaces. Inbound is above zero, outbound below. SDK run logging arrives as inbound traffic; artifact uploads and downloads appear here only when they pass through the cluster, such as with in-cluster SeaweedFS.\n\n**What bad looks like** — a plateau at the same level during busy periods, which suggests the node or instance type is at its bandwidth limit.\n\n**Do next** — select the slowdown, then check the same node and time on **Node Disk I/O** below. Then run these in Explore over that window, replacing `<node>` with the node from the legend.\n\nPods writing to disk on that node:\n\n```\ntopk(10, max by (namespace, pod, device) (rate(container_fs_writes_bytes_total{node=\"<node>\", pod!=\"\"}[5m])))\n```\n\nManaged SeaweedFS requests/sec, across all filers (not bytes on this node):\n\n```\nsum(rate(SeaweedFS_filer_request_total[5m]))\n```\n\nFor an external object store, use its bucket metrics. If disk activity rose too, continue with **About: Node disk**. Coincident peaks alone don't prove saturation."
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Node Disk I/O",
+      "datasource": { "type": "prometheus", "uid": "${DS_VICTORIAMETRICS}" },
+      "gridPos": { "h": 15, "w": 16, "x": 0, "y": 308 },
+      "targets": [
+        {
+          "expr": "sum by (node) (rate(container_fs_reads_bytes_total{id=\"/\", device!~\".*(loop|sr|dm-).*\"}[$__rate_interval]))",
+          "legendFormat": "{{node}} read",
+          "refId": "A"
+        },
+        {
+          "expr": "-sum by (node) (rate(container_fs_writes_bytes_total{id=\"/\", device!~\".*(loop|sr|dm-).*\"}[$__rate_interval]))",
+          "legendFormat": "{{node}} write",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "binBps" }, "overrides": [] },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi" }
+      },
+      "description": "Bytes/sec read (above zero) and written (below zero) per node, across all block devices including attached persistent volume disks. Loop, CD-ROM and device-mapper devices are excluded to avoid double counting."
+    },
+    {
+      "type": "text",
+      "title": "About: Node disk",
+      "gridPos": { "h": 15, "w": 8, "x": 16, "y": 308 },
+      "options": {
+        "mode": "markdown",
+        "content": "**What it shows** — read and write throughput on each node across all its disks, including those behind MySQL, ClickHouse, Kafka and object storage volumes.\n\n**What bad looks like** — reads or writes pinned at the same level during load, often a disk's provisioned throughput limit. Sustained high reads often point to MySQL buffer-pool pressure, and write bursts track run initialization (`wandb.init()`) load on MySQL. Either slows MySQL and run logging.\n\n**Do next** — find the pods writing on that node, replacing `<node>` with the node from the legend:\n\n```\ntopk(10, max by (namespace, pod, device) (rate(container_fs_writes_bytes_total{node=\"<node>\", pod!=\"\"}[5m])))\n```\n\nTo trace a pod to its disk, run these in order: the first lists the pod's claims, the second shows a claim's volume and StorageClass, and the third shows the volume's disk.\n\n```\nkubectl get pod <pod> -n $namespace -o jsonpath='{.spec.volumes[*].persistentVolumeClaim.claimName}'\nkubectl get pvc <claim> -n $namespace -o wide\nkubectl get pv <volume> -o jsonpath='{.spec.csi.volumeHandle}'\n```\n\nIn your storage provider, check that disk's latency and throttling during the slowdown; for MySQL, also check row-lock and query time on the Telemetry Overview. Then:\n\n- **A disk is at its limit:** managed claims use the cluster's default StorageClass.\n- **The node is at its total disk limit:** use a node type with higher disk limits."
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Node Filesystem Free",
+      "datasource": { "type": "prometheus", "uid": "${DS_VICTORIAMETRICS}" },
+      "gridPos": { "h": 10, "w": 16, "x": 0, "y": 323 },
+      "targets": [
+        {
+          "expr": "min by (node, device) (1 - container_fs_usage_bytes{id=\"/\", device=~\"/dev/.+\", device!~\"/dev/(shm|kube_shm)\"} / container_fs_limit_bytes{id=\"/\", device=~\"/dev/.+\", device!~\"/dev/(shm|kube_shm)\"})",
+          "legendFormat": "{{node}} {{device}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "orange", "value": 0.1 }, { "color": "green", "value": 0.2 }] },
+          "custom": { "thresholdsStyle": { "mode": "line" } }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["min", "lastNotNull"] },
+        "tooltip": { "mode": "multi" }
+      },
+      "description": "Free space on each node's own filesystems (where container images, logs and emptyDir volumes live), from the kubelet's cAdvisor. Persistent volumes are in the next panel."
+    },
+    {
+      "type": "text",
+      "title": "About: Node filesystem",
+      "gridPos": { "h": 10, "w": 8, "x": 16, "y": 323 },
+      "options": {
+        "mode": "markdown",
+        "content": "**What it shows** — free space on each node's local disks: container images, pod logs and emptyDir scratch space.\n\n**What bad looks like** — free space falling toward the kubelet's thresholds. By default it deletes unused images once the disk is 85% full; below 10% free (15% for a separate image filesystem), the node reports DiskPressure and can evict pods.\n\n**Do next** — find which pods use the space:\n\n```\nkubectl get --raw /api/v1/nodes/<node>/proxy/stats/summary | jq '[.pods[] | {namespace: .podRef.namespace, pod: .podRef.name, bytes: .[\"ephemeral-storage\"].usedBytes}] | sort_by(.bytes) | reverse | .[:10]'\n```"
+      }
+    },
+    {
+      "type": "bargauge",
+      "title": "Persistent Volume Free",
+      "datasource": { "type": "prometheus", "uid": "${DS_VICTORIAMETRICS}" },
+      "gridPos": { "h": 15, "w": 16, "x": 0, "y": 333 },
+      "targets": [
+        {
+          "expr": "sort(min by (persistentvolumeclaim) (kubelet_volume_stats_available_bytes{namespace=\"$namespace\"} / kubelet_volume_stats_capacity_bytes{namespace=\"$namespace\"}))",
+          "legendFormat": "{{persistentvolumeclaim}}",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "noValue": "No volume stats yet",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "orange", "value": 0.03 }, { "color": "green", "value": 0.15 }] }
+        },
+        "overrides": []
+      },
+      "options": { "orientation": "horizontal", "displayMode": "gradient", "showUnfilled": true, "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "description": "Free space on each persistent volume claim in the W&B namespace (MySQL, ClickHouse, Kafka, Redis, object storage), lowest first. From the kubelet's kubelet_volume_stats metrics."
+    },
+    {
+      "type": "text",
+      "title": "About: Persistent volumes",
+      "gridPos": { "h": 15, "w": 8, "x": 16, "y": 333 },
+      "options": {
+        "mode": "markdown",
+        "content": "**What it shows** — free space on each persistent volume claim in the W&B namespace, lowest first. The claim name identifies the service (see **Do next**).\n\n**What bad looks like** — free space that keeps falling, or too little left for expected growth. When a volume fills, the service on it can no longer write, and unlike node disks, the kubelet doesn't free space or evict anything for persistent volumes. Orange marks less than 15% free and red less than 3%, the levels the widely used Kubernetes volume alerts (kubernetes-mixin) use; they warn at 15% only when the volume is also on track to fill within four days.\n\n**Do next** — find the claims on track to fill within four days:\n\n```\npredict_linear(kubelet_volume_stats_available_bytes{namespace=\"$namespace\"}[6h], 4 * 24 * 3600) < 0\n```\n\nThen raise the claim's size in the W&B resource, under the existing `spec.<service>.<instance>` key, for example `spec.mysql.<instance>.managedMysql.storageSize: 300Gi`:\n\n- `mysql-data-…` (MySQL): `managedMysql.storageSize`\n- `…-chi-…` (ClickHouse): `managedClickhouse.storageSize`\n- `keeper-data-…` (ClickHouse Keeper): `managedClickhouse.keeper.storageSize`\n- `wandb-redis-…` (Redis): `managedRedis.storageSize`\n- `…seaweedfs-volume-…` (object data): `managedObjectStore.storageSize`\n- `…seaweedfs-filer-…` (object metadata): `managedObjectStore.SeaweedObjectStoreSpec.filerStorageSize`\n- `data-wandb-kafka-etcd-…` (Kafka metadata, etcd): `spec.kafka.managedKafka.storageSize` sizes only new claims; expand existing ones directly:\n\n```\nkubectl patch pvc <claim> -n $namespace -p '{\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}'\n```\n\nA larger `spec.size` (WSM `--size`) raises the default size of claims without an explicit `storageSize`, and CPU and memory for every managed service, so nodes need room."
       }
     }
   ],
