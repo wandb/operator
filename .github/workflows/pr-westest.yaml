@@ -21,7 +21,7 @@ jobs:
       ${{ !github.event.pull_request.draft &&
           github.event.pull_request.head.repo.full_name == github.repository &&
           github.actor != 'dependabot[bot]' }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER_LIGHT || 'ubuntu-latest' }}
     timeout-minutes: 10
     outputs:
       app_version: ${{ steps.app-version.outputs.app_version }}
@@ -38,7 +38,7 @@ jobs:
   local-test:
     name: ${{ matrix.scenario }}
     needs: setup
-    runs-on: ubuntu-latest-8-cores
+    runs-on: ${{ vars.RUNNER_HEAVY || 'ubuntu-latest-8-cores' }}
     timeout-minutes: 90
     strategy:
       fail-fast: false
