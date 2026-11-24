@@ -42,7 +42,7 @@
       "gridPos": {"h": 6, "w": 24, "x": 0, "y": 0},
       "options": {
         "mode": "markdown",
-        "content": "# W&B Application\n\nAnswers **\"is the whole W&B app slow or erroring for users?\"** Start here when users (AI engineers) report the UI is slow, requests fail, or the SDK can't reach the server.\n\nThe top sections cover **overall API health** — request rate and errors overall and by request type (`graphql`, `files`, filestream, …), and latency. The **GraphQL errors** section attributes failures to the specific service/operation responsible. The **Operations & background** section shows read-path, artifact, and export span latencies from traces. The **Run Keys** section shows how many distinct metric keys active runs log, with recommended limits by instance size. The **FileStream** section shows whether live run logging (history, events, console logs) is failing or slow. The **Nodes & storage capacity** section shows CPU, memory, network, disk and free space per node.\n\nUse the **W&B Namespace** dropdown to pick the W&B install. Use **Open Traces in Explore** (top-right) to drill from any symptom to a real trace."
+        "content": "# W&B Application\n\nAnswers **\"is the whole W&B app slow or erroring for users?\"** Start here when users (AI engineers) report the UI is slow, requests fail, or the SDK can't reach the server.\n\nThe top sections cover **overall API health** — request rate and errors overall and by request type (`graphql`, `files`, filestream, …), and latency. The **GraphQL errors** section attributes failures to the specific service/operation responsible. The **Operations & background** section shows read-path, artifact, and export span latencies from traces. The **Run Keys** section shows how many distinct metric keys active runs log, with recommended limits by instance size. The **FileStream** section shows whether live run logging (history, events, console logs) is failing or slow. The **Nodes & storage capacity** section shows CPU, memory, network, disk and free space per node, and free space on each persistent volume.\n\nUse the **W&B Namespace** dropdown to pick the W&B install. Use **Open Traces in Explore** (top-right) to drill from any symptom to a real trace."
       }
     },
     {
@@ -1190,7 +1190,7 @@
       "gridPos": { "h": 15, "w": 8, "x": 16, "y": 308 },
       "options": {
         "mode": "markdown",
-        "content": "**What it shows** — read and write throughput on each node across all its disks, including those behind MySQL, ClickHouse, Kafka and object storage volumes.\n\n**What bad looks like** — reads or writes pinned at the same level during load, often a disk's provisioned throughput limit. Sustained high reads often point to MySQL buffer-pool pressure, and write bursts track run initialization (`wandb.init()`) load on MySQL. Either slows MySQL and run logging.\n\n**Do next** — find the pods writing on that node, replacing `<node>` with the node from the legend:\n\n```\ntopk(10, max by (namespace, pod, device) (rate(container_fs_writes_bytes_total{node=\"<node>\", pod!=\"\"}[5m])))\n```\n\nTo trace a pod to its disk, run these in order: the first lists the pod's claims, the second shows a claim's volume and StorageClass, and the third shows the volume's disk.\n\n```\nkubectl get pod <pod> -n $namespace -o jsonpath='{.spec.volumes[*].persistentVolumeClaim.claimName}'\nkubectl get pvc <claim> -n $namespace -o wide\nkubectl get pv <volume> -o jsonpath='{.spec.csi.volumeHandle}'\n```\n\nIn your storage provider, check that disk's latency and throttling during the slowdown; for MySQL, also check row-lock and query time on the Telemetry Overview. Then:\n\n- **A disk is at its limit:** managed claims use the cluster's default StorageClass; the W&B resource sets only their size (for example `spec.mysql.<instance>.managedMysql.storageSize`). A larger size adds performance only on disk types that scale with size, such as GCP pd-balanced or pd-ssd, not AWS gp3 or GCP Hyperdisk. Otherwise, raise provisioned IOPS or throughput with your provider, or migrate the data to a faster StorageClass; changing the default StorageClass affects only new claims.\n- **The node is at its total disk limit:** use a node type with higher disk limits.\n\n**Note** — whole-node numbers, so they ignore the namespace picker."
+        "content": "**What it shows** — read and write throughput on each node across all its disks, including those behind MySQL, ClickHouse, Kafka and object storage volumes.\n\n**What bad looks like** — reads or writes pinned at the same level during load, often a disk's provisioned throughput limit. Sustained high reads often point to MySQL buffer-pool pressure, and write bursts track run initialization (`wandb.init()`) load on MySQL. Either slows MySQL and run logging.\n\n**Do next** — find the pods writing on that node, replacing `<node>` with the node from the legend:\n\n```\ntopk(10, max by (namespace, pod, device) (rate(container_fs_writes_bytes_total{node=\"<node>\", pod!=\"\"}[5m])))\n```\n\nTo trace a pod to its disk, run these in order: the first lists the pod's claims, the second shows a claim's volume and StorageClass, and the third shows the volume's disk.\n\n```\nkubectl get pod <pod> -n $namespace -o jsonpath='{.spec.volumes[*].persistentVolumeClaim.claimName}'\nkubectl get pvc <claim> -n $namespace -o wide\nkubectl get pv <volume> -o jsonpath='{.spec.csi.volumeHandle}'\n```\n\nIn your storage provider, check that disk's latency and throttling during the slowdown; for MySQL, also check row-lock and query time on the Telemetry Overview. Then:\n\n- **A disk is at its limit:** managed claims use the cluster's default StorageClass; the W&B resource sets only their size (see **About: Persistent volumes** below). A larger size adds performance only on disk types that scale with size, such as GCP pd-balanced or pd-ssd, not AWS gp3 or GCP Hyperdisk. Otherwise, raise provisioned IOPS or throughput with your provider, or migrate the data to a faster StorageClass; changing the default StorageClass affects only new claims.\n- **The node is at its total disk limit:** use a node type with higher disk limits.\n\n**Note** — whole-node numbers, so they ignore the namespace picker."
       }
     },
     {
@@ -1228,6 +1228,41 @@
       "options": {
         "mode": "markdown",
         "content": "**What it shows** — free space on each node's local disks: container images, pod logs and emptyDir scratch space.\n\n**What bad looks like** — free space falling toward the kubelet's thresholds. By default it deletes unused images once the disk is 85% full; below 10% free (15% for a separate image filesystem), the node reports DiskPressure and can evict pods.\n\n**Do next** — find which pods use the space; this dashboard doesn't collect per-pod ephemeral usage:\n\n```\nkubectl get --raw /api/v1/nodes/<node>/proxy/stats/summary | jq '[.pods[] | {namespace: .podRef.namespace, pod: .podRef.name, bytes: .[\"ephemeral-storage\"].usedBytes}] | sort_by(.bytes) | reverse | .[:10]'\n```\n\nThe bundled VictoriaMetrics, VictoriaLogs and VictoriaTraces stores keep their data on the node disk; `telemetry.retentionPeriod` (default `1d`) controls how much they keep. If space stays low, add nodes to spread the workload or increase the node pool's boot disk size (this usually replaces the nodes).\n\n**Note** — whole-node numbers, so they ignore the namespace picker."
+      }
+    },
+    {
+      "type": "bargauge",
+      "title": "Persistent Volume Free",
+      "datasource": { "type": "prometheus", "uid": "${DS_VICTORIAMETRICS}" },
+      "gridPos": { "h": 15, "w": 16, "x": 0, "y": 333 },
+      "targets": [
+        {
+          "expr": "sort(min by (persistentvolumeclaim) (kubelet_volume_stats_available_bytes{namespace=\"$namespace\"} / kubelet_volume_stats_capacity_bytes{namespace=\"$namespace\"}))",
+          "legendFormat": "{{persistentvolumeclaim}}",
+          "refId": "A",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "noValue": "No volume stats yet",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "orange", "value": 0.03 }, { "color": "green", "value": 0.15 }] }
+        },
+        "overrides": []
+      },
+      "options": { "orientation": "horizontal", "displayMode": "gradient", "showUnfilled": true, "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "description": "Free space on each persistent volume claim in the W&B namespace (MySQL, ClickHouse, Kafka, Redis, object storage), lowest first. From the kubelet's kubelet_volume_stats metrics."
+    },
+    {
+      "type": "text",
+      "title": "About: Persistent volumes",
+      "gridPos": { "h": 15, "w": 8, "x": 16, "y": 333 },
+      "options": {
+        "mode": "markdown",
+        "content": "**What it shows** — free space on each persistent volume claim in the W&B namespace, lowest first. The claim name identifies the service (see **Do next**).\n\n**What bad looks like** — free space that keeps falling, or too little left for expected growth. When a volume fills, the service on it can no longer write, and unlike node disks, the kubelet doesn't free space or evict anything for persistent volumes. Orange marks less than 15% free and red less than 3%, the levels the widely used Kubernetes volume alerts (kubernetes-mixin) use; they warn at 15% only when the volume is also on track to fill within four days.\n\n**Do next** — find the claims on track to fill within four days:\n\n```\npredict_linear(kubelet_volume_stats_available_bytes{namespace=\"$namespace\"}[6h], 4 * 24 * 3600) < 0\n```\n\nThen raise the claim's size in the W&B resource, under the existing `spec.<service>.<instance>` key, for example `spec.mysql.<instance>.managedMysql.storageSize: 300Gi`:\n\n- `mysql-data-…` (MySQL): `managedMysql.storageSize`\n- `…-chi-…` (ClickHouse): `managedClickhouse.storageSize`\n- `keeper-data-…` (ClickHouse Keeper): `managedClickhouse.keeper.storageSize`\n- `wandb-redis-…` (Redis): `managedRedis.storageSize`\n- `…seaweedfs-volume-…` (object data): `managedObjectStore.storageSize`\n- `…seaweedfs-filer-…` (object metadata): `managedObjectStore.SeaweedObjectStoreSpec.filerStorageSize`\n- `data-wandb-kafka-etcd-…` (Kafka metadata, etcd): `spec.kafka.managedKafka.storageSize` sizes only new claims; expand existing ones directly:\n\n```\nkubectl patch pvc <claim> -n $namespace -p '{\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}'\n```\n\nA larger `spec.size` (WSM `--size`) raises the default size of claims without an explicit `storageSize`, and CPU and memory for every managed service, so nodes need room.\n\nClaims can grow but never shrink, and only if their StorageClass allows it (`kubectl get storageclass`, **ALLOWVOLUMEEXPANSION** column). Confirm the new size with `kubectl get pvc -n $namespace` (**CAPACITY** column); if it hasn't changed, expand the claim directly as above."
       }
     }
   ],
